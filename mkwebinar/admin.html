@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>StarPips Control Desk - Admin Portal</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS v3 CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: '#006fff',
+            navy: '#000066',
+          },
+          fontFamily: {
+            sans: ['Ubuntu', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+        }
+      }
+    }
+  </script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    html, body {
+      overflow-x: hidden;
+      width: 100%;
+      max-width: 100%;
+    }
+    /* Custom Scrollbar styling */
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #02050e;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #1a2238;
+      border-radius: 4px;
+    }
+  </style>
+
+  <!-- Quill Editor -->
+  <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+  <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
+</head>
+<body class="bg-[#000022] text-zinc-100 min-h-screen font-sans flex flex-col selection:bg-[#006fff] selection:text-white">
+
+  <!-- Background Ambient Gradients -->
+  <div class="fixed inset-0 bg-[radial-gradient(circle_at_top_right,rgba(0,111,255,0.03),transparent_50%)] pointer-events-none z-0"></div>
+  <div class="fixed inset-0 bg-[linear-gradient(rgba(255,255,255,0.003)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.003)_1px,transparent_1px)] bg-[size:30px_30px] pointer-events-none z-0"></div>
+
+  <!-- Admin Header -->
+  <header class="bg-zinc-950 border-b border-zinc-900 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 relative z-10">
+    <div class="flex items-center space-x-3 text-center sm:text-left">
+      <div class="p-2 rounded-lg bg-[#006fff]/10 border border-[#006fff]/20 text-[#006fff] shadow">
+        <i data-lucide="shield-check" class="h-5 w-5"></i>
+      </div>
+      <div>
+        <h1 class="text-sm font-black text-white uppercase tracking-widest font-mono">StarPips Webinar Control Desk</h1>
+        <p class="text-[9px] text-zinc-500 font-mono uppercase tracking-widest">Secure Master Admin Portal</p>
+      </div>
+    </div>
+
+    <!-- Quick navigation -->
+    <div class="flex items-center space-x-3">
+      <a
+        href="/"
+        class="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white transition text-xs font-mono flex items-center gap-1.5"
+      >
+        <i data-lucide="external-link" class="h-3.5 w-3.5"></i>
+        <span>Live Webinar Room</span>
+      </a>
+      <span class="text-zinc-800">|</span>
+      <span class="text-xs font-mono text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-md">
+        ● SECURED SYSTEM
+      </span>
+    </div>
+  </header>
+
+  <!-- Main Workspace Grid -->
+  <main class="flex-1 w-full max-w-7xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 relative z-10 overflow-y-auto custom-scrollbar">
+    
+    <!-- LEFT COLUMN: SETTINGS ENGINE & AI CHAT GENERATOR (Col span 7) -->
+    <div class="lg:col-span-7 space-y-8">
+      
+      
+      <!-- INTERNAL STATS TRACKING -->
+      <section class="bg-zinc-950/90 border border-zinc-900 rounded-2xl shadow-xl p-6 relative">
+        <div class="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-[#00E5FF]/40 to-transparent"></div>
+        <div class="flex items-center space-x-2 mb-4">
+          <i data-lucide="activity" class="h-5 w-5 text-[#00E5FF]"></i>
+          <h2 class="text-sm font-black text-white uppercase tracking-wider font-mono">Real-Time Traffic Stats</h2>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div class="bg-[#02050E] border border-zinc-800 rounded-xl p-4 flex flex-col relative overflow-hidden">
+            <span class="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold mb-1">Total Page Views</span>
+            <span id="stat-views" class="text-2xl font-black text-white">0</span>
+          </div>
+          <div class="bg-[#02050E] border border-zinc-800 rounded-xl p-4 flex flex-col relative overflow-hidden">
+            <span class="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold mb-1">Checkout Clicks</span>
+            <span id="stat-clicks" class="text-2xl font-black text-white">0</span>
+          </div>
+          <div class="bg-[#02050E] border border-zinc-800 rounded-xl p-4 flex flex-col relative overflow-hidden">
+            <span class="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold mb-1">Conversion Rate</span>
+            <span id="stat-conv" class="text-2xl font-black text-[#22c55e]">0%</span>
+          </div>
+          <div class="bg-[#02050E] border border-zinc-800 rounded-xl p-4 flex flex-col relative overflow-hidden">
+            <span class="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold mb-1">Total Registrants</span>
+            <span id="stat-regs" class="text-2xl font-black text-[#00E5FF]">0</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 1. CAMPAIGN CONFIGURATION EDITOR -->
+      <section class="bg-zinc-950/90 border border-zinc-900 rounded-2xl shadow-xl p-6 relative">
+        <div class="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent"></div>
+        
+        <div class="flex items-center justify-between mb-6 border-b border-zinc-900 pb-4">
+          <div class="flex items-center space-x-2">
+            <i data-lucide="sliders" class="text-amber-500 h-5 w-5"></i>
+            <h2 class="text-sm font-extrabold text-white uppercase tracking-wider font-mono">Webinar Parameter Engine</h2>
+          </div>
+          <span class="text-[9px] font-mono text-zinc-600">Evergreen Campaign Settings</span>
+        </div>
+
+        <form id="form-campaign-settings" class="space-y-6">
+          
+          <!-- Master Class Meta Title -->
+          <div>
+            <label class="block text-[10px] uppercase tracking-wider font-mono text-zinc-400 mb-2 font-bold">Webinar Title / Headline Hook</label>
+            <input
+              type="text"
+              
+              id="sett-title"
+              class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500/50 transition font-mono"
+            />
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <!-- Presenter Name -->
+            <div>
+              <label class="block text-[10px] uppercase tracking-wider font-mono text-zinc-400 mb-2 font-bold">Presenter Name</label>
+              <input
+                type="text"
+                
+                id="sett-presenter-name"
+                class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500/50 transition font-mono"
+              />
+            </div>
+            <!-- Presenter Title -->
+            <div>
+              <label class="block text-[10px] uppercase tracking-wider font-mono text-zinc-400 mb-2 font-bold">Presenter Title / Slogan</label>
+              <input
+                type="text"
+                
+                id="sett-presenter-title"
+                class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500/50 transition font-mono"
+              />
+            </div>
+          </div>
+
+          <!-- Video URL hosted on Cloudflare R2, Telegram, Google Drive or similar -->
+          <div>
+            <label class="block text-[10px] uppercase tracking-wider font-mono text-zinc-400 mb-2 font-bold">Webinar Video Stream URL (YouTube Unlisted/Public, Dropbox, Drive, or direct MP4)</label>
+            <input
+              type="url"
+              id="sett-video-url"
+              placeholder="e.g., https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+              class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500/50 transition font-mono mb-2"
+            />
+            <div class="flex items-center space-x-2">
+              <input type="checkbox" id="sett-is-real-youtube-live" class="rounded border-zinc-800 bg-[#02050E] text-amber-500 focus:ring-0 h-3 w-3 cursor-pointer" />
+              <label for="sett-is-real-youtube-live" class="text-[9px] text-zinc-400 font-mono uppercase cursor-pointer">This is an active Real-Time YouTube Live Stream (Bypass simulated timeline)</label>
+            </div>
+            <span class="block text-[8px] text-zinc-600 font-mono mt-1 uppercase">Paste any unlisted or public YouTube link, Dropbox link, or raw MP4 URL. YouTube is highly recommended for maximum speed with zero buffering!</span>
+          </div>
+
+          <!-- FREE & FAST VIDEO STORAGE GUIDE -->
+          <div class="bg-[#02050E]/80 border border-zinc-900 rounded-xl p-4 space-y-2.5">
+            <div class="flex items-center space-x-2 text-amber-500 font-mono text-[10px] font-bold uppercase tracking-wider">
+              <i data-lucide="info" class="h-4 w-4"></i>
+              <span>High-Performance Free Video Storage Guide</span>
+            </div>
+            <p class="text-[10px] text-zinc-400 leading-relaxed font-sans">
+              To guarantee lightning-fast load times and perfect playback on all devices (especially iOS/Android mobile), use one of these highly-compatible storage options:
+            </p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[9px] font-mono leading-relaxed text-zinc-500 uppercase">
+              <div class="bg-zinc-950 p-2.5 rounded border border-zinc-900/60">
+                <span class="text-white font-bold block mb-1">Option 1: Dropbox (Recommended Free)</span>
+                Paste any standard Dropbox link. Our backend automatically proxies it to <code class="text-amber-500 font-bold lowercase">dl.dropboxusercontent.com</code> for instant, lag-free direct CDN buffering.
+              </div>
+              <div class="bg-zinc-950 p-2.5 rounded border border-zinc-900/60">
+                <span class="text-white font-bold block mb-1">Option 2: YouTube (Highly Recommended)</span>
+                Paste any unlisted or public YouTube video. Our system automatically handles it via our white-labeled player layer, keeping chats synchronized perfectly!
+              </div>
+              <div class="bg-zinc-950 p-2.5 rounded border border-zinc-900/60">
+                <span class="text-white font-bold block mb-1">Option 3: Bunny.net / Cloudflare Stream (Premium)</span>
+                Extremely cheap paid solutions (fraction of a cent). Provides high-speed direct global CDNs and prevents any lag or browser security blocks.
+              </div>
+              <div class="bg-zinc-950 p-2.5 rounded border border-zinc-900/60">
+                <span class="text-white font-bold block mb-1">Option 4: Google Drive (Limits Apply)</span>
+                Google Drive files are supported but Google limits high-speed direct downloads to files under 100MB. Larger files will fail to play directly. Keep sizes small or use Dropbox!
+              </div>
+            </div>
+          </div>
+
+          <!-- Alumni Replay Mode Control Card -->
+          <div class="border border-zinc-800 bg-[#04091A]/30 p-4 rounded-xl space-y-4">
+            <div class="flex items-center space-x-2">
+              <i data-lucide="refresh-cw" class="text-amber-500 h-4 w-4 animate-spin"></i>
+              <h3 class="text-xs font-bold text-white font-mono uppercase tracking-wider">Alumni Replay Mode Engine</h3>
+            </div>
+            
+            <div class="flex flex-col space-y-3">
+              <div class="flex items-center space-x-3 bg-zinc-950/60 p-3 rounded-lg border border-zinc-900">
+                <input
+                  type="checkbox"
+                  id="sett-alumni-enabled"
+                  class="rounded border-zinc-800 bg-[#02050E] text-amber-500 focus:ring-0 h-4 w-4 cursor-pointer"
+                />
+                <div class="space-y-0.5">
+                  <label for="sett-alumni-enabled" class="text-xs text-white font-bold cursor-pointer font-mono uppercase">Enable Alumni Replay Mode</label>
+                  <p class="text-[9px] text-zinc-500 font-mono leading-relaxed">When checked, attendees who finish the webinar or return after their slot see the custom Replay Room (with playback/seeking controls). When unchecked, the stream stays in "Always Live" mode for them, bypassing replay locks!</p>
+                </div>
+              </div>
+
+              <div class="flex items-center space-x-3 bg-zinc-950/60 p-3 rounded-lg border border-zinc-900">
+                <input
+                  type="checkbox"
+                  id="sett-unique-visits-only"
+                  class="rounded border-zinc-800 bg-[#02050E] text-amber-500 focus:ring-0 h-4 w-4 cursor-pointer"
+                />
+                <div class="space-y-0.5">
+                  <label for="sett-unique-visits-only" class="text-xs text-white font-bold cursor-pointer font-mono uppercase">Force Unique Visits (Disable Returning Bypass)</label>
+                  <p class="text-[9px] text-zinc-500 font-mono leading-relaxed">When checked, returning users with the same email will be treated like completely new visitors and forced to wait through the countdown again. They will only receive follow up emails.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-4 bg-zinc-950/60 p-4 rounded-xl border border-zinc-900">
+            <!-- Waiting Count timer seconds -->
+            <div>
+              <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-500 mb-1.5 font-bold">Wait Room (Seconds)</label>
+              <input
+                type="number"
+                
+                id="sett-wait-duration"
+                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500/50 font-mono"
+              />
+            </div>
+            <!-- Initial viewers -->
+            <div>
+              <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-500 mb-1.5 font-bold">Initial Viewers</label>
+              <input
+                type="number"
+                
+                id="sett-initial-viewers"
+                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500/50 font-mono"
+              />
+            </div>
+            <!-- Peak viewers -->
+            <div>
+              <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-500 mb-1.5 font-bold">Peak Viewers Limit</label>
+              <input
+                type="number"
+                
+                id="sett-peak-viewers"
+                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500/50 font-mono"
+              />
+            </div>
+          </div>
+
+          <!-- LANDING PAGE VERTICAL GALLERY IMAGES -->
+          <div class="border-t border-zinc-900 pt-5 space-y-4">
+            <h3 class="text-xs font-bold text-[#006fff] font-mono uppercase tracking-widest">Vertical Landing Gallery Images (Custom Links)</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-[9px] font-mono text-zinc-500 mb-1 font-bold">Image URL Slot 1</label>
+                <input type="url" id="sett-img-1" class="w-full bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#006fff]/50 font-mono" />
+              </div>
+              <div>
+                <label class="block text-[9px] font-mono text-zinc-500 mb-1 font-bold">Image URL Slot 2</label>
+                <input type="url" id="sett-img-2" class="w-full bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#006fff]/50 font-mono" />
+              </div>
+              <div>
+                <label class="block text-[9px] font-mono text-zinc-500 mb-1 font-bold">Image URL Slot 3</label>
+                <input type="url" id="sett-img-3" class="w-full bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#006fff]/50 font-mono" />
+              </div>
+              <div>
+                <label class="block text-[9px] font-mono text-zinc-500 mb-1 font-bold">Image URL Slot 4</label>
+                <input type="url" id="sett-img-4" class="w-full bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#006fff]/50 font-mono" />
+              </div>
+            </div>
+          </div>
+
+          <!-- OFFER SETTINGS SECTION -->
+          <div class="border-t border-zinc-900 pt-5 space-y-4">
+            <h3 class="text-xs font-bold text-[#006fff] font-mono uppercase tracking-widest">Offer Pitch Trigger parameters</h3>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <!-- Offer Title -->
+              <div>
+                <label class="block text-[10px] uppercase tracking-wider font-mono text-zinc-400 mb-2 font-bold">Special Offer Title</label>
+                <input
+                  type="text"
+                  
+                  id="sett-offer-title"
+                  class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#006fff]/50 transition font-mono"
+                />
+              </div>
+              <!-- Price display -->
+              <div>
+                <label class="block text-[10px] uppercase tracking-wider font-mono text-zinc-400 mb-2 font-bold">Offer Price Text</label>
+                <input
+                  type="text"
+                  
+                  id="sett-offer-price"
+                  class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#006fff]/50 transition font-mono"
+                />
+              </div>
+            </div>
+
+            <!-- Offer description -->
+            <div>
+              <label class="block text-[10px] uppercase tracking-wider font-mono text-zinc-400 mb-2 font-bold">Offer Description pitch details</label>
+              <textarea
+                
+                id="sett-offer-desc"
+                rows="2"
+                class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#006fff]/50 transition font-mono resize-none custom-scrollbar"
+              ></textarea>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <!-- Seler checkout link -->
+              <div>
+                <label class="block text-[10px] uppercase tracking-wider font-mono text-zinc-400 mb-2 font-bold">Payment Gateway Link</label>
+                <input
+                  type="url"
+                  
+                  id="sett-offer-payment"
+                  class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#006fff]/50 transition font-mono"
+                />
+              </div>
+
+              <div class="grid grid-cols-2 gap-3 mb-4">
+                <div>
+                  <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-400 mb-1.5 font-bold">Offer Display Mode</label>
+                  <select id="sett-offer-mode" class="w-full bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#006fff]/50 font-mono">
+                    <option value="scheduled">Scheduled (Trigger Time)</option>
+                    <option value="instant">Instant (Always On)</option>
+                    <option value="disabled">Disabled (Never Show)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-3">
+                <!-- Trigger timestamp in video -->
+                <div>
+                  <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-400 mb-1.5 font-bold">Trigger Playtime (Sec)</label>
+                  <input
+                    type="number"
+                    
+                    id="sett-offer-trigger"
+                    class="w-full bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#006fff]/50 font-mono"
+                  />
+                </div>
+                <!-- Scarcity total slots -->
+                <div>
+                  <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-400 mb-1.5 font-bold">Total Scarcity Slots</label>
+                  <input
+                    type="number"
+                    
+                    id="sett-offer-slots"
+                    class="w-full bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#006fff]/50 font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ZOHO CRM & EMAIL CAMPAIGNS PARAMETERS -->
+          <div class="border-t border-zinc-900 pt-5 space-y-4">
+            <div class="flex items-center space-x-2">
+              <i data-lucide="mail-check" class="text-[#006fff] h-4 w-4"></i>
+              <h3 class="text-xs font-bold text-[#006fff] font-mono uppercase tracking-widest">Zoho CRM & Campaigns Automated Workflows</h3>
+            </div>
+            
+            <p class="text-[10px] text-zinc-400 leading-relaxed font-sans max-w-4xl bg-zinc-950 p-3 rounded-xl border border-zinc-900">
+              <strong class="text-amber-500 block mb-1 uppercase tracking-wider font-mono text-[9px]">⚡ Native Campaigns Automations Active (June 2026):</strong>
+              To maximize delivery rates and utilize Zoho's free tier, direct API-driven mail dispatching has been replaced. 
+              Leads are now synced directly into your Zoho Campaign list. 
+              Please design your templates and configure your email delivery workflows directly inside the <a href="https://campaigns.zoho.com" target="_blank" class="text-[#006fff] hover:underline font-bold">Zoho Campaigns Dashboard</a>. 
+              Your email triggers can be scheduled on Zoho Campaigns to fire automatically when a contact is added to your list or when their custom <code class="bg-[#02050E] px-1 rounded text-amber-400 font-mono">Webinar_Stage</code> field changes state. The system updates this field with the following values:
+              <br/>
+              • <code class="bg-[#02050E] px-1 rounded text-amber-400 font-mono">registration</code> (triggers welcome/registration emails)
+              <br/>
+              • <code class="bg-[#02050E] px-1 rounded text-amber-400 font-mono">countdown_ended</code> (triggers reminder emails when class starts)
+              <br/>
+              • <code class="bg-[#02050E] px-1 rounded text-amber-400 font-mono">followup_48h</code> (triggers follow-up cart recovery sequences)
+              <br/>
+              • <code class="bg-[#02050E] px-1 rounded text-amber-400 font-mono">payment_received</code> (triggers VIP onboarding emails)
+            </p>
+
+            <!-- Automated Zoho Campaigns Initialization UI block -->
+            <div class="bg-[#02050E]/80 p-4 rounded-xl border border-zinc-900 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div class="space-y-1">
+                <h4 class="text-[11px] font-bold text-white font-mono uppercase tracking-wider flex items-center space-x-1.5">
+                  <span class="inline-block w-1.5 h-1.5 rounded-full bg-[#006fff] animate-pulse"></span>
+                  <span>Automated Zoho campaigns setup</span>
+                </h4>
+                <p class="text-[10px] text-zinc-400 max-w-2xl">
+                  First click <strong>Connect Zoho Account</strong> to link your Zoho account and generate the Refresh Token. Then click <strong>Initialize Zoho</strong> to check/create the mailing list, configure custom fields (<code class="text-amber-400">Webinar Stage</code> &amp; <code class="text-amber-400">Webinar Link</code>), and sync HTML templates.
+                </p>
+              </div>
+              <div class="flex flex-col sm:flex-row gap-2 shrink-0">
+                <button
+                  type="button"
+                  id="btn-connect-zoho"
+                  class="w-full sm:w-auto bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-bold uppercase tracking-wider font-mono px-4.5 py-2.5 rounded-xl transition duration-200 flex items-center justify-center space-x-1.5 shadow-lg shadow-amber-600/10 cursor-pointer active:scale-[0.98]"
+                >
+                  <i data-lucide="link" class="h-3.5 w-3.5"></i>
+                  <span>Connect Zoho Account</span>
+                </button>
+                <button
+                  type="button"
+                  id="btn-init-zoho"
+                  class="w-full sm:w-auto bg-[#006fff] hover:bg-[#006fff]/85 text-white text-[10px] font-bold uppercase tracking-wider font-mono px-4.5 py-2.5 rounded-xl transition duration-200 flex items-center justify-center space-x-1.5 shadow-lg shadow-[#006fff]/10 cursor-pointer active:scale-[0.98]"
+                >
+                  <i data-lucide="sparkles" class="h-3.5 w-3.5"></i>
+                  <span>Initialize Zoho</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Zoho Initialization Log container -->
+            <div id="zoho-init-logs" class="hidden bg-zinc-950/80 border border-zinc-900 rounded-xl p-3.5 font-mono text-[9px] text-zinc-400 space-y-1 max-h-48 overflow-y-auto">
+              <div class="text-zinc-500 uppercase tracking-widest text-[8px] font-bold border-b border-zinc-900 pb-1.5 mb-1.5 flex items-center justify-between">
+                <span>Initialization Progress Console:</span>
+                <span class="text-zinc-600">June 2026</span>
+              </div>
+              <!-- Log entries will be appended dynamically -->
+            </div>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <!-- Client ID -->
+              <div>
+                <label class="block text-[10px] uppercase tracking-wider font-mono text-zinc-400 mb-2 font-bold">Zoho API Client ID</label>
+                <input
+                  type="text"
+                  id="sett-zoho-client-id"
+                  class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#006fff]/50 transition font-mono"
+                />
+              </div>
+              <!-- Client Secret -->
+              <div>
+                <label class="block text-[10px] uppercase tracking-wider font-mono text-zinc-400 mb-2 font-bold">Zoho Client Secret</label>
+                <input
+                  type="text"
+                  id="sett-zoho-client-secret"
+                  class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#006fff]/50 transition font-mono"
+                />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <!-- Refresh Token -->
+              <div>
+                <label class="block text-[10px] uppercase tracking-wider font-mono text-zinc-400 mb-2 font-bold">Zoho OAuth Refresh Token</label>
+                <input
+                  type="text"
+                  id="sett-zoho-refresh-token"
+                  class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#006fff]/50 transition font-mono"
+                />
+              </div>
+              <!-- Subscriber list ID -->
+              <div>
+                <label class="block text-[10px] uppercase tracking-wider font-mono text-zinc-400 mb-2 font-bold">Lead Subscriber List ID</label>
+                <input
+                  type="text"
+                  id="sett-zoho-list-id"
+                  class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#006fff]/50 transition font-mono"
+                />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-5 gap-3">
+              <!-- Welcome Email template -->
+              <div>
+                <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-400 mb-1.5 font-bold">Welcome Email ID</label>
+                <input
+                  type="text"
+                  id="sett-zoho-welcome-template"
+                  class="w-full bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-[10px] text-white focus:outline-none focus:border-[#006fff]/50 font-mono"
+                />
+              </div>
+              <!-- Reminder Template ID -->
+              <div>
+                <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-400 mb-1.5 font-bold">Class Reminder ID</label>
+                <input
+                  type="text"
+                  id="sett-zoho-reminder-template"
+                  class="w-full bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-[10px] text-white focus:outline-none focus:border-[#006fff]/50 font-mono"
+                />
+              </div>
+              <!-- Follow-up template -->
+              <div>
+                <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-400 mb-1.5 font-bold">48h Recovery ID</label>
+                <input
+                  type="text"
+                  id="sett-zoho-followup-template"
+                  class="w-full bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-[10px] text-white focus:outline-none focus:border-[#006fff]/50 font-mono"
+                />
+              </div>
+              <!-- Follow-up 2 template -->
+              <div>
+                <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-400 mb-1.5 font-bold">72h Final Warning ID</label>
+                <input
+                  type="text"
+                  id="sett-zoho-followup2-template"
+                  class="w-full bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-[10px] text-white focus:outline-none focus:border-[#006fff]/50 font-mono"
+                />
+              </div>
+              <!-- Payment template -->
+              <div>
+                <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-400 mb-1.5 font-bold">Payment Confirmed ID</label>
+                <input
+                  type="text"
+                  id="sett-zoho-payment-template"
+                  class="w-full bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-[10px] text-white focus:outline-none focus:border-[#006fff]/50 font-mono"
+                />
+              </div>
+            </div>
+          </div>
+
+          
+          <!-- DYNAMIC EMAIL TEMPLATES & AUTOMATION -->
+          <div class="border-t border-zinc-900 pt-5 space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-2">
+                <i data-lucide="mail" class="text-[#006fff] h-4 w-4"></i>
+                <h3 class="text-xs font-bold text-white font-mono uppercase tracking-widest">Email Templates & Automations</h3>
+              </div>
+              <button id="add-template-btn" type="button" class="bg-[#006fff]/10 text-[#006fff] px-3 py-1 rounded text-[10px] font-bold border border-[#006fff]/20 hover:bg-[#006fff]/20 transition-colors">
+                + ADD NEW TEMPLATE
+              </button>
+            </div>
+            <p class="text-[10px] text-zinc-400 font-sans leading-relaxed">
+              Create, edit, and format your email templates here using the rich editor (bold, colors, images, links). 
+              Our system will automatically attempt to upload these to Zoho Campaigns and retrieve a Template ID. 
+              If the upload fails due to API restrictions, you can design the template manually in Zoho Campaigns and paste its <strong>Template ID</strong> here.
+              <br><br>
+              <strong>Automated Workflows:</strong> Our system automatically syncs contacts to Zoho and sets the <code class="text-amber-500">Webinar_Stage</code> field (e.g. 'welcome', 'reminder', custom stages). Inside Zoho Campaigns, configure an <strong>Autoresponder/Workflow</strong> that triggers when <code class="text-amber-500">Webinar_Stage</code> changes to send the corresponding email.
+            </p>
+
+            <div id="dynamic-templates-container" class="space-y-6">
+              <!-- Templates will be injected here by admin.js -->
+            </div>
+          </div>
+          <button
+            type="submit"
+            class="w-full py-3.5 mt-8 rounded-xl bg-[#006fff] hover:bg-[#006fff]/90 text-white font-black text-xs tracking-widest uppercase shadow transition cursor-pointer flex items-center justify-center space-x-2"
+          >
+            <i data-lucide="save" class="h-4 w-4"></i>
+            <span>Commit Parameter Engine Settings</span>
+          </button>
+        </form>
+      </section>
+
+      
+      <!-- MASTERCLASS REPLAY SETTINGS -->
+      <section class="bg-zinc-950/90 border border-zinc-900 rounded-2xl shadow-xl p-6 relative mb-8">
+        <div class="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent"></div>
+        <div class="flex items-center space-x-2 mb-6 border-b border-zinc-900 pb-4">
+          <i data-lucide="video" class="text-amber-500 h-5 w-5"></i>
+          <h2 class="text-sm font-extrabold text-white uppercase tracking-wider font-mono">Masterclass Replay Link & Settings</h2>
+        </div>
+        <div class="space-y-4">
+          <p class="text-[10px] text-zinc-400 font-sans leading-relaxed">
+            Configure the specific video for your replay page. If left blank, it falls back to the main Webinar Video Stream URL. You can use Wistia, YouTube, or direct MP4 links here.
+          </p>
+          
+          
+          <div>
+            <label class="block text-[10px] uppercase tracking-wider font-mono text-zinc-400 mb-2 font-bold">Custom Replay Video URL (Optional)</label>
+            <input
+              type="url"
+              id="sett-replay-video-url"
+              placeholder="e.g., https://fast.wistia.net/embed/iframe/..."
+              class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500/50 transition font-mono mb-2"
+            />
+          </div>
+          <div>
+            <label class="block text-[10px] uppercase tracking-wider font-mono text-zinc-400 mb-2 font-bold">Replay Expiration (Hours)</label>
+            <input
+              type="number"
+              id="sett-replay-expiry"
+              placeholder="e.g., 48 (Leave blank for no expiration)"
+              class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500/50 transition font-mono mb-2"
+            />
+          </div>
+
+
+          <div class="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl mt-4">
+            <label class="block text-[10px] uppercase tracking-wider font-mono text-amber-500 mb-2 font-bold">Your Replay Page Link</label>
+            <div class="flex items-center space-x-2">
+              <input type="text" id="replay-page-link-display" readonly class="flex-1 bg-[#02050E] border border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-400 font-mono" />
+              <button type="button" onclick="copyReplayLink()" class="bg-amber-500 hover:bg-amber-400 text-black px-4 py-2.5 rounded-xl text-xs font-bold font-mono transition-colors">
+                COPY LINK
+              </button>
+            </div>
+            <p class="text-[9px] text-zinc-500 mt-2 font-mono">Send this link in your Zoho Campaigns 'offer' or 'followup' emails.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- UNIQUE WEBINAR PASSES & SPECIAL OFFERS GENERATOR -->
+      <section class="bg-zinc-950/90 border border-zinc-900 rounded-2xl shadow-xl p-6 relative">
+        <div class="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-[#00E5FF]/40 to-transparent"></div>
+        
+        <div class="flex items-center justify-between mb-6 border-b border-zinc-900 pb-4">
+          <div class="flex items-center space-x-2">
+            <i data-lucide="link-2" class="text-[#00E5FF] h-5 w-5"></i>
+            <h2 class="text-sm font-extrabold text-white uppercase tracking-wider font-mono">Special Webinar Passes & Invite Links</h2>
+          </div>
+          <span class="text-[9px] font-mono text-[#00E5FF] bg-[#00E5FF]/10 border border-[#00E5FF]/20 px-2 py-0.5 rounded">URL Override Engine</span>
+        </div>
+
+        <div class="space-y-6">
+          <p class="text-xs text-zinc-400 leading-relaxed">
+            Generate unique expiring or high-urgency webinar links. Share these with exclusive private groups, specific high-ticket leads, or scholarship winners. They temporarily override prices, titles, and presenters, and auto-expire or fall back when you set!
+          </p>
+
+          <!-- Create Special Offer Link Form -->
+          <form id="form-special-offer" class="space-y-4 bg-zinc-900/20 border border-zinc-900 p-4 rounded-xl">
+            <h3 class="text-xs font-bold text-[#00E5FF] font-mono uppercase tracking-wider mb-2 text-center sm:text-left">Create New Special Webinar Pass</h3>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-400 mb-1.5 font-bold">Unique URL Parameter Suffix (code)</label>
+                <input
+                  type="text"
+                  
+                  id="spec-code"
+                  placeholder="e.g. fast20, privatevip"
+                  class="w-full bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#00E5FF]/50 font-mono"
+                />
+              </div>
+              <div>
+                <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-400 mb-1.5 font-bold">Expiration Date & Time (Optional)</label>
+                <input
+                  type="datetime-local"
+                  id="spec-expires"
+                  class="w-full bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#00E5FF]/50 font-mono text-zinc-400"
+                />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-400 mb-1.5 font-bold">Custom Webinar Headline Override</label>
+                <input
+                  type="text"
+                  id="spec-webinar-title"
+                  placeholder="Leave empty to keep default headline"
+                  class="w-full bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#00E5FF]/50 font-mono"
+                />
+              </div>
+              <div>
+                <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-400 mb-1.5 font-bold">Custom Presenter Name Override</label>
+                <input
+                  type="text"
+                  id="spec-presenter"
+                  placeholder="e.g. FXHighpriest (VIP Live)"
+                  class="w-full bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#00E5FF]/50 font-mono"
+                />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-400 mb-1.5 font-bold">Special Offer Title Override</label>
+                <input
+                  type="text"
+                  id="spec-offer-title"
+                  placeholder="e.g. StarPips VIP Portfolio (Scholarship)"
+                  class="w-full bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#00E5FF]/50 font-mono"
+                />
+              </div>
+              <div>
+                <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-400 mb-1.5 font-bold">Special Price Override</label>
+                <input
+                  type="text"
+                  
+                  id="spec-price"
+                  placeholder="e.g. $147 (50% Off Scholarship)"
+                  class="w-full bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#00E5FF]/50 font-mono"
+                />
+              </div>
+              <div>
+                <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-400 mb-1.5 font-bold">Payment Gateway Checkout URL Override</label>
+                <input
+                  type="url"
+                  
+                  id="spec-selar"
+                  placeholder="e.g. https://selar.co/..."
+                  class="w-full bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#00E5FF]/50 font-mono"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-400 mb-1.5 font-bold">Special Offer Description Override</label>
+              <textarea
+                id="spec-desc"
+                rows="2"
+                placeholder="Description of the unique discounted offer suite..."
+                class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-zinc-700 focus:outline-none focus:border-[#00E5FF]/50 transition font-mono resize-none custom-scrollbar"
+              ></textarea>
+            </div>
+
+            <button
+              type="submit"
+              class="w-full py-2.5 rounded-xl bg-[#00E5FF] hover:bg-[#00E5FF]/90 text-zinc-950 font-black text-xs tracking-widest uppercase transition flex items-center justify-center space-x-2 cursor-pointer font-mono"
+            >
+              <i data-lucide="plus-circle" class="h-4 w-4"></i>
+              <span>Generate and Register Special Webinar URL</span>
+            </button>
+          </form>
+
+          
+      <!-- Tracking & Analytics Section -->
+      <section id="sec-tracking" class="dashboard-section hidden space-y-6">
+        <div class="glass-panel p-6">
+          <div class="flex items-center space-x-3 mb-6">
+            <div class="p-2 bg-purple-500/10 rounded-lg">
+              <i data-lucide="bar-chart-2" class="h-5 w-5 text-purple-400"></i>
+            </div>
+            <div>
+              <h2 class="text-sm font-bold text-white font-mono uppercase tracking-widest">Tracking & Pixels</h2>
+              <p class="text-xs text-zinc-400 mt-1">Configure Meta, Google, and TikTok Analytics</p>
+            </div>
+          </div>
+          
+          <form id="tracking-form" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-400 mb-1.5 font-bold">Facebook Pixel ID</label>
+                <input type="text" id="track-fb" placeholder="e.g. 1234567890" class="w-full bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#00E5FF]/50 font-mono" />
+              </div>
+              <div>
+                <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-400 mb-1.5 font-bold">TikTok Pixel ID</label>
+                <input type="text" id="track-tk" placeholder="e.g. CXXXXXX" class="w-full bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#00E5FF]/50 font-mono" />
+              </div>
+              <div>
+                <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-400 mb-1.5 font-bold">Google Analytics (G-TAG)</label>
+                <input type="text" id="track-ga" placeholder="e.g. G-XXXXXXX" class="w-full bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#00E5FF]/50 font-mono" />
+              </div>
+            </div>
+            <button type="submit" class="w-full py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 font-bold text-[10px] tracking-widest uppercase transition flex items-center justify-center space-x-2 font-mono">
+              <i data-lucide="save" class="h-3.5 w-3.5"></i>
+              <span>Save Tracking Settings</span>
+            </button>
+          </form>
+        </div>
+      </section>
+
+          <!-- List of Special Offers -->
+          <div class="space-y-3">
+            <h3 class="text-xs font-bold text-zinc-400 font-mono uppercase tracking-wider flex items-center space-x-2">
+              <i data-lucide="list" class="h-4 w-4 text-[#00E5FF]"></i>
+              <span>Active Special Webinar & Invite Links</span>
+            </h3>
+            <div id="special-links-list" class="grid grid-cols-1 gap-3">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. AI LIVE CHAT GENERATION HUB POWERED BY GEMINI -->
+      <section class="bg-zinc-950/90 border border-zinc-900 rounded-2xl shadow-xl p-6 relative">
+        <div class="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-[#00E5FF]/40 to-transparent"></div>
+        
+        <div class="flex items-center justify-between mb-6 border-b border-zinc-900 pb-4">
+          <div class="flex items-center space-x-2">
+            <i data-lucide="sparkles" class="text-[#00E5FF] h-5 w-5"></i>
+            <h2 class="text-sm font-extrabold text-white uppercase tracking-wider font-mono">Gemini AI Chat Architect</h2>
+          </div>
+          <span class="text-[9px] font-mono text-[#00E5FF] bg-[#00E5FF]/10 border border-[#00E5FF]/20 px-2 py-0.5 rounded">Model: 3.5 Flash</span>
+        </div>
+
+        <div class="space-y-4">
+          <p class="text-xs text-zinc-400 leading-relaxed">
+            Need a fresh, highly convincing live stream attendee timeline? Enter any specific Forex sub-topic and let Gemini instantly build a timeline of 12 realistic live-chat entries.
+          </p>
+
+          <form id="form-gemini-chat" class="space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-[10px] uppercase tracking-wider font-mono text-zinc-500 mb-2 font-bold">Specific Topic Focus</label>
+                <input
+                  type="text"
+                  
+                  id="gemini-topic"
+                  placeholder="e.g. SMC Sweeps, Risk Reward spreadsheet"
+                  class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#00E5FF]/50 transition font-mono"
+                />
+              </div>
+              <div>
+                <label class="block text-[10px] uppercase tracking-wider font-mono text-zinc-500 mb-2 font-bold">Presenter Name Reference</label>
+                <input
+                  type="text"
+                  
+                  id="gemini-presenter"
+                  placeholder="e.g. Coach Raymond"
+                  class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#00E5FF]/50 transition font-mono"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-[10px] uppercase tracking-wider font-mono text-zinc-500 mb-2 font-bold">Audience Mood / Behavior Vibe</label>
+              <select
+                id="gemini-mood"
+                class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#00E5FF]/50 transition font-mono"
+              >
+                <option value="balanced">Balanced / Organic Mix (Default)</option>
+                <option value="strategy">Strategy & Technical Q&A Focus</option>
+                <option value="hype">Explosive Hype & Review Praise</option>
+                <option value="fomo">Scarcity Rush & Checkout FOMO</option>
+              </select>
+            </div>
+
+            <button
+              type="submit"
+              id="gemini-submit-btn"
+              class="w-full py-3.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-[#00E5FF] hover:border-[#00E5FF]/60 font-black text-xs tracking-widest uppercase transition flex items-center justify-center space-x-2.5 cursor-pointer"
+            >
+              <i data-lucide="brain" class="h-4 w-4"></i>
+              <span>Generate Synchronized Chat Script</span>
+            </button>
+          </form>
+
+          <!-- Current Chat script display log -->
+          <div class="space-y-2 mt-4">
+            <span class="block text-[10px] font-bold uppercase tracking-widest text-zinc-500 font-mono">Current Scheduled Script Logs</span>
+            <div id="admin-chat-preview" class="max-h-60 overflow-y-auto border border-zinc-900 rounded-xl bg-zinc-950/40 p-3 space-y-2.5 custom-scrollbar text-[11px] font-mono">
+              <!-- Chat logs listing inside admin -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2B. ZOOM CHAT LOG AUTO-SYNCHRONIZER -->
+      <section class="bg-zinc-950/90 border border-zinc-900 rounded-2xl shadow-xl p-6 relative">
+        <div class="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent"></div>
+        
+        <div class="flex items-center justify-between mb-6 border-b border-zinc-900 pb-4">
+          <div class="flex items-center space-x-2">
+            <i data-lucide="file-text" class="text-amber-500 h-5 w-5"></i>
+            <h2 class="text-sm font-extrabold text-white uppercase tracking-wider font-mono">Zoom Chat Log Auto-Synchronizer</h2>
+          </div>
+          <span class="text-[9px] font-mono text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">TXT, CSV, LOG Supported</span>
+        </div>
+
+        <div class="space-y-4">
+          <p class="text-xs text-zinc-400 leading-relaxed font-sans">
+            Directly upload an exported Zoom chat log or any other raw chat text file. The system will parse the timestamps and automatically schedule attendee comments in real-time.
+          </p>
+
+          <div>
+            <label class="block text-[10px] uppercase tracking-wider font-mono text-zinc-400 mb-1 font-bold">Zoom Recording Start Time Offset (Optional)</label>
+            <input
+              type="text"
+              id="sett-chat-sync-offset"
+              placeholder="e.g. 14:30:00 or 00:05:00"
+              class="w-full bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500/50 transition font-mono"
+            />
+            <span class="block text-[8px] text-zinc-600 font-mono mt-1 uppercase">If your Zoom chat uses absolute time-of-day (e.g., 14:32:01), enter the time the video recording actually started here (e.g., 14:30:00) to perfectly sync the chat.</span>
+          </div>
+
+          <div id="chat-upload-dropzone" class="border-2 border-dashed border-zinc-800 hover:border-amber-500/50 rounded-xl p-6 text-center cursor-pointer transition bg-[#02050E]/40 flex flex-col items-center justify-center space-y-2">
+            <input type="file" id="chat-file-input" accept=".txt,.csv,.log" class="hidden" />
+            <i data-lucide="upload-cloud" class="h-8 w-8 text-zinc-600"></i>
+            <span class="text-xs text-zinc-300 font-medium">Drag & Drop Zoom chat log file here or click to browse</span>
+            <span class="text-[10px] text-zinc-600 font-mono">Accepts: .txt, .csv, .log formats</span>
+          </div>
+
+          <!-- Parse results status -->
+          <div id="parse-status-box" class="hidden bg-zinc-900/60 border border-zinc-800 p-3.5 rounded-xl space-y-3 text-xs font-mono">
+            <div class="flex items-center justify-between">
+              <span class="text-zinc-400">Parsed Entries:</span>
+              <span id="parsed-count" class="font-bold text-amber-500 text-sm">0</span>
+            </div>
+            <p id="parse-sample" class="text-[10px] text-zinc-500 italic truncate border-t border-zinc-850 pt-2"></p>
+            <div class="flex space-x-2 pt-1">
+              <button id="btn-save-parsed" class="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black rounded-lg text-xs tracking-wider uppercase transition cursor-pointer">
+                Inject & Save to Live Script
+              </button>
+              <button id="btn-clear-parsed" class="py-2.5 px-3 bg-zinc-900 text-zinc-400 hover:text-white font-bold rounded-lg text-xs border border-zinc-800 hover:border-zinc-700 transition cursor-pointer">
+                Clear
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- RIGHT COLUMN: LEADS CRM DATABASE & REAL-TIME RESPONSE PANEL (Col span 5) -->
+    <div class="lg:col-span-5 space-y-8">
+      
+      <!-- 3. CRM LEADS DATABASE (ZOHO AND CALLBACKS) -->
+      <section class="bg-zinc-950/90 border border-zinc-900 rounded-2xl shadow-xl p-6 relative">
+        <div class="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-emerald-500/40 to-transparent"></div>
+        
+        <div class="flex items-center justify-between mb-6 border-b border-zinc-900 pb-4">
+          <div class="flex items-center space-x-2">
+            <i data-lucide="database" class="text-emerald-500 h-5 w-5"></i>
+            <h2 class="text-sm font-extrabold text-white uppercase tracking-wider font-mono">Lead CRM Database</h2>
+          </div>
+          <div class="flex items-center space-x-2">
+            <button id="admin-btn-refresh" onclick="loadCRMData()" class="text-[10px] font-mono text-emerald-400 hover:text-emerald-300 transition flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-md">
+              <i data-lucide="refresh-cw" class="h-3 w-3"></i>
+              <span>Refresh Data</span>
+            </button>
+            <button id="admin-btn-clear" class="text-[9px] font-mono text-zinc-600 hover:text-red-400 transition">
+              Clear Database
+            </button>
+          </div>
+        </div>
+
+        <div class="space-y-4">
+          <p class="text-xs text-zinc-400 leading-relaxed">
+            Registered subscriber emails synchronized with Zoho Stage, plus phone numbers captured for follow-up calls (scholarship option).
+          </p>
+
+          <div id="admin-leads-list" class="space-y-3 max-h-80 overflow-y-auto custom-scrollbar pr-1">
+            <!-- Lead item bubbles -->
+          </div>
+
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between mt-4 border-t border-zinc-900 pt-4 gap-3">
+            <span class="text-xs text-zinc-400 font-mono">Global Workflows (Skip duplicates):</span>
+            <div class="flex gap-2 flex-wrap">
+              <button onclick="triggerGlobalZohoSync('welcome')" class="text-[10px] px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition border border-zinc-700 font-bold tracking-wider" title="Trigger Registration/Welcome for all pending">RESEND WELCOME</button>
+              <button onclick="triggerGlobalZohoSync('live')" class="text-[10px] px-3 py-1.5 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 transition border border-amber-500/30 font-bold tracking-wider" title="Trigger Live/Replay for all pending">RESEND LIVE/REPLAY</button>
+              <button onclick="triggerGlobalZohoSync('offer')" class="text-[10px] px-3 py-1.5 rounded bg-[#006fff]/10 hover:bg-[#006fff]/20 text-[#006fff] transition border border-[#006fff]/30 font-bold tracking-wider" title="Trigger Offer for all pending">RESEND OFFER</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3.1. PAYMENT GATEWAY INTEGRATION -->
+        <div class="mb-10 p-6 rounded-2xl bg-[#030816] border border-[#006fff]/20 shadow-2xl relative overflow-hidden group">
+          <div class="absolute inset-0 bg-gradient-to-r from-[#006fff]/5 to-transparent opacity-0 group-hover:opacity-100 transition duration-500 pointer-events-none"></div>
+          <div class="relative z-10">
+            <h2 class="text-sm font-extrabold text-white uppercase tracking-wider font-mono">Payment Gateway Integrations (Paystack/Flutterwave/Selar)</h2>
+            <div class="mt-4 grid grid-cols-1 gap-4">
+              <!-- Selar -->
+              <div class="p-4 rounded-xl bg-[#006fff]/10 border border-[#006fff]/30">
+                <div class="flex items-center gap-2 mb-2">
+                  <div class="w-2 h-2 rounded-full bg-[#00E5FF] animate-pulse"></div>
+                  <h3 class="text-xs font-bold text-[#006fff] font-mono tracking-widest uppercase">Selar Webhook</h3>
+                </div>
+                <p class="text-[10px] text-zinc-400 mb-3 leading-relaxed">
+                  Paste this URL in your <strong>Selar Dashboard > Integration > Webhooks</strong>.
+                </p>
+                <div class="bg-[#02050E] border border-zinc-800 rounded-lg p-2 flex justify-between items-center">
+                  <span id="selar-webhook-url-display" class="text-[9px] font-mono text-[#00E5FF] select-all break-all"></span>
+                  <button type="button" onclick="copyWebhookUrl('selar')" class="ml-2 bg-zinc-800 hover:bg-zinc-700 text-white p-1 rounded"><i data-lucide="copy" class="w-3 h-3"></i></button>
+                </div>
+              </div>
+
+              <!-- Paystack -->
+              <div class="p-4 rounded-xl bg-[#006fff]/10 border border-[#006fff]/30">
+                <div class="flex items-center gap-2 mb-2">
+                  <div class="w-2 h-2 rounded-full bg-[#00E5FF] animate-pulse"></div>
+                  <h3 class="text-xs font-bold text-[#006fff] font-mono tracking-widest uppercase">Paystack Webhook</h3>
+                </div>
+                <p class="text-[10px] text-zinc-400 mb-3 leading-relaxed">
+                  Paste this URL in your <strong>Paystack Dashboard > Settings > API Keys & Webhooks</strong>.
+                </p>
+                <div class="bg-[#02050E] border border-zinc-800 rounded-lg p-2 flex justify-between items-center">
+                  <span id="paystack-webhook-url-display" class="text-[9px] font-mono text-[#00E5FF] select-all break-all"></span>
+                  <button type="button" onclick="copyWebhookUrl('paystack')" class="ml-2 bg-zinc-800 hover:bg-zinc-700 text-white p-1 rounded"><i data-lucide="copy" class="w-3 h-3"></i></button>
+                </div>
+              </div>
+
+              <!-- Flutterwave -->
+              <div class="p-4 rounded-xl bg-[#006fff]/10 border border-[#006fff]/30">
+                <div class="flex items-center gap-2 mb-2">
+                  <div class="w-2 h-2 rounded-full bg-[#00E5FF] animate-pulse"></div>
+                  <h3 class="text-xs font-bold text-[#006fff] font-mono tracking-widest uppercase">Flutterwave Webhook</h3>
+                </div>
+                <p class="text-[10px] text-zinc-400 mb-3 leading-relaxed">
+                  Paste this URL in your <strong>Flutterwave Dashboard > Settings > Webhooks</strong>.
+                </p>
+                <div class="bg-[#02050E] border border-zinc-800 rounded-lg p-2 flex justify-between items-center">
+                  <span id="flutterwave-webhook-url-display" class="text-[9px] font-mono text-[#00E5FF] select-all break-all"></span>
+                  <button type="button" onclick="copyWebhookUrl('flutterwave')" class="ml-2 bg-zinc-800 hover:bg-zinc-700 text-white p-1 rounded"><i data-lucide="copy" class="w-3 h-3"></i></button>
+                </div>
+              </div>
+            </div>
+
+            <!-- SIMULATION TOOL -->
+            <div class="mt-6 pt-4 border-t border-zinc-800">
+              <p class="text-[11px] text-zinc-500 mb-2">Test the entire funnel. Enter a test email below to mock-simulate a successful payment internally:</p>
+              <div class="flex gap-2">
+                <input
+                  type="email"
+                  id="sim-selar-email"
+                  placeholder="test@starpips.com"
+                  class="flex-1 max-w-xs bg-[#02050E] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#00E5FF]/50 transition font-mono"
+                />
+                <button
+                  type="button"
+                  id="btn-sim-selar"
+                  class="bg-[#006fff]/20 hover:bg-[#00E5FF]/30 text-[#00E5FF] border border-[#00E5FF]/30 px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2"
+                >
+                  <i class="fas fa-bolt"></i>
+                  <span>Simulate Payment</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      <!-- 3.2. REAL-TIME SALES & REVENUE LOG -->
+      <section class="bg-zinc-950/90 border border-zinc-900 rounded-2xl shadow-xl p-6 relative">
+        <div class="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-emerald-500/40 to-transparent"></div>
+        
+        <div class="flex items-center justify-between mb-6 border-b border-zinc-900 pb-4">
+          <div class="flex items-center space-x-2">
+            <i data-lucide="dollar-sign" class="text-emerald-500 h-5 w-5"></i>
+            <h2 class="text-sm font-extrabold text-white uppercase tracking-wider font-mono">Real-Time Verified Sales Logs</h2>
+          </div>
+          <span id="sales-count-badge" class="text-[9px] font-mono text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">0 Sales</span>
+        </div>
+
+        <div class="space-y-3">
+          <div id="admin-sales-list" class="space-y-3 max-h-60 overflow-y-auto custom-scrollbar pr-1">
+            <!-- Dynamic sales lists -->
+          </div>
+        </div>
+      </section>
+
+      <!-- 3.3. ZOHO CAMPAIGNS AUTOMATION MONITOR -->
+      <section class="bg-zinc-950/90 border border-zinc-900 rounded-2xl shadow-xl p-6 relative">
+        <div class="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-blue-500/40 to-transparent"></div>
+        
+        <div class="flex items-center justify-between mb-6 border-b border-zinc-900 pb-4">
+          <div class="flex items-center space-x-2">
+            <i data-lucide="activity" class="text-blue-500 h-5 w-5"></i>
+            <h2 class="text-sm font-extrabold text-white uppercase tracking-wider font-mono">Zoho Campaigns Drip Monitor</h2>
+          </div>
+          <span class="text-[9px] font-mono text-zinc-500">Live API logs</span>
+        </div>
+
+        <div class="space-y-3">
+          <p class="text-xs text-zinc-400">Tracks instant welcome, countdown reminders, and payment confirmations dispatched to registrants:</p>
+          <div id="admin-zoho-logs" class="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-1 text-[11px] font-mono">
+            <!-- Dynamic Zoho dispatch items -->
+          </div>
+        </div>
+      </section>
+
+      <!-- MANUAL RESOURCE & ACTIVITY LOGGER UPLOADS -->
+      <section class="bg-zinc-950/90 border border-zinc-900 rounded-2xl shadow-xl p-6 relative">
+        <div class="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-[#006fff]/40 to-transparent"></div>
+        
+        <div class="flex items-center justify-between mb-6 border-b border-zinc-900 pb-4">
+          <div class="flex items-center space-x-2">
+            <i data-lucide="file-text" class="text-[#006fff] h-5 w-5"></i>
+            <h2 class="text-sm font-extrabold text-white uppercase tracking-wider font-mono">Dynamic Materials & Logs</h2>
+          </div>
+          <span class="text-[9px] font-mono text-[#006fff] bg-[#006fff]/10 border border-[#006fff]/20 px-2 py-0.5 rounded">Activity Logger</span>
+        </div>
+
+        <div class="space-y-4">
+          <p class="text-xs text-zinc-400 leading-relaxed">
+            Upload text reports, sheet csv rows, or session activity logs. They are instantly formatted and dispatched as official system alerts inside all live stream viewer desks!
+          </p>
+
+          <form id="form-upload-material" class="space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-500 mb-1.5 font-bold">Document Title</label>
+                <input
+                  type="text"
+                  
+                  id="mat-title"
+                  placeholder="e.g. SMC Order Block Playbook"
+                  class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-[#006fff]/50 transition font-mono"
+                />
+              </div>
+              <div>
+                <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-500 mb-1.5 font-bold">Document Type</label>
+                <select
+                  id="mat-type"
+                  class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#006fff]/50 transition font-mono"
+                >
+                  <option value="text">General Plain Text Report</option>
+                  <option value="sheet">CSV Spreadsheet Data Row</option>
+                  <option value="log">Live Activity Log Sheet</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="mat-timestamp"
+                checked
+                class="rounded border-zinc-800 bg-[#02050E] text-[#006fff] focus:ring-0"
+              />
+              <label for="mat-timestamp" class="text-[11px] text-zinc-400 select-none cursor-pointer">Include automatic current UTC date-timestamp</label>
+            </div>
+
+            <div>
+              <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-500 mb-1.5 font-bold">Content (Paste text, sheets, or logs)</label>
+              <textarea
+                
+                id="mat-content"
+                rows="3"
+                placeholder="Paste content lines here..."
+                class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-zinc-700 focus:outline-none focus:border-[#006fff]/50 transition font-mono resize-none custom-scrollbar"
+              ></textarea>
+            </div>
+
+            <button
+              type="submit"
+              class="w-full py-3 rounded-xl bg-[#006fff] hover:bg-[#006fff]/90 text-white font-black text-xs tracking-widest uppercase transition flex items-center justify-center space-x-2 cursor-pointer"
+            >
+              <i data-lucide="upload" class="h-4 w-4"></i>
+              <span>Upload and Publish Activity Material</span>
+            </button>
+          </form>
+        </div>
+      </section>
+
+      
+      <!-- MySQL Database Config -->
+      <section class="bg-zinc-950/90 border border-zinc-900 rounded-2xl shadow-xl p-6 relative">
+        <div class="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-[#006fff]/40 to-transparent"></div>
+        <div class="flex items-center justify-between mb-6 border-b border-zinc-900 pb-4">
+          <div class="flex items-center space-x-2">
+            <i data-lucide="database" class="text-[#006fff] h-5 w-5"></i>
+            <h2 class="text-sm font-extrabold text-white uppercase tracking-wider font-mono">Shared Hosting MySQL Database Config</h2>
+          </div>
+        </div>
+        <div class="space-y-4">
+          <p class="text-xs text-zinc-400 leading-relaxed">
+            Configure your Namecheap shared hosting MySQL database here. When enabled, this overrides local file storage so your app seamlessly transitions.
+          </p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-500 mb-1.5 font-bold">Database Host</label>
+              <input type="text" id="mysql-host" placeholder="e.g. localhost or remote IP" class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-[#006fff]/50 transition font-mono" />
+            </div>
+            <div>
+              <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-500 mb-1.5 font-bold">Database Name</label>
+              <input type="text" id="mysql-db" class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-[#006fff]/50 transition font-mono" />
+            </div>
+            <div>
+              <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-500 mb-1.5 font-bold">Username</label>
+              <input type="text" id="mysql-user" class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-[#006fff]/50 transition font-mono" />
+            </div>
+            <div>
+              <label class="block text-[9px] uppercase tracking-wider font-mono text-zinc-500 mb-1.5 font-bold">Password</label>
+              <input type="password" id="mysql-pass" class="w-full bg-[#02050E] border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-[#006fff]/50 transition font-mono" />
+            </div>
+          </div>
+          <div class="flex items-center space-x-2 py-2">
+            <input type="checkbox" id="mysql-enabled" class="rounded border-zinc-800 bg-[#02050E] text-[#006fff] focus:ring-0 h-4 w-4" />
+            <label for="mysql-enabled" class="text-xs text-zinc-300 font-bold uppercase tracking-wider font-mono cursor-pointer">Enable MySQL Database</label>
+          </div>
+          <button id="btn-save-mysql" class="w-full py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-black text-xs tracking-widest uppercase transition flex items-center justify-center space-x-2 cursor-pointer mt-4">
+            <i data-lucide="save" class="h-4 w-4"></i>
+            <span>Save MySQL Config</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- 4. REAL-TIME VIEWER INQUIRY RESPONDER -->
+      <section class="bg-zinc-950/90 border border-zinc-900 rounded-2xl shadow-xl p-6 relative">
+        <div class="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-[#006fff]/40 to-transparent"></div>
+        
+        <div class="flex items-center justify-between mb-6 border-b border-zinc-900 pb-4">
+          <div class="flex items-center space-x-2">
+            <i data-lucide="message-square" class="text-[#006fff] h-5 w-5"></i>
+            <h2 class="text-sm font-extrabold text-white uppercase tracking-wider font-mono">Viewer Q&A Terminal</h2>
+          </div>
+          <span id="active-inquiries-count" class="text-[9px] font-mono text-zinc-500">0 Inquiries</span>
+        </div>
+
+        <div class="space-y-4">
+          <p class="text-xs text-zinc-400 leading-relaxed">
+            When attendees type comments inside the webinar room, they arrive on this console. Reply directly here; replies simulate outbound Namecheap SMTP email dispatch to the viewer.
+          </p>
+
+          <div id="admin-comments-list" class="space-y-4 max-h-[350px] overflow-y-auto custom-scrollbar pr-1">
+            <!-- Question items and response forms -->
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+  </main>
+
+  <footer class="bg-zinc-950/60 border-t border-zinc-900/60 py-4 px-6 text-center text-[10px] font-mono text-zinc-600 relative z-10">
+    <span>© 2026 StarPips Forex Academy. Admin interface operates local file serialization.</span>
+  </footer>
+
+  <script src="js/admin.js"></script>
+</body>
+</html>

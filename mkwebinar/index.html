@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>StarPips Forex Transformation - Live Masterclass</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS v3 CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: '#006fff',
+            navy: '#000066',
+          },
+          fontFamily: {
+            sans: ['Ubuntu', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+        }
+      }
+    }
+  </script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- HLS.js for HLS (.m3u8) video stream playback on all browsers -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    @keyframes float-pulse {
+      0%, 100% { transform: translateY(0) scale(1); box-shadow: 0 0 15px rgba(0,111,255,0.4); }
+      50% { transform: translateY(-4px) scale(1.02); box-shadow: 0 0 30px rgba(0,111,255,0.75); }
+    }
+    .catchy-float {
+      animation: float-pulse 2.5s infinite ease-in-out;
+    }
+    html, body {
+      overflow-x: hidden;
+      width: 100%;
+      max-width: 100%;
+    }
+    /* Custom Scrollbar styling */
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #02050e;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #1a2238;
+      border-radius: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #006fff;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.5; }
+      50% { transform: scale(1.1); opacity: 0.8; }
+      100% { transform: scale(0.95); opacity: 0.5; }
+    }
+    .animate-pulse-ring {
+      animation: pulse-ring 2s infinite ease-in-out;
+    }
+  </style>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen font-sans flex flex-col selection:bg-[#006fff] selection:text-white">
+
+  <!-- Background Ambient Gradients -->
+  <div class="fixed inset-0 bg-[radial-gradient(circle_at_top_right,rgba(217,119,6,0.04),transparent_50%)] pointer-events-none z-0"></div>
+  <div class="fixed inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(0,229,255,0.02),transparent_50%)] pointer-events-none z-0"></div>
+  <div class="fixed inset-0 bg-[linear-gradient(rgba(255,255,255,0.005)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.005)_1px,transparent_1px)] bg-[size:30px_30px] pointer-events-none z-0"></div>
+
+  <!-- STAGE 1: ZOHO REGISTRATION LANDING PAGE -->
+  <div id="stage-registration" class="relative z-10 w-full max-w-6xl mx-auto px-4 py-8 md:py-16 flex flex-col justify-center min-h-screen space-y-10">
+    
+    <!-- Top Live Badge Header -->
+    <div class="self-start flex flex-wrap items-center gap-2.5 bg-[#000066]/80 border border-[#006fff]/30 px-5 py-2.5 rounded-full shadow-lg backdrop-blur-md">
+      <span class="relative flex h-2 w-2">
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-2 w-2 bg-red-600"></span>
+      </span>
+      <span class="text-xs font-mono font-bold uppercase tracking-widest text-[#006fff]">JOIN FREE LIVE CLASS NOW</span>
+    </div>
+
+    <!-- Main Landing Block Grid (Left: Content, Right: Floating Form on Desktop) -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start w-full">
+      
+      <!-- Left Column: Copy, What You'll Learn, and Portrait Gallery -->
+      <div class="lg:col-span-7 space-y-8">
+        
+        <!-- Copy Block & Large Headline -->
+        <div class="text-left space-y-4">
+          <h1 id="main-webinar-title" class="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black text-white leading-tight tracking-tight font-sans">
+            FREE LIVE CLASS: Learn exactly how I and my mentees earn thousands from forex and how you can make $1000 to $3000 monthly trading.
+          </h1>
+          <p class="text-xs sm:text-sm font-mono uppercase tracking-widest text-zinc-400 font-bold">
+            <span id="main-presenter-title">Live Class By</span> <span id="main-presenter-name" class="text-[#006fff]">Fx High Priest</span>
+          </p>
+        </div>
+
+        <!-- What You'll Learn Checklist -->
+        <div class="space-y-6 bg-[#000066]/20 border border-zinc-900/60 p-6 sm:p-8 rounded-2xl backdrop-blur-sm">
+          <h2 class="text-lg font-black text-white uppercase tracking-wider border-b border-zinc-900 pb-3">
+            What you'll learn in this program
+          </h2>
+          
+          <ul class="space-y-4 text-sm text-zinc-300">
+            <li class="flex items-start gap-3">
+              <span class="p-1 rounded bg-[#006fff]/10 border border-[#006fff]/20 text-[#006fff] mt-0.5 flex-shrink-0">
+                <i data-lucide="check" class="h-3.5 w-3.5 stroke-[3]"></i>
+              </span>
+              <div>
+                <strong class="text-white">What forex is → how profit is made</strong>
+              </div>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="p-1 rounded bg-[#006fff]/10 border border-[#006fff]/20 text-[#006fff] mt-0.5 flex-shrink-0">
+                <i data-lucide="x" class="h-3.5 w-3.5 stroke-[3] text-red-400"></i>
+              </span>
+              <div>
+                <strong class="text-white">Why most traders fail</strong>
+              </div>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="p-1 rounded bg-[#006fff]/10 border border-[#006fff]/20 text-[#006fff] mt-0.5 flex-shrink-0">
+                <i data-lucide="check" class="h-3.5 w-3.5 stroke-[3]"></i>
+              </span>
+              <div>
+                <strong class="text-white">What the 1% do to be profitable</strong>
+              </div>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="p-1 rounded bg-[#006fff]/10 border border-[#006fff]/20 text-[#006fff] mt-0.5 flex-shrink-0">
+                <i data-lucide="key-round" class="h-3.5 w-3.5 stroke-[3]"></i>
+              </span>
+              <div>
+                <strong class="text-white">Secret entry techniques: My unique entry techniques</strong>
+              </div>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="p-1 rounded bg-[#006fff]/10 border border-[#006fff]/20 text-[#006fff] mt-0.5 flex-shrink-0">
+                <i data-lucide="lock" class="h-3.5 w-3.5 stroke-[3]"></i>
+              </span>
+              <div>
+                <strong class="text-white">What profitable traders don't want you to know</strong>
+              </div>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="p-1 rounded bg-[#006fff]/10 border border-[#006fff]/20 text-[#006fff] mt-0.5 flex-shrink-0">
+                <i data-lucide="trending-up" class="h-3.5 w-3.5 stroke-[3]"></i>
+              </span>
+              <div>
+                <strong class="text-white">How you can become profitable too</strong>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Portraits Gallery block -->
+        <div class="space-y-4">
+          <div class="flex items-center space-x-2 border-b border-zinc-900/60 pb-2">
+            <i data-lucide="image" class="text-[#006fff] h-4 w-4"></i>
+            <span class="text-[10px] font-mono tracking-widest uppercase text-zinc-400 font-bold">Mentees' Results</span>
+          </div>
+          
+          <div id="vertical-images-container" class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div class="relative overflow-hidden rounded-xl border border-zinc-900 aspect-[3/4] bg-zinc-950">
+              <img id="landing-img-1" class="w-full h-full object-cover opacity-80 hover:scale-105 hover:opacity-100 transition-all duration-500" src="https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&w=800&q=80" alt="Forex Candlestick Analysis">
+              <div class="absolute bottom-2 left-2 right-2 bg-black/85 text-white text-[8px] font-mono p-1 rounded border border-zinc-800 text-center truncate">prop payout</div>
+            </div>
+            <div class="relative overflow-hidden rounded-xl border border-zinc-900 aspect-[3/4] bg-zinc-950">
+              <img id="landing-img-2" class="w-full h-full object-cover opacity-80 hover:scale-105 hover:opacity-100 transition-all duration-500" src="https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=800&q=80" alt="Trading Terminal">
+              <div class="absolute bottom-2 left-2 right-2 bg-black/85 text-white text-[8px] font-mono p-1 rounded border border-zinc-800 text-center truncate">$1000+ profit</div>
+            </div>
+            <div class="relative overflow-hidden rounded-xl border border-zinc-900 aspect-[3/4] bg-zinc-950">
+              <img id="landing-img-3" class="w-full h-full object-cover opacity-80 hover:scale-105 hover:opacity-100 transition-all duration-500" src="https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=800&q=80" alt="Elite Mentorship">
+              <div class="absolute bottom-2 left-2 right-2 bg-black/85 text-white text-[8px] font-mono p-1 rounded border border-zinc-800 text-center truncate">high win rate strategy</div>
+            </div>
+            <div class="relative overflow-hidden rounded-xl border border-zinc-900 aspect-[3/4] bg-zinc-950">
+              <img id="landing-img-4" class="w-full h-full object-cover opacity-80 hover:scale-105 hover:opacity-100 transition-all duration-500" src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80" alt="Account Growth Statistics">
+              <div class="absolute bottom-2 left-2 right-2 bg-black/85 text-white text-[8px] font-mono p-1 rounded border border-zinc-800 text-center truncate">transformation</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Right Column: Floating/Sticky Registration Card (Slightly reduced size but fully intact) -->
+      <div id="main-registration-form-anchor" class="lg:col-span-5 lg:sticky lg:top-8 z-20 w-full">
+        <div class="bg-[#000066]/80 border border-[#006fff]/30 p-5 sm:p-6 rounded-2xl shadow-2xl relative backdrop-blur-md">
+          <div class="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-[#006fff]/50 to-transparent"></div>
+          
+          <div class="text-center space-y-2 mb-5">
+            <h2 class="text-sm sm:text-base font-black text-white uppercase tracking-wider">JOIN TO LEARN AND EARN</h2>
+            <p class="text-[9px] text-zinc-500 font-mono">Fill The Form To Join Free Live Class</p>
+          </div>
+
+          <form id="form-registration" class="space-y-3.5">
+            <div>
+              <label class="block text-[9px] uppercase tracking-widest font-mono text-zinc-400 mb-1 font-bold">Your Full Name</label>
+              <div class="relative">
+                <span class="absolute inset-y-0 left-3 flex items-center text-zinc-500">
+                  <i data-lucide="user" class="h-3.5 w-3.5"></i>
+                </span>
+                <input
+                  type="text"
+                  required
+                  id="reg-name"
+                  placeholder=""
+                  class="w-full bg-zinc-950/85 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-xs text-white placeholder-zinc-700 focus:outline-none focus:border-[#006fff]/50 transition font-mono"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-[9px] uppercase tracking-widest font-mono text-zinc-400 mb-1 font-bold">Primary Email Address</label>
+              <div class="relative">
+                <span class="absolute inset-y-0 left-3 flex items-center text-zinc-500">
+                  <i data-lucide="mail" class="h-3.5 w-3.5"></i>
+                </span>
+                <input
+                  type="email"
+                  required
+                  id="reg-email"
+                  placeholder=""
+                  class="w-full bg-zinc-950/85 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-xs text-white placeholder-zinc-700 focus:outline-none focus:border-[#006fff]/50 transition font-mono"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-[9px] uppercase tracking-widest font-mono text-zinc-400 mb-1 font-bold">WhatsApp / Phone Number</label>
+              <div class="relative">
+                <span class="absolute inset-y-0 left-3 flex items-center text-zinc-500">
+                  <i data-lucide="phone" class="h-3.5 w-3.5"></i>
+                </span>
+                <input
+                  type="tel"
+                  required
+                  id="reg-phone"
+                  placeholder=""
+                  class="w-full bg-zinc-950/85 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-xs text-white placeholder-zinc-700 focus:outline-none focus:border-[#006fff]/50 transition font-mono"
+                />
+              </div>
+            </div>
+
+            <!-- Dynamic Form Validation & Feedback Message -->
+            <div id="registration-feedback" class="hidden text-center text-xs font-mono p-2.5 rounded-lg border mt-2"></div>
+
+            <button
+              type="submit"
+              class="w-full py-3 rounded-xl bg-[#006fff] hover:bg-[#006fff]/90 text-white font-bold text-xs tracking-widest uppercase shadow-lg shadow-[#006fff]/20 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer flex items-center justify-center space-x-1.5"
+            >
+              <span>Join Free Live Class</span>
+              <i data-lucide="arrow-right" class="h-4 w-4"></i>
+            </button>
+          </form>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Bottom Host Section -->
+    <div class="border-t border-zinc-900/60 w-full pt-6 flex flex-col sm:flex-row justify-between items-center text-xs text-zinc-500 gap-4">
+      <div class="flex items-center space-x-3">
+        <div class="h-9 w-9 rounded-full bg-[#000066] border border-[#006fff]/30 flex items-center justify-center text-[#006fff] font-bold font-mono text-xs shadow">
+          HP
+        </div>
+        <div>
+          <span id="reg-presenter-name-display" class="block text-zinc-300 font-bold">Fx High Priest</span>
+          <span id="reg-presenter-title-display" class="text-[10px] text-zinc-600 uppercase font-mono tracking-wider font-bold">CEO, Starpips Forex</span>
+        </div>
+      </div>
+      <div class="font-mono text-center sm:text-right">
+        <span>Active Participants on Queue: <strong id="reg-active-viewer-placeholder" class="text-[#006fff]">827</strong></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- FLOATING REGISTRATION CTA BAR (SCROLLING VIEWPORT ANCHOR) -->
+  <div id="floating-reg-bar" class="fixed bottom-4 left-4 right-4 sm:left-1/2 sm:-translate-x-1/2 sm:right-auto bg-[#006fff] hover:bg-[#006fff]/95 border border-[#006fff]/30 p-3.5 sm:p-4 shadow-[0_0_30px_rgba(0,111,255,0.4)] backdrop-blur-md z-50 transition-all duration-300 transform translate-y-full opacity-0 flex items-center justify-center max-w-md rounded-2xl cursor-pointer select-none touch-manipulation animate-pulse-ring" onclick="scrollToMainForm()">
+    <div class="flex flex-col items-center text-center w-full catchy-float">
+      <span class="text-white font-black text-base sm:text-lg uppercase tracking-widest mb-1 drop-shadow-sm flex items-center justify-center gap-2">
+        <i data-lucide="video" class="h-4 w-4 animate-pulse"></i> SECURE YOUR SPOT NOW
+      </span>
+      <span class="text-white/80 font-bold text-[10px] sm:text-xs uppercase tracking-wide">
+        Tap here to register for the free live webinar
+      </span>
+    </div>
+  </div>
+
+  <!-- STAGE 2: SECURE CONNECTION WAIT ROOM -->
+  <div id="stage-waiting" class="hidden relative z-10 w-full max-w-md mx-auto px-4 py-16 flex-col items-center justify-center min-h-screen text-center space-y-8">
+    
+    <div class="relative flex items-center justify-center">
+      <!-- Loading rings -->
+      <div class="h-20 w-20 rounded-full border border-zinc-800 flex items-center justify-center relative">
+        <div class="absolute inset-0 rounded-full border-t-2 border-amber-500 animate-spin"></div>
+        <i data-lucide="server" class="h-8 w-8 text-amber-500"></i>
+      </div>
+    </div>
+
+    <div class="space-y-3">
+      <h2 class="text-xl font-extrabold text-white uppercase tracking-wider font-mono">connecting to live webinar...</h2>
+    </div>
+
+    <!-- Live Timer Countdown -->
+    <div class="bg-[#04091A] border border-zinc-900 p-6 rounded-2xl w-full shadow-2xl space-y-4">
+      <span class="block text-[10px] font-bold uppercase tracking-widest text-zinc-500 font-mono">Live Webinar Commencing In</span>
+      <div class="flex justify-center space-x-6">
+        <div class="text-center">
+          <span id="wait-timer-sec" class="block text-4xl font-black font-mono text-amber-500">00:15</span>
+          <span class="text-[9px] uppercase tracking-wider text-zinc-600 font-bold">Minutes / Seconds</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick instructions -->
+    <div class="text-xs text-zinc-600 space-y-1">
+      <p>Get ready to join live session with Fx High Priest</p>
+      <p>Make sure your audio volume is unmuted.</p>
+    </div>
+  </div>
+
+  <!-- STAGE 3: THE LIVE BROADCAST ROOM -->
+  <div id="stage-broadcast" class="hidden fixed inset-0 z-50 bg-zinc-950 flex flex-col overflow-hidden">
+    <!-- Main Live Screen Layout (Bento split) -->
+    <div class="flex-1 flex flex-col lg:grid lg:grid-cols-12 gap-0 min-h-0 h-full w-full relative overflow-hidden">
+      
+      <!-- Live Chat Stream Column (Left on desktop, bottom on mobile) -->
+      <div class="order-2 lg:order-1 lg:col-span-4 bg-zinc-950 flex flex-col relative min-h-0 flex-1 lg:h-full lg:overflow-hidden lg:border-r border-zinc-900/60">
+        
+        <!-- Chat header indicator -->
+        <div class="p-4 border-b border-zinc-900/60 flex items-center justify-between bg-zinc-950 shrink-0">
+          <div class="flex items-center space-x-2">
+            <span class="relative flex h-2 w-2">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span class="text-xs font-black uppercase tracking-wider text-emerald-500">Live Chat</span>
+          </div>
+        </div>
+        
+        <!-- Virtualized chat feed -->
+        <div id="webinar-chat-log" class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar text-zinc-400 relative pb-4 min-h-0">
+          <!-- Intro System Message -->
+          <div class="text-[10px] text-center text-zinc-600 font-mono my-4 uppercase tracking-widest flex items-center justify-center space-x-2 before:h-px before:flex-1 before:bg-zinc-800/50 after:h-px after:flex-1 after:bg-zinc-800/50">
+            <span>Chat Connected securely</span>
+          </div>
+        </div>
+        
+        <!-- Chat Input (Fixed to bottom on mobile, relative on desktop) -->
+        <div class="p-4 border-t border-zinc-900/60 bg-zinc-950 shrink-0">
+          <form id="form-live-chat" class="flex items-center gap-2 max-w-full">
+            <div class="relative flex-1 group">
+              <div class="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                <i data-lucide="message-square" class="h-4 w-4 text-zinc-500 group-focus-within:text-[#006fff] transition-colors"></i>
+              </div>
+              <input 
+                type="text" 
+                id="chat-input" 
+                placeholder="Say something to Fx High Priest..." 
+                autocomplete="off"
+                class="w-full bg-zinc-900/80 border border-zinc-800 rounded-xl pl-9 pr-4 py-3 text-sm text-white focus:border-[#006fff]/50 focus:bg-zinc-900 outline-none transition-all placeholder:text-zinc-600 placeholder:font-mono font-sans"
+              />
+            </div>
+            <button 
+              type="submit" 
+              class="bg-[#006fff] hover:bg-blue-600 text-white rounded-xl px-4 py-3 transition-all shadow-lg shadow-[#006fff]/20 active:scale-95 flex-shrink-0"
+              aria-label="Send Message"
+            >
+              <i data-lucide="send" class="h-5 w-5"></i>
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Video stream & offer sector (Right on desktop, top on mobile) -->
+      <div class="order-1 lg:order-2 lg:col-span-8 flex flex-col bg-zinc-950 sticky lg:relative top-0 z-[60] shrink-0 w-full lg:flex-1 lg:h-full lg:border-l border-zinc-900/60 lg:overflow-hidden">
+        
+        <!-- Custom styled Live Video Box -->
+        <div class="bg-black overflow-hidden shadow-2xl aspect-video w-full flex-shrink-0 relative z-[60]">
+          
+          <!-- Live Status & Viewers Badge (Top Left Overlay) -->
+          <div class="absolute top-4 left-4 z-40 flex items-center gap-2 pointer-events-none">
+            <div id="video-top-live-badge" class="flex items-center gap-1.5 bg-red-600 px-2 py-1 rounded shadow-lg">
+              <span class="relative flex h-1.5 w-1.5">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-white"></span>
+              </span>
+              <span class="text-[9px] font-black text-white tracking-widest uppercase">LIVE</span>
+            </div>
+            <div id="video-top-views-badge" class="flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-2 py-1 rounded shadow-lg border border-white/10">
+              <i data-lucide="users" class="h-3 w-3 text-white"></i>
+              <span id="dynamic-viewer-counter-video" class="text-[10px] font-mono font-bold text-white">0</span>
+            </div>
+          </div>
+          <video
+            id="main-video-player"
+            playsinline
+            preload="auto"
+            controlsList="nodownload"
+            class="w-full h-full object-cover rounded-none lg:rounded-2xl"
+            style="pointer-events: none;"
+          >
+            <!-- Native video source injected here if used -->
+          </video>
+          
+          <!-- YouTube Embedded Client Container -->
+          <div id="youtube-player-container" class="hidden absolute inset-0 bg-black z-10 w-full h-full overflow-hidden pointer-events-none">
+             <!-- The iframe will be dynamically generated by JS -->
+          </div>
+
+          <!-- YouTube Loading Blocker UI -->
+          <div id="youtube-ui-blocker" class="hidden absolute inset-0 bg-black z-20 transition-opacity duration-[2000ms] ease-in-out opacity-100 flex items-center justify-center pointer-events-none">
+             <div class="flex flex-col items-center space-y-6">
+                <div class="h-12 w-12 rounded-full border border-zinc-800 flex items-center justify-center relative mb-4">
+                  <div class="absolute inset-0 rounded-full border-t-2 border-[#006fff] animate-spin"></div>
+                </div>
+                <div class="space-y-2 text-center">
+                  <p class="text-xs text-[#006fff] font-mono tracking-widest uppercase font-black animate-pulse">CONNECTING SECURE STREAM...</p>
+                  <p class="text-[10px] text-zinc-500 font-mono uppercase tracking-wider">DO NOT REFRESH</p>
+                </div>
+             </div>
+          </div>
+
+          <!-- Gumlet Player Container -->
+          <div id="gumlet-player-container" class="hidden absolute inset-0 bg-black z-10 w-full h-full overflow-hidden pointer-events-none">
+             <!-- Gumlet SDK -->
+          </div>
+          
+          <!-- Zoom Embedded Client Container (Hidden by default, shown if zoomEnabled is active during live) -->
+          <div id="zoom-player-container" class="hidden absolute inset-0 bg-black z-10 w-full h-full">
+            <iframe id="zoom-iframe" class="w-full h-full border-none" allow="microphone; camera; fullscreen; display-capture; autoplay" sandbox="allow-forms allow-scripts allow-same-origin allow-popups"></iframe>
+          </div>
+
+          <!-- Video Over UI (Play/Ended) -->
+          <div id="video-ended-overlay" class="hidden absolute inset-0 bg-zinc-950/95 backdrop-blur-md z-40 flex-col justify-center items-center p-6 text-center animate-fade-in pointer-events-auto">
+            <div class="max-w-md mx-auto space-y-4 flex flex-col items-center">
+              <div class="flex items-center space-x-2 bg-zinc-900/90 border border-zinc-800/80 px-3 py-1 rounded-full text-zinc-400 select-none">
+                <span class="relative flex h-1.5 w-1.5">
+                  <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-zinc-500"></span>
+                </span>
+                <span class="text-[9px] font-mono font-bold uppercase tracking-widest text-zinc-400">LIVE SESSION CONCLUDED</span>
+              </div>
+              
+              <h3 class="text-white text-base sm:text-lg md:text-xl font-black uppercase tracking-wider leading-snug select-none">
+                Webinar Broadcast Ended
+              </h3>
+              
+              <p class="text-[10px] sm:text-[11px] text-zinc-400 leading-relaxed max-w-xs sm:max-w-sm select-none">
+                Missed some parts of the training or want to secure your special discount? Get instant access to the full replay page and active exclusive bonuses!
+              </p>
+              
+              <!-- A very big animated link to the replay page -->
+              <a id="video-ended-replay-btn" href="/replay" class="relative group mt-3 flex items-center justify-center space-x-2.5 px-8 py-4 bg-gradient-to-r from-[#006fff] to-[#3b82f6] hover:from-[#3b82f6] hover:to-[#006fff] text-white text-xs font-black uppercase tracking-widest rounded-xl shadow-[0_0_20px_rgba(0,111,255,0.35)] hover:shadow-[0_0_40px_rgba(0,111,255,0.6)] transition-all duration-300 transform hover:scale-105 active:scale-95 animate-pulse cursor-pointer">
+                <i data-lucide="play-circle" class="w-5 h-5 stroke-[2.5]"></i>
+                <span>Access Full Replay & Offers Now</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- Click to Unmute/Play Overlay -->
+          <div id="video-click-overlay" class="absolute inset-0 bg-zinc-950 z-30 flex flex-col justify-center items-center p-6 text-center transition-all duration-1000 ease-out cursor-pointer pointer-events-auto">
+            <div id="overlay-interactive-content" class="flex flex-col items-center space-y-4 max-w-sm pointer-events-none">
+              <!-- Animated Pulse Audio Waves and Live Icon -->
+              <div class="flex items-center space-x-2 bg-red-500/10 border border-red-500/20 px-3 py-1 rounded-full animate-pulse mb-1">
+                <span class="relative flex h-2 w-2">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                </span>
+                <span class="text-[9px] font-mono font-black text-red-500 uppercase tracking-widest">LIVE WEBINAR IN PROGRESS</span>
+              </div>
+              <!-- Animated Soundwave Speakers -->
+              <div class="flex items-end justify-center space-x-1.5 h-8 my-2">
+                <div class="w-1 bg-[#006fff] rounded-full animate-pulse h-4"></div>
+                <div class="w-1 bg-[#006fff] rounded-full animate-pulse h-8"></div>
+                <div class="w-1 bg-[#006fff] rounded-full animate-pulse h-6"></div>
+                <div class="w-1 bg-[#006fff] rounded-full animate-pulse h-5"></div>
+                <div class="w-1 bg-[#006fff] rounded-full animate-pulse h-7"></div>
+              </div>
+              <div class="space-y-1">
+                <h3 class="text-white text-sm font-black uppercase tracking-wider">Fx High Priest Is Live Now</h3>
+                <p class="text-[10px] text-zinc-400 max-w-[280px] leading-relaxed">Live webinar has started. tap below to join live now</p>
+              </div>
+              <!-- Glowing, pulsing CTA unmute button -->
+              <button id="unmute-cta-btn" class="flex items-center space-x-2 px-6 py-3.5 bg-[#006fff] hover:bg-[#3b82f6] active:scale-95 text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-2xl transition-all duration-200 cursor-pointer pointer-events-auto">
+                <i data-lucide="play" class="h-4 w-4 stroke-[3]"></i>
+                <span>TAP TO JOIN LIVE</span>
+              </button>
+            </div>
+            
+            <!-- Pre-allocated loading buffer structure hidden initially inside the overlay itself to cover any youtube state change popup -->
+            <div id="overlay-buffering-content" class="hidden flex flex-col items-center justify-center space-y-4">
+              <div class="h-10 w-10 rounded-full border border-zinc-800 flex items-center justify-center relative mb-4">
+                <div class="absolute inset-0 rounded-full border-t-2 border-[#006fff] animate-spin"></div>
+              </div>
+              <div class="space-y-1">
+                <p class="text-[10px] text-[#006fff] font-mono tracking-widest uppercase font-black animate-pulse">SYNCHRONIZING LIVE...</p>
+                <p class="text-[8px] text-zinc-500 font-mono uppercase tracking-wider">CONNECTING AUDIO</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex-shrink-0 bg-zinc-950 p-2 md:p-3 border-b border-zinc-900/60 relative z-20">
+          <!-- VIP CHECKOUT OFFER BOX (Row layout on mobile & desktop for tight height) -->
+          <div id="webinar-offer-container" class="hidden transform scale-95 opacity-0 transition-all duration-700 ease-out bg-gradient-to-r from-[#006fff] to-blue-600 border border-[#006fff]/50 p-2 sm:p-3.5 rounded-xl relative shadow-2xl flex flex-row items-center justify-between gap-3">
+            <div class="flex flex-col text-left min-w-0">
+              <span id="offer-title" class="text-[11px] sm:text-xs md:text-sm font-black text-white uppercase tracking-wider truncate">StarPips VIP Portfolio (90% Off)</span>
+              <span id="offer-desc" class="hidden text-[10px] md:text-xs text-blue-100 mt-0.5 truncate">Get complete access to the proprietary StarPips Algorithmic Sweep indicator.</span>
+              <span class="text-[9px] sm:text-[10px] md:text-xs text-blue-100 font-bold leading-none mt-0.5">Scarcity: Only <strong id="scarcity-counter" class="text-white text-[11px] sm:text-xs md:text-sm">20</strong> slots left!</span>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <span id="offer-price" class="hidden text-[11px] sm:text-xs md:text-sm font-black text-white font-mono">$200</span>
+              <a id="offer-selar-link" href="https://paystack.shop/pay/starpips" target="_blank" class="px-3 py-1.5 sm:px-6 sm:py-2 bg-zinc-950 text-[#006fff] hover:bg-zinc-900 text-[10px] md:text-xs font-black uppercase tracking-wider rounded-lg shadow-lg transition-all text-center whitespace-nowrap">
+                Claim Offer
+              </a>
+            </div>
+          </div>
+          
+          <!-- FALLBACK SCHOLARSHIP CALLBACK FORM (Row layout on mobile & desktop for tight height) -->
+          <div id="scholarship-form-container" class="hidden transform scale-95 opacity-0 transition-all duration-700 ease-out bg-zinc-950/95 border border-[#006fff]/30 p-2.5 rounded-xl relative shadow-2xl flex flex-row items-center justify-between gap-3">
+            <div class="flex-1 text-left space-y-0.5 min-w-0">
+              <span class="inline-block px-1.5 py-0.5 rounded bg-[#006fff]/10 text-[#006fff] font-mono text-[9px] uppercase font-black leading-none">Partial Scholarship</span>
+              <h3 class="text-[10px] md:text-xs font-extrabold text-white uppercase truncate">Need a payment plan?</h3>
+              <p class="text-[8px] md:text-[10px] text-zinc-400 truncate">Leave your phone number, our team will call you.</p>
+            </div>
+            <form id="form-scholarship" class="flex flex-row items-center gap-1.5 shrink-0">
+              <input type="tel" required id="scholarship-phone" placeholder="Phone Number" class="w-24 md:w-40 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-[10px] md:text-xs text-white focus:border-[#006fff]/50 outline-none font-mono" />
+              <button type="submit" class="px-2.5 py-1.5 rounded-lg bg-[#006fff] hover:bg-blue-600 text-white font-black text-[10px] md:text-xs uppercase shadow transition-all whitespace-nowrap">Apply</button>
+            </form>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+  <!-- REAL-TIME CONVERSION NOTIFICATION WATERFALL POPUP -->
+  <div id="purchase-toast-alert" class="fixed bottom-6 left-4 right-4 sm:left-6 sm:right-auto transform translate-y-12 opacity-0 transition-all duration-500 ease-out z-50 bg-[#04091A] border border-amber-500/20 p-4 rounded-xl flex items-center space-x-3.5 shadow-2xl max-w-xs sm:max-w-sm backdrop-blur-md">
+    <div class="h-9 w-9 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+      <i data-lucide="dollar-sign" class="h-5 w-5 stroke-[2.5]"></i>
+    </div>
+    <div>
+      <span id="toast-buyer-name" class="block text-xs font-bold text-white">Mustapha K.</span>
+      <span class="block text-[10px] text-zinc-500 font-mono">Secured their VIP Portfolio via Selar!</span>
+    </div>
+  </div>
+
+  <!-- FOOTER CREDIT -->
+  <footer class="bg-zinc-950/60 border-t border-zinc-900/60 py-4 px-6 relative z-10 text-center text-[10px] font-mono text-zinc-600">
+    <span>© 2026 StarPips Forex. All rights reserved. Professional Trading Mentorship & Signals Provider.</span>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@gumlet/player.js/dist/player.min.js"></script>
+  <script src="/js/player.js"></script>
+  <script src="/js/index.js"></script>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>

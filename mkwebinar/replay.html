@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Webinar Replay - Starpips Trader Transformation</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- HLS.js for HLS (.m3u8) video stream playback on all browsers -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    body { background-color: #02050e; color: #e4e4e7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; overflow-x: hidden; }
+    .wistia_responsive_padding { padding:56.25% 0 0 0; position:relative; }
+    .wistia_responsive_wrapper { height:100%; left:0; position:absolute; top:0; width:100%; }
+    .blue-gradient { background: linear-gradient(90deg, #006fff 0%, #3b82f6 50%, #006fff 100%); background-size: 200% auto; animation: shine 3s linear infinite; }
+    @keyframes shine { to { background-position: 200% center; } }
+    .pulse-glow { box-shadow: 0 0 20px rgba(0, 111, 255, 0.4); animation: pulse-shadow 2s infinite; }
+    @keyframes pulse-shadow { 0% { box-shadow: 0 0 20px rgba(0, 111, 255, 0.4); } 50% { box-shadow: 0 0 40px rgba(0, 111, 255, 0.7); } 100% { box-shadow: 0 0 20px rgba(0, 111, 255, 0.4); } }
+  
+    @keyframes offer-pulse {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 20px rgba(0,111,255,0.5); }
+      50% { transform: scale(1.05); box-shadow: 0 0 40px rgba(0,111,255,0.9); }
+    }
+    .catchy-offer-btn {
+      animation: offer-pulse 2s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center antialiased">
+  
+  <!-- URGENT BANNER -->
+  <div class="w-full bg-red-600 text-white font-bold text-center py-3 text-xs md:text-sm tracking-widest uppercase z-50 sticky top-0 shadow-xl border-b border-red-500/50 flex flex-col sm:flex-row items-center justify-center gap-2">
+    <div class="flex items-center">
+      <i data-lucide="alert-triangle" class="w-5 h-5 mr-2 animate-pulse"></i> 
+      <span>LIMITED REPLAY TIME - ACCESS EXPIRES IN:</span>
+    </div>
+    <div class="bg-black/40 px-3 py-1 rounded text-[#006fff] font-mono text-lg md:text-xl font-black drop-shadow-md" id="persistent-countdown">
+      --:--:--
+    </div>
+  </div>
+
+  <main class="w-full max-w-5xl mx-auto px-4 py-12 flex flex-col items-center">
+    
+    <!-- HERO SECTION -->
+    <div class="text-center max-w-3xl mx-auto mb-10">
+      <span class="inline-block px-4 py-1 rounded-full bg-red-500/20 text-red-400 font-bold text-xs uppercase tracking-widest mb-6 border border-red-500/30">
+        <i data-lucide="clock" class="inline w-3 h-3 mr-1"></i> Replay Available For A Limited Time Only
+      </span>
+      <h1 class="text-4xl md:text-5xl font-black text-white mb-6 leading-tight">
+        Did You Miss The Live Webinar?
+      </h1>
+      <p class="text-lg md:text-xl text-zinc-300 font-medium leading-relaxed">
+        Watch the Replay Below and Discover How Ordinary People Are Becoming Consistent Forex Traders Through The <strong class="text-[#006fff]">Starpips Trader Transformation Program</strong>.
+      </p>
+    </div>
+
+    <!-- VIDEO CONTAINER -->
+    <div class="w-full bg-[#090d16] border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl mb-8 pulse-glow" id="video-wrapper">
+      <div id="video-container" class="aspect-video bg-black relative flex items-center justify-center w-full">
+        <p class="text-zinc-500 font-mono text-sm animate-pulse flex flex-col items-center">
+          <i data-lucide="loader-2" class="w-8 h-8 animate-spin mb-2 text-[#006fff]"></i>
+          Loading Replay Stream...
+        </p>
+      </div>
+    </div>
+    
+    <div class="text-center mb-16">
+      <p class="text-red-400 font-bold text-sm uppercase tracking-widest flex items-center justify-center">
+        <i data-lucide="alert-circle" class="w-4 h-4 mr-1"></i> This replay will be removed soon.
+      </p>
+    </div>
+
+    <!-- MAIN CTA BUTTON -->
+    <div class="w-full flex justify-center mb-24 hidden" id="offer-section-top">
+      <a href="#pricing" id="offer-link-top" class="blue-gradient text-white font-black uppercase tracking-widest px-10 md:px-16 py-6 rounded-2xl shadow-[0_0_30px_rgba(0,111,255,0.5)] transition-all hover:scale-[1.15] flex items-center text-xl md:text-3xl w-full md:w-auto justify-center text-center catchy-offer-btn">
+        <i data-lucide="play-circle" class="w-6 h-6 mr-2"></i> JOIN THE STARPIPS TRADER TRANSFORMATION PROGRAM NOW
+      </a>
+    </div>
+
+    <!-- AFTER VIDEO: THE PROGRAM -->
+    <div class="max-w-4xl mx-auto w-full mb-24">
+      <div class="text-center mb-12">
+        <h2 class="text-3xl md:text-4xl font-bold text-white mb-4">This Is More Than A Forex Class…</h2>
+        <p class="text-zinc-400 text-lg max-w-2xl mx-auto">This is a complete transformation program designed to take you from a complete Beginner or Unprofitable to an independent consistently profitable Trader.</p>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-4">
+        <!-- List items -->
+        <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 flex items-start">
+          <div class="bg-[#006fff]/10 border border-[#006fff]/20 p-2 rounded-xl mr-4 shrink-0 text-[#006fff]"><i data-lucide="check" class="w-5 h-5 stroke-[3]"></i></div>
+          <div class="text-zinc-200 font-medium pt-1">Get Started The Right Way</div>
+        </div>
+        <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 flex items-start">
+          <div class="bg-[#006fff]/10 border border-[#006fff]/20 p-2 rounded-xl mr-4 shrink-0 text-[#006fff]"><i data-lucide="check" class="w-5 h-5 stroke-[3]"></i></div>
+          <div class="text-zinc-200 font-medium pt-1">Master Risk Management</div>
+        </div>
+        <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 flex items-start">
+          <div class="bg-[#006fff]/10 border border-[#006fff]/20 p-2 rounded-xl mr-4 shrink-0 text-[#006fff]"><i data-lucide="check" class="w-5 h-5 stroke-[3]"></i></div>
+          <div class="text-zinc-200 font-medium pt-1">Trade Live With Fx High Priest</div>
+        </div>
+        <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 flex items-start">
+          <div class="bg-[#006fff]/10 border border-[#006fff]/20 p-2 rounded-xl mr-4 shrink-0 text-[#006fff]"><i data-lucide="check" class="w-5 h-5 stroke-[3]"></i></div>
+          <div class="text-zinc-200 font-medium pt-1">Learn The Exact Strategy I And My Mentees Trade With</div>
+        </div>
+        <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 flex items-start">
+          <div class="bg-[#006fff]/10 border border-[#006fff]/20 p-2 rounded-xl mr-4 shrink-0 text-[#006fff]"><i data-lucide="check" class="w-5 h-5 stroke-[3]"></i></div>
+          <div class="text-zinc-200 font-medium pt-1">Become An Independent Trader</div>
+        </div>
+        <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 flex items-start">
+          <div class="bg-[#006fff]/10 border border-[#006fff]/20 p-2 rounded-xl mr-4 shrink-0 text-[#006fff]"><i data-lucide="check" class="w-5 h-5 stroke-[3]"></i></div>
+          <div class="text-zinc-200 font-medium pt-1">Join Our Private Supportive Trading Community</div>
+        </div>
+        <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 flex items-start">
+          <div class="bg-[#006fff]/10 border border-[#006fff]/20 p-2 rounded-xl mr-4 shrink-0 text-[#006fff]"><i data-lucide="check" class="w-5 h-5 stroke-[3]"></i></div>
+          <div class="text-zinc-200 font-medium pt-1">Get Lifetime Mentorship</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MY STORY SECTION -->
+    <div class="w-full max-w-4xl mx-auto mb-24 bg-gradient-to-br from-zinc-900 to-[#02050e] border border-zinc-800 rounded-3xl p-8 md:p-12 relative overflow-hidden">
+      <div class="absolute top-0 right-0 p-16 opacity-5 pointer-events-none"><i data-lucide="quote" class="w-64 h-64"></i></div>
+      
+      <h2 class="text-3xl md:text-4xl font-bold text-white mb-8 text-center relative z-10">I Was Once Exactly Where You Are…</h2>
+      
+      <div class="space-y-6 text-zinc-300 text-lg relative z-10 max-w-2xl mx-auto">
+        <p>I remember living in a mud house, unable to afford many things, just dreaming of financial freedom.</p>
+        <p>It felt like success was meant for other people. But I decided to master the markets, and <strong class="text-white">Forex changed everything.</strong></p>
+        <div class="border-t border-zinc-800 my-8"></div>
+        <h3 class="text-2xl font-bold text-white mb-4">Today I…</h3>
+        <ul class="space-y-3 font-medium text-white">
+          <li class="flex items-center"><i data-lucide="check-circle-2" class="w-6 h-6 text-[#006fff] mr-3"></i> Own a house</li>
+          <li class="flex items-center"><i data-lucide="check-circle-2" class="w-6 h-6 text-[#006fff] mr-3"></i> Own a car</li>
+          <li class="flex items-center"><i data-lucide="check-circle-2" class="w-6 h-6 text-[#006fff] mr-3"></i>  have been able to Travel out of the country</li>
+          <li class="flex items-center"><i data-lucide="check-circle-2" class="w-6 h-6 text-[#006fff] mr-3"></i> Generated thousand of dollars from the Market consistently</li>
+          <li class="flex items-center"><i data-lucide="check-circle-2" class="w-6 h-6 text-[#006fff] mr-3"></i> Have passed down the knowledge to thousands who are also profitable</li>
+        </ul>
+        <div class="bg-blue-500/10 border border-blue-500/30 p-6 rounded-xl text-center mt-8">
+          <p class="text-[#006fff] font-bold text-xl">If I could do it… so can you.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- STUDENT RESULTS (VIDEOS & IMAGES) -->
+    <div class="w-full max-w-5xl mx-auto mb-24">
+      <div class="text-center mb-12">
+        <h2 class="text-3xl md:text-4xl font-bold text-white mb-4">My Students Are Getting Results Too</h2>
+        <p class="text-zinc-400 text-lg">Funded Accounts. Prop Firm Passes. Trading Profits. Withdrawals & Payouts.</p>
+      </div>
+
+      <!-- VIDEO GRID PLACEHOLDERS -->
+      <div class="text-center mb-8">
+        <h3 class="text-2xl font-bold text-white mb-2">Don’t Take My Word For It…</h3>
+        <p class="text-zinc-400">Hear directly from students whose lives changed after joining the program.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
+        <!-- 6 Wistia Student Result Videos -->
+        <div class="aspect-[9/16] bg-zinc-900 border border-zinc-800 rounded-xl relative overflow-hidden group hover:border-blue-500 transition">
+          <div class="wistia_embed wistia_async_hctisyv0ko seo=true videoFoam=true" style="height:100%;position:relative;width:100%">
+            <div class="wistia_swatch" style="height:100%;left:0;opacity:0;overflow:hidden;position:absolute;top:0;transition:opacity 200ms;width:100%;">
+              <img src="https://fast.wistia.com/embed/medias/hctisyv0ko/swatch" style="filter:blur(5px);height:100%;object-fit:contain;width:100%;" alt="" aria-hidden="true" onload="this.parentNode.style.opacity=1;" />
+            </div>
+          </div>
+        </div>
+        <div class="aspect-[9/16] bg-zinc-900 border border-zinc-800 rounded-xl relative overflow-hidden group hover:border-blue-500 transition">
+          <div class="wistia_embed wistia_async_hkhz6mnx3c seo=true videoFoam=true" style="height:100%;position:relative;width:100%">
+            <div class="wistia_swatch" style="height:100%;left:0;opacity:0;overflow:hidden;position:absolute;top:0;transition:opacity 200ms;width:100%;">
+              <img src="https://fast.wistia.com/embed/medias/hkhz6mnx3c/swatch" style="filter:blur(5px);height:100%;object-fit:contain;width:100%;" alt="" aria-hidden="true" onload="this.parentNode.style.opacity=1;" />
+            </div>
+          </div>
+        </div>
+        <div class="aspect-[9/16] bg-zinc-900 border border-zinc-800 rounded-xl relative overflow-hidden group hover:border-blue-500 transition">
+          <div class="wistia_embed wistia_async_hgwzuzjn6m seo=true videoFoam=true" style="height:100%;position:relative;width:100%">
+            <div class="wistia_swatch" style="height:100%;left:0;opacity:0;overflow:hidden;position:absolute;top:0;transition:opacity 200ms;width:100%;">
+              <img src="https://fast.wistia.com/embed/medias/hgwzuzjn6m/swatch" style="filter:blur(5px);height:100%;object-fit:contain;width:100%;" alt="" aria-hidden="true" onload="this.parentNode.style.opacity=1;" />
+            </div>
+          </div>
+        </div>
+        <div class="aspect-[9/16] bg-zinc-900 border border-zinc-800 rounded-xl relative overflow-hidden group hover:border-blue-500 transition">
+          <div class="wistia_embed wistia_async_2uwzwz1nmn seo=true videoFoam=true" style="height:100%;position:relative;width:100%">
+            <div class="wistia_swatch" style="height:100%;left:0;opacity:0;overflow:hidden;position:absolute;top:0;transition:opacity 200ms;width:100%;">
+              <img src="https://fast.wistia.com/embed/medias/2uwzwz1nmn/swatch" style="filter:blur(5px);height:100%;object-fit:contain;width:100%;" alt="" aria-hidden="true" onload="this.parentNode.style.opacity=1;" />
+            </div>
+          </div>
+        </div>
+        <div class="aspect-[9/16] bg-zinc-900 border border-zinc-800 rounded-xl relative overflow-hidden group hover:border-blue-500 transition">
+          <div class="wistia_embed wistia_async_17w44zijxo seo=true videoFoam=true" style="height:100%;position:relative;width:100%">
+            <div class="wistia_swatch" style="height:100%;left:0;opacity:0;overflow:hidden;position:absolute;top:0;transition:opacity 200ms;width:100%;">
+              <img src="https://fast.wistia.com/embed/medias/17w44zijxo/swatch" style="filter:blur(5px);height:100%;object-fit:contain;width:100%;" alt="" aria-hidden="true" onload="this.parentNode.style.opacity=1;" />
+            </div>
+          </div>
+        </div>
+        <div class="aspect-[9/16] bg-zinc-900 border border-zinc-800 rounded-xl relative overflow-hidden group hover:border-blue-500 transition">
+          <div class="wistia_embed wistia_async_9s47ic7ajg seo=true videoFoam=true" style="height:100%;position:relative;width:100%">
+            <div class="wistia_swatch" style="height:100%;left:0;opacity:0;overflow:hidden;position:absolute;top:0;transition:opacity 200ms;width:100%;">
+              <img src="https://fast.wistia.com/embed/medias/9s47ic7ajg/swatch" style="filter:blur(5px);height:100%;object-fit:contain;width:100%;" alt="" aria-hidden="true" onload="this.parentNode.style.opacity=1;" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <script src="https://fast.wistia.com/assets/external/E-v1.js" async></script>
+
+      <!-- SCREENSHOTS PLACEHOLDERS -->
+      <div class="text-center mb-8">
+        <h3 class="text-2xl font-bold text-white mb-2">Real Messages From Real Students</h3>
+        <p class="text-zinc-400">Success messages, payout proofs, and WhatsApp conversations.</p>
+      </div>
+
+      <div class="columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4 mb-8" id="screenshots-gallery">
+        <!-- 10 Student Success Images -->
+        <div class="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden aspect-[3/4]"><img src="https://ik.imagekit.io/Fxhighpriest/IMG_8179.png?updatedAt=1781466296189" alt="Student Success 1" class="w-full h-full object-cover"></div>
+        <div class="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden aspect-square"><img src="https://ik.imagekit.io/Fxhighpriest/IMG_1468.png?updatedAt=1781466519192" alt="Student Success 2" class="w-full h-full object-cover"></div>
+        <div class="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden aspect-[4/5]"><img src="https://ik.imagekit.io/Fxhighpriest/IMG_9031.jpeg?updatedAt=1781466258497" alt="Student Success 3" class="w-full h-full object-cover"></div>
+        <div class="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden aspect-square"><img src="https://ik.imagekit.io/Fxhighpriest/IMG_7418.png" alt="Student Success 4" class="w-full h-full object-cover"></div>
+        <div class="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden aspect-[3/4]"><img src="https://ik.imagekit.io/Fxhighpriest/IMG_9772.png" alt="Student Success 5" class="w-full h-full object-cover"></div>
+        <div class="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden aspect-square"><img src="https://ik.imagekit.io/Fxhighpriest/IMG_3238.png" alt="Student Success 6" class="w-full h-full object-cover"></div>
+        <div class="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden aspect-[4/3]"><img src="https://ik.imagekit.io/Fxhighpriest/IMG_9880.jpeg" alt="Student Success 7" class="w-full h-full object-cover"></div>
+        <div class="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden aspect-[3/4]"><img src="https://ik.imagekit.io/Fxhighpriest/IMG_5143.jpeg" alt="Student Success 8" class="w-full h-full object-cover"></div>
+        <div class="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden aspect-square"><img src="https://ik.imagekit.io/Fxhighpriest/IMG_8633.png" alt="Student Success 9" class="w-full h-full object-cover"></div>
+        <div class="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden aspect-[4/5]"><img src="https://ik.imagekit.io/Fxhighpriest/IMG_2494.png" alt="Student Success 10" class="w-full h-full object-cover"></div>
+      </div>
+    </div>
+
+    <!-- WHY THIS IS DIFFERENT -->
+    <div class="w-full max-w-4xl mx-auto mb-24 text-center">
+      <h2 class="text-3xl md:text-4xl font-bold text-white mb-4">Why This Program Is Different</h2>
+      <p class="text-zinc-400 text-lg mb-10 max-w-2xl mx-auto">Instead of teaching random strategies… Here’s what makes Starpips different.</p>
+      
+      <div class="flex flex-wrap justify-center gap-4">
+        <span class="bg-[#02050e] border border-zinc-800 px-6 py-3 rounded-full text-zinc-300 font-medium flex items-center shadow-lg"><i data-lucide="star" class="w-4 h-4 text-blue-500 mr-2"></i> Structured Learning</span>
+        <span class="bg-[#02050e] border border-zinc-800 px-6 py-3 rounded-full text-zinc-300 font-medium flex items-center shadow-lg"><i data-lucide="star" class="w-4 h-4 text-blue-500 mr-2"></i> Live Market Sessions</span>
+        <span class="bg-[#02050e] border border-zinc-800 px-6 py-3 rounded-full text-zinc-300 font-medium flex items-center shadow-lg"><i data-lucide="star" class="w-4 h-4 text-blue-500 mr-2"></i> Practical Assignments</span>
+        <span class="bg-[#02050e] border border-zinc-800 px-6 py-3 rounded-full text-zinc-300 font-medium flex items-center shadow-lg"><i data-lucide="star" class="w-4 h-4 text-blue-500 mr-2"></i> Accountability</span>
+        <span class="bg-[#02050e] border border-zinc-800 px-6 py-3 rounded-full text-zinc-300 font-medium flex items-center shadow-lg"><i data-lucide="star" class="w-4 h-4 text-blue-500 mr-2"></i> Lifetime Mentorship</span>
+        <span class="bg-[#02050e] border border-zinc-800 px-6 py-3 rounded-full text-zinc-300 font-medium flex items-center shadow-lg"><i data-lucide="star" class="w-4 h-4 text-blue-500 mr-2"></i> Private Community</span>
+        <span class="bg-[#02050e] border border-zinc-800 px-6 py-3 rounded-full text-zinc-300 font-medium flex items-center shadow-lg"><i data-lucide="star" class="w-4 h-4 text-blue-500 mr-2"></i> Continuous Updates</span>
+      </div>
+    </div>
+
+    <!-- WHAT YOU RECEIVE -->
+    <div class="w-full max-w-5xl mx-auto mb-24">
+      <h2 class="text-3xl md:text-4xl font-bold text-white mb-10 text-center">What You Receive Inside</h2>
+      
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="bg-gradient-to-b from-zinc-900 to-[#02050e] border border-zinc-800 rounded-2xl p-8 text-center hover:border-blue-500/50 transition duration-300">
+          <div class="w-16 h-16 mx-auto bg-blue-500/10 rounded-full flex items-center justify-center mb-6"><i data-lucide="book-open" class="w-8 h-8 text-blue-500"></i></div>
+          <h3 class="text-xl font-bold text-white mb-2">Foundation Of Forex</h3>
+          <p class="text-zinc-400 text-sm">Master the absolute basics so you never feel lost looking at a chart again.</p>
+        </div>
+        <div class="bg-gradient-to-b from-zinc-900 to-[#02050e] border border-zinc-800 rounded-2xl p-8 text-center hover:border-blue-500/50 transition duration-300">
+          <div class="w-16 h-16 mx-auto bg-blue-500/10 rounded-full flex items-center justify-center mb-6"><i data-lucide="shield-check" class="w-8 h-8 text-blue-500"></i></div>
+          <h3 class="text-xl font-bold text-white mb-2">Advanced Risk Management</h3>
+          <p class="text-zinc-400 text-sm">Learn to protect your capital like a professional institution.</p>
+        </div>
+        <div class="bg-gradient-to-b from-zinc-900 to-[#02050e] border border-zinc-800 rounded-2xl p-8 text-center hover:border-blue-500/50 transition duration-300">
+          <div class="w-16 h-16 mx-auto bg-blue-500/10 rounded-full flex items-center justify-center mb-6"><i data-lucide="trending-up" class="w-8 h-8 text-blue-500"></i></div>
+          <h3 class="text-xl font-bold text-white mb-2">Fx High Priest Strategy</h3>
+          <p class="text-zinc-400 text-sm">The exact mechanical strategy I personally trade every day.</p>
+        </div>
+        <div class="bg-gradient-to-b from-zinc-900 to-[#02050e] border border-zinc-800 rounded-2xl p-8 text-center hover:border-blue-500/50 transition duration-300">
+          <div class="w-16 h-16 mx-auto bg-blue-500/10 rounded-full flex items-center justify-center mb-6"><i data-lucide="monitor-play" class="w-8 h-8 text-blue-500"></i></div>
+          <h3 class="text-xl font-bold text-white mb-2">Trade Live</h3>
+          <p class="text-zinc-400 text-sm">Watch over my shoulder and trade the live markets alongside me.</p>
+        </div>
+        <div class="bg-gradient-to-b from-zinc-900 to-[#02050e] border border-zinc-800 rounded-2xl p-8 text-center hover:border-blue-500/50 transition duration-300">
+          <div class="w-16 h-16 mx-auto bg-blue-500/10 rounded-full flex items-center justify-center mb-6"><i data-lucide="award" class="w-8 h-8 text-blue-500"></i></div>
+          <h3 class="text-xl font-bold text-white mb-2">Certification</h3>
+          <p class="text-zinc-400 text-sm">Earn your completion certificate to prove your technical expertise.</p>
+        </div>
+        <div class="bg-gradient-to-b from-zinc-900 to-[#02050e] border border-zinc-800 rounded-2xl p-8 text-center hover:border-blue-500/50 transition duration-300">
+          <div class="w-16 h-16 mx-auto bg-blue-500/10 rounded-full flex items-center justify-center mb-6"><i data-lucide="users" class="w-8 h-8 text-blue-500"></i></div>
+          <h3 class="text-xl font-bold text-white mb-2">Private Community & Mentorship</h3>
+          <p class="text-zinc-400 text-sm">Lifetime access to our exclusive network of profitable traders.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- PRICING / SCHOLARSHIP SECTION -->
+    <div id="pricing" class="w-full max-w-3xl mx-auto mb-24 bg-[#090d16] border-2 border-[#006fff]/30 rounded-3xl p-8 md:p-14 text-center relative shadow-[0_0_50px_rgba(0,111,255,0.1)]">
+      
+      <div class="absolute -top-5 left-1/2 -translate-x-1/2 bg-[#006fff] text-white font-black uppercase tracking-widest px-6 py-2 rounded-full shadow-lg text-sm">
+        LIMITED SCHOLARSHIP
+      </div>
+
+      <h2 class="text-3xl font-bold text-white mb-6 pt-4">The Actual Value</h2>
+      <p class="text-zinc-400 text-lg mb-2">This program is worth</p>
+      <div class="text-4xl font-bold text-red-500 line-through mb-8 opacity-70">₦500,000</div>
+      
+      <div class="border-t border-zinc-800 my-8"></div>
+      
+      <p class="text-zinc-300 text-lg mb-4">But because of the <strong class="text-blue-400">Starpips Growth Scholarship...</strong></p>
+      <p class="text-zinc-400 text-lg mb-2">You can join today for only</p>
+      <div class="text-6xl md:text-7xl font-black text-white mb-10 drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
+        <span class="text-blue-500">₦</span>50,000
+      </div>
+
+      <div class="bg-red-500/10 border border-red-500/20 rounded-xl p-6 mb-10">
+        <h3 class="text-red-400 font-bold uppercase tracking-wider mb-2">⚠️ IMPORTANT</h3>
+        <p class="text-zinc-300">This scholarship closes in <strong class="text-white">72 HOURS</strong>.</p>
+        <p class="text-zinc-400 text-sm mt-1">Once it closes, the program returns to its normal price.</p>
+      </div>
+
+      <div class="hidden" id="offer-section-bottom">
+        <a href="#" id="offer-link-bottom" class="blue-gradient text-white font-black uppercase tracking-widest px-10 md:px-16 py-8 rounded-2xl shadow-[0_0_40px_rgba(0,111,255,0.6)] transition-all hover:scale-[1.15] flex flex-col items-center justify-center w-full catchy-offer-btn">
+          <span class="text-xl md:text-2xl mb-1">CLAIM YOUR SCHOLARSHIP NOW</span>
+        </a>
+        <p class="text-zinc-500 text-xs mt-4 uppercase tracking-wider font-mono">Secure your spot before registration closes.</p>
+      </div>
+    </div>
+
+    <!-- FAQ -->
+    <div class="w-full max-w-3xl mx-auto mb-24">
+      <h2 class="text-3xl font-bold text-white mb-10 text-center">Frequently Asked Questions</h2>
+      
+      <div class="space-y-4">
+        <div class="bg-[#090d16] border border-zinc-800 rounded-xl p-6">
+          <h3 class="text-lg font-bold text-white mb-2">Is this for beginners?</h3>
+          <p class="text-zinc-400">Absolutely.</p>
+        </div>
+        <div class="bg-[#090d16] border border-zinc-800 rounded-xl p-6">
+          <h3 class="text-lg font-bold text-white mb-2">Will I receive mentorship?</h3>
+          <p class="text-zinc-400">Yes. Lifetime.</p>
+        </div>
+        <div class="bg-[#090d16] border border-zinc-800 rounded-xl p-6">
+          <h3 class="text-lg font-bold text-white mb-2">Will I receive the strategy?</h3>
+          <p class="text-zinc-400">Yes. You’ll learn the exact strategy I personally trade.</p>
+        </div>
+        <div class="bg-[#090d16] border border-zinc-800 rounded-xl p-6">
+          <h3 class="text-lg font-bold text-white mb-2">Can I become profitable?</h3>
+          <p class="text-zinc-400">If you follow the structure, remain disciplined, and implement what you learn, you’ll have the skills and framework needed to trade independently.</p>
+        </div>
+        <div class="bg-[#090d16] border border-zinc-800 rounded-xl p-6">
+          <h3 class="text-lg font-bold text-white mb-2">Do I need experience?</h3>
+          <p class="text-zinc-400">No. We’ll start from the absolute foundation.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- FINAL CTA -->
+    <div class="w-full max-w-4xl mx-auto text-center border-t border-zinc-800 pt-16 pb-8">
+      <h2 class="text-3xl md:text-4xl font-black text-white mb-6">The Next Decision Could Change Your Life</h2>
+      <p class="text-xl text-zinc-300 mb-8 max-w-2xl mx-auto">
+        One decision can keep you exactly where you are… Or completely change your future.<br><br>
+        <span class="text-blue-400 font-bold">The opportunity is here. The decision is yours.</span>
+      </p>
+      
+      <div class="hidden" id="offer-section-final">
+        <a href="#pricing" id="offer-link-final" class="blue-gradient text-white font-black uppercase tracking-widest px-10 md:px-16 py-6 rounded-2xl shadow-[0_0_30px_rgba(0,111,255,0.5)] transition-all hover:scale-[1.15] inline-flex items-center text-xl md:text-3xl catchy-offer-btn">
+          JOIN THE STARPIPS TRADER TRANSFORMATION PROGRAM
+        </a>
+        <p class="text-red-400 font-bold text-sm mt-4 uppercase tracking-widest">Scholarship Ends In 72 Hours</p>
+      </div>
+    </div>
+
+  </main>
+  
+  <script>
+    lucide.createIcons();
+
+    async function loadReplay() {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const email = urlParams.get('email');
+        
+        const verifyRes = await fetch('/api/verify-replay?email=' + (email || ''));
+        const verify = await verifyRes.json();
+        
+        if (!verify.allowed) {
+          document.body.innerHTML = `<div class="min-h-screen flex items-center justify-center bg-[#02050e] p-4 text-center"><div class="max-w-md bg-[#090d16] p-8 rounded-2xl border border-zinc-800"><i data-lucide="lock" class="w-12 h-12 text-red-500 mx-auto mb-4"></i><h2 class="text-red-500 text-2xl font-bold mb-2">Replay Expired</h2><p class="text-zinc-400">The strictly limited time for this replay has concluded.</p></div></div>`;
+          lucide.createIcons();
+          return;
+        }
+
+        const res = await fetch('/api/campaign');
+        const campaign = await res.json();
+        
+        // Setup Video (Prioritize Wistia if provided in replayVideoUrl, otherwise videoUrl)
+        const videoUrl = campaign.replayVideoUrl || campaign.videoUrl || '';
+        const container = document.getElementById('video-container');
+        
+        if (videoUrl.includes('wistia.com') || videoUrl.includes('wistia.net')) {
+           if (videoUrl.includes('/embed/iframe/')) {
+             container.innerHTML = `<iframe src="${videoUrl}" title="Replay" allow="autoplay; fullscreen" allowtransparency="true" frameborder="0" scrolling="no" class="wistia_embed" name="wistia_embed" width="100%" height="100%"></iframe>`;
+           } else {
+             const wistiaIdMatch = videoUrl.match(/medias\/([a-zA-Z0-9]+)/);
+             let wistiaId = wistiaIdMatch ? wistiaIdMatch[1] : videoUrl.split('/').pop();
+             container.innerHTML = `<iframe src="https://fast.wistia.net/embed/iframe/${wistiaId}?videoFoam=true&seo=false" title="Replay" allow="autoplay; fullscreen" allowtransparency="true" frameborder="0" scrolling="no" class="wistia_embed" name="wistia_embed" width="100%" height="100%"></iframe>`;
+           }
+        } else if (videoUrl.includes('.m3u8') || videoUrl.includes('hls')) {
+           container.innerHTML = `<video id="replay-video" controls autoplay width="100%" height="100%" class="w-full h-full bg-black"></video>`;
+           const videoEl = document.getElementById('replay-video');
+           if (window.Hls && Hls.isSupported()) {
+             const hls = new Hls();
+             hls.loadSource(videoUrl);
+             hls.attachMedia(videoEl);
+           } else if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
+             videoEl.src = videoUrl;
+           } else {
+             videoEl.src = videoUrl;
+           }
+        } else if (videoUrl.includes('gumlet.com') || videoUrl.includes('gumlet.io') || videoUrl.includes('gumlet.tv')) {
+           const cleanUrl = videoUrl.split('?')[0];
+           const parts = cleanUrl.split('/');
+           let videoId = '';
+           for (let i = parts.length - 1; i >= 0; i--) {
+             const part = parts[i];
+             if (part && part.length === 24 && /^[0-9a-fA-F]+$/.test(part)) {
+               videoId = part;
+               break;
+             }
+           }
+           if (!videoId) {
+             videoId = parts[parts.length - 1];
+           }
+           
+           if (videoUrl.includes('.m3u8') || videoUrl.includes('.mpd')) {
+             container.innerHTML = `<video id="replay-video" controls autoplay width="100%" height="100%" class="w-full h-full bg-black"></video>`;
+             const videoEl = document.getElementById('replay-video');
+             if (window.Hls && Hls.isSupported()) {
+               const hls = new Hls();
+               hls.loadSource(videoUrl);
+               hls.attachMedia(videoEl);
+             } else if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
+               videoEl.src = videoUrl;
+             } else {
+               videoEl.src = videoUrl;
+             }
+           } else {
+             container.innerHTML = `<iframe width="100%" height="100%" src="https://play.gumlet.io/embed/${videoId}?autoplay=0&controls=1&title=1" frameborder="0" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>`;
+           }
+        } else if (videoUrl.includes('youtube.com') || videoUrl.includes('youtu.be')) {
+           const ytIdMatch = videoUrl.match(/(?:youtu\.be\/|v=)([^&]+)/);
+           const ytId = ytIdMatch ? ytIdMatch[1] : '';
+           container.innerHTML = `<iframe width="100%" height="100%" src="https://www.youtube.com/embed/${ytId}?modestbranding=1&rel=0&showinfo=0" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+        } else {
+           container.innerHTML = `<video controls width="100%" height="100%" src="${videoUrl}"></video>`;
+        }
+
+        // Setup CTA buttons
+        const link = (campaign.offer && campaign.offer.paymentLink) ? campaign.offer.paymentLink : "https://paystack.com/pay/starpips-vip";
+        
+        document.getElementById('offer-section-top').classList.remove('hidden');
+        document.getElementById('offer-link-top').href = link;
+        
+        document.getElementById('offer-section-bottom').classList.remove('hidden');
+        document.getElementById('offer-link-bottom').href = link;
+        
+        document.getElementById('offer-section-final').classList.remove('hidden');
+        document.getElementById('offer-link-final').href = link;
+
+        // NOTE: Disabled on purpose. This block was overwriting the 10 fixed student-success
+        // screenshots with default images from the admin dashboard's campaign.landingImages
+        // every time the page loaded. Left in place (commented) in case you want to re-enable
+        // dashboard-driven images later.
+        // if (campaign.landingImages && campaign.landingImages.length > 0) {
+        //   const gallery = document.getElementById('screenshots-gallery');
+        //   if (gallery) {
+        //     gallery.innerHTML = '';
+        //     campaign.landingImages.forEach((imgUrl, idx) => {
+        //       const item = document.createElement('div');
+        //       item.className = 'relative overflow-hidden rounded-xl border border-zinc-800 aspect-[3/4] bg-zinc-950 group cursor-pointer hover:border-blue-500 transition-all duration-300 break-inside-avoid mb-4';
+        //       item.innerHTML = `<img class="w-full h-full object-cover opacity-80 group-hover:scale-105 group-hover:opacity-100 transition-all duration-500" src="${imgUrl}" alt="Student Success ${idx + 1}">`;
+        //       gallery.appendChild(item);
+        //     });
+        //   }
+        // }
+
+      } catch (err) {
+        console.error("Failed to load replay data", err);
+      }
+    }
+    
+    loadReplay();
+    
+    function startPersistentCountdown() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const email = urlParams.get('email') || 'guest';
+      const storageKey = 'replay_start_time_' + email;
+      
+      let startTime = localStorage.getItem(storageKey);
+      if (!startTime) {
+        startTime = Date.now();
+        localStorage.setItem(storageKey, startTime);
+      }
+      
+      const updateTimer = () => {
+        const now = Date.now();
+        const elapsed = now - parseInt(startTime);
+        
+        const FORTY_EIGHT_HOURS = 48 * 60 * 60 * 1000;
+        const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+        
+        let timeLeft = 0;
+        
+        if (elapsed <= FORTY_EIGHT_HOURS) {
+          timeLeft = FORTY_EIGHT_HOURS - elapsed;
+        } else {
+          // If 48 hours have passed, we enter 24 hour recurring cycles
+          const extraTime = elapsed - FORTY_EIGHT_HOURS;
+          const currentCycleElapsed = extraTime % TWENTY_FOUR_HOURS;
+          timeLeft = TWENTY_FOUR_HOURS - currentCycleElapsed;
+        }
+        
+        const h = Math.floor(timeLeft / (1000 * 60 * 60));
+        const m = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+        const s = Math.floor((timeLeft % (1000 * 60)) / 1000);
+        
+        document.getElementById('persistent-countdown').innerText = 
+          String(h).padStart(2, '0') + ':' + 
+          String(m).padStart(2, '0') + ':' + 
+          String(s).padStart(2, '0');
+      };
+      
+      updateTimer();
+      setInterval(updateTimer, 1000);
+    }
+    
+    startPersistentCountdown();
+  </script>
+</body>
+</html>
