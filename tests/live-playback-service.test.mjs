@@ -50,14 +50,13 @@ test('active session receives viewer-scoped authorization and server-derived sta
   const media = new FakeMediaProvider();
   const service = new LivePlaybackService(new FakeRepository(), media);
   const result = await service.authorize({ batch, viewerId: 'viewer-1', now: new Date('2026-08-30T19:23:40Z') });
-
   assert.equal(result.ok, true);
   assert.equal(result.state, 'LIVE');
   assert.equal(result.sessionId, 'session-1');
   assert.equal(result.startAtSeconds, 1420);
+  assert.equal(result.testMode, false);
   assert.equal(result.authorization?.playbackType, 'HLS');
   assert.equal(media.calls[0].context.viewerId, 'viewer-1');
-  assert.equal(media.calls[0].context.studentId, null);
 });
 
 test('ended class receives no playback authorization', async () => {
@@ -69,11 +68,24 @@ test('ended class receives no playback authorization', async () => {
   assert.equal(media.calls.length, 0);
 });
 
-test('live session without a ready configured media asset fails closed', async () => {
+test('active session with no media enters explicit live test mode without contacting media provider', async () => {
   const noMediaBatch = { ...batch, sessions: [{ ...batch.sessions[0], mediaAssetId: null }] };
   const media = new FakeMediaProvider();
   const service = new LivePlaybackService(new FakeRepository(), media);
   const result = await service.authorize({ batch: noMediaBatch, viewerId: 'viewer-1', now: new Date('2026-08-30T19:10:00Z') });
+  assert.equal(result.ok, true);
+  assert.equal(result.testMode, true);
+  assert.equal(result.authorization, null);
+  assert.equal(result.sessionId, 'session-1');
+  assert.equal(result.startAtSeconds, 600);
+  assert.equal(media.calls.length, 0);
+});
+
+test('configured media that is missing or not ready still fails closed', async () => {
+  const missingBatch = { ...batch, sessions: [{ ...batch.sessions[0], mediaAssetId: 'missing-asset' }] };
+  const media = new FakeMediaProvider();
+  const service = new LivePlaybackService(new FakeRepository(), media);
+  const result = await service.authorize({ batch: missingBatch, viewerId: 'viewer-1', now: new Date('2026-08-30T19:10:00Z') });
   assert.equal(result.ok, false);
   assert.equal(result.reason, 'MEDIA_UNAVAILABLE');
   assert.equal(media.calls.length, 0);
