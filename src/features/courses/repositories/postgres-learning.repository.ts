@@ -7,12 +7,28 @@ import type {
   LearningEnrollmentRecord,
   LearningProgressRepository,
 } from "../services/learning-progress.service";
+import type { StudentLearningRepository } from "../services/student-learning.service";
 
-export class PostgresLearningRepository implements LearningProgressRepository {
+export class PostgresLearningRepository
+  implements LearningProgressRepository, StudentLearningRepository
+{
   private readonly pool: Pool;
 
   constructor(pool: Pool = getPostgresPool()) {
     this.pool = pool;
+  }
+
+  async listEnrollmentCourseIds(studentId: string): Promise<string[]> {
+    const result = await this.pool.query<{ course_id: string }>(
+      `SELECT course_id
+       FROM enrollments
+       WHERE student_id = $1
+         AND status IN ('ACTIVE', 'COMPLETED')
+       ORDER BY authorized_at ASC, course_id ASC`,
+      [studentId],
+    );
+
+    return result.rows.map((row) => row.course_id);
   }
 
   async getCourseStructure(courseId: string): Promise<CourseStructure | null> {
