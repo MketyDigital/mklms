@@ -1,5 +1,5 @@
 import type { CourseStructure } from "../domain/model";
-import { getPublishedCourseStructure } from "../domain/publication";
+import { getPublishedCourseStructure } from "../domain/publication.ts";
 import {
   calculateCourseProgress,
   canAccessLesson,
