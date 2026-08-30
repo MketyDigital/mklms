@@ -16,7 +16,6 @@ export function ClaimAccessForm({ verificationStrategy }: ClaimAccessFormProps) 
   const [phone, setPhone] = useState("");
   const [certificateName, setCertificateName] = useState("");
   const [certificateEmail, setCertificateEmail] = useState("");
-  const [claimCode, setClaimCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [issuedAccessCode, setIssuedAccessCode] = useState<string | null>(null);
@@ -28,7 +27,7 @@ export function ClaimAccessForm({ verificationStrategy }: ClaimAccessFormProps) 
     setIssuedAccessCode(null);
 
     try {
-      const response = await fetch("/api/access/claim", {
+      const response = await fetch("/api/auth/claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -36,7 +35,6 @@ export function ClaimAccessForm({ verificationStrategy }: ClaimAccessFormProps) 
           phone: phone || undefined,
           certificateName,
           certificateEmail: certificateEmail || undefined,
-          claimCode: claimCode || undefined,
         }),
       });
       const result = await response.json();
@@ -95,13 +93,13 @@ export function ClaimAccessForm({ verificationStrategy }: ClaimAccessFormProps) 
             type="tel"
             value={phone}
             onChange={(event) => setPhone(event.target.value)}
-            placeholder="Your paid-registration phone"
+            placeholder="Your approved phone"
           />
         </div>
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Enter at least one detail that matches the paid-student list provided to the portal administrator.
+        Enter at least one detail that matches the paid-student list supplied to the portal administrator.
       </p>
 
       <div className="space-y-2">
@@ -129,17 +127,10 @@ export function ClaimAccessForm({ verificationStrategy }: ClaimAccessFormProps) 
         />
       </div>
 
-      {verificationStrategy === "claim-code" ? (
-        <div className="space-y-2">
-          <Label htmlFor="claim-code">One-time claim code</Label>
-          <Input
-            id="claim-code"
-            value={claimCode}
-            onChange={(event) => setClaimCode(event.target.value)}
-            placeholder="Enter the claim code given by the administrator"
-            required
-          />
-        </div>
+      {verificationStrategy !== "preauth-only" ? (
+        <p className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+          This portal is configured to require an additional verification step after your approved details are matched.
+        </p>
       ) : null}
 
       {message ? (
