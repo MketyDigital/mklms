@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { CourseStructure } from "@/features/courses/domain/model";
+import type { CourseStructure, LessonStatus } from "@/features/courses/domain/model";
 
 interface AdminCourseBuilderProps {
   course: CourseStructure;
@@ -83,7 +83,27 @@ export function AdminCourseBuilder({ course }: AdminCourseBuilderProps) {
       setLessonTitle("");
       setLessonDescription("");
       setMediaAssetId("");
-      setMessage("Lesson added.");
+      setMessage("Lesson added as draft.");
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setLessonStatus(lessonId: string, status: LessonStatus) {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const response = await fetch(`/api/admin/lessons/${lessonId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!response.ok) {
+        setMessage("Could not update lesson publishing status.");
+        return;
+      }
+      setMessage(status === "PUBLISHED" ? "Lesson published." : "Lesson returned to draft.");
       router.refresh();
     } finally {
       setBusy(false);
@@ -179,7 +199,14 @@ export function AdminCourseBuilder({ course }: AdminCourseBuilderProps) {
                       {lesson.mediaAssetId ? `Media asset: ${lesson.mediaAssetId}` : "No media asset assigned"}
                     </p>
                   </div>
-                  <Badge variant="outline">{lesson.status}</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline">{lesson.status}</Badge>
+                    {lesson.status === "PUBLISHED" ? (
+                      <Button size="sm" variant="outline" disabled={busy} onClick={() => setLessonStatus(lesson.id, "DRAFT")}>Unpublish</Button>
+                    ) : (
+                      <Button size="sm" disabled={busy} onClick={() => setLessonStatus(lesson.id, "PUBLISHED")}>Publish</Button>
+                    )}
+                  </div>
                 </div>
               ))}
               {!module.lessons.length ? (
