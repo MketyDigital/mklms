@@ -19,10 +19,16 @@ export type CompleteVerifiedClaimResult =
 const NEUTRAL_CLAIM_FAILURE = "We couldn't verify access with those details.";
 
 export class AccessService {
+  private readonly repository: AccessRepository;
+  private readonly options: AccessServiceOptions;
+
   constructor(
-    private readonly repository: AccessRepository,
-    private readonly options: AccessServiceOptions,
-  ) {}
+    repository: AccessRepository,
+    options: AccessServiceOptions,
+  ) {
+    this.repository = repository;
+    this.options = options;
+  }
 
   async completeVerifiedClaim(
     input: CompleteVerifiedClaimInput,
