@@ -7,53 +7,61 @@
 > **Architecture branch:** `architecture/mklms-reusable-platform`.
 > **Verified Phase 1 branch:** `feature/mklms-phase-1-foundation-access`.
 > **Verified Phase 2 branch:** `feature/mklms-phase-2-learning-progress`.
-> **Legacy webinar reference:** `mkwebinar` branch — reference behavior only; do not merge as-is.
+> **Verified Phase 3 branch:** `feature/mklms-phase-3-certificates-media`.
+> **Legacy webinar reference:** `mkwebinar` branch — reference behavior only; never merge as-is.
 > **Legacy Mkety production repo:** `MketyDigital/Mkety` — READ/REFERENCE ONLY. Never edit it for MkLMS work.
 
 ---
 
 ## 0. Agent Rules — Read First
 
-1. **MkLMS is reusable and white-label.** Never hardcode Starpips, Mkety, Foyzul, a single course type, a single certificate prefix, a single domain, a single Telegram account, or a single customer brand into reusable product logic.
-2. **Admin-level configuration controls branding and deployment identity.** Logo, colors, organization name, support identity, domain, certificate template/prefix, email sender, access-code format, CTA text/links, Telegram destination, and similar customer-specific values belong in settings/configuration.
-3. **Payments and marketing are external to MkLMS.** MkLMS does not need registration funnels, checkout, payment gateways, payment webhooks, marketing CRM, lead capture, or advertising flows in the core product.
-4. **The paid LMS portal may be publicly reachable, but only pre-authorized paid students may successfully claim access.**
-5. **Pre-authorization must scale.** Support manual authorization, bulk paste/import, CSV import, and an API/webhook adapter for external systems. Do not force one-by-one admin work.
-6. **First-time claim verification is configurable.** OTP by email/SMS is optional, not mandatory. A deployment owner may use preauth-only matching, OTP, pre-generated claim code, manual approval, or a custom verification provider.
-7. **Persistent student access code is distinct from one-time claim verification.** After successful claim, the student receives a unique access code used for future portal access unless another auth adapter is selected.
-8. **Admin must be able to create, reset/regenerate, suspend, revoke, restore, and remove student access.** Access codes must be stored securely; the default implementation stores a one-way scrypt hash and never treats plaintext credentials as database records.
-9. **Certificate identity is captured on first successful claim and is distinct from ordinary editable profile data.** Profile edits must not silently rewrite issued certificates.
-10. **Course access is enrollment-based, not payment-based.** MkLMS only needs to know whether a student is authorized/enrolled.
-11. **Course lessons support sequential unlocking until course completion.** After 100% completion and certificate issuance, completed-course lessons may be revisited in any order.
-12. **Certificates are automatic at 100% completion.** Use an admin-supplied template, add certificate name, completion date, certificate ID and optional QR, generate/store PDF, email it, retain admin copy, expose it in student portal, and provide public verification.
-13. **Admin certificate controls:** download, resend by email, send/attach through internal messaging, regenerate/reissue where authorized, and revoke.
-14. **Internal messaging is core.** Support student ↔ admin messaging and reuse it for course support, certificate delivery/support, and webinar attendee inquiries.
-15. **Live classes/webinars are temporary scheduled experiences, not registration products.** Audience acquisition remains external.
-16. **A live batch may contain 1, 2, or 3 sessions initially.** Keep the model extensible without overbuilding event management.
-17. **Admin controls session schedule, media, countdown, CTA, expiry behavior, redirects/messages, imported timeline comments, and notification routing.**
-18. **Simulated-live timeline uses server-defined session start time, never viewer registration time.** All attendees resolve to approximately the same live offset.
-19. **Before start:** countdown/waiting. **During:** authorize playback at current live offset. **After:** deny playback and show/redirect to configured destination.
-20. **Imported/scheduled webinar comments are timeline-driven.** Late attendees fast-forward chat state appropriately.
-21. **Real attendee comments are private to that attendee and admin.** Attendee sees staged comments plus their own message, not other current attendees' real messages.
-22. **Real attendee comments enter the core admin messaging/inquiry system** and may also dispatch through an optional notification adapter such as Telegram.
-23. **Webinar CTAs are external links only.** Do not embed payment/sales logic into the reusable live-class engine.
-24. **Media origin URLs must not be permanent/public.** Course and webinar playback must use controlled, short-lived authorization where the selected provider supports it.
-25. **Protect the complete playback chain where possible.** HLS authorization should cover manifests and segments, not only the first `.m3u8` URL.
-26. **Private origin is preferred.** Avoid exposing permanent storage URLs directly to students/viewers.
-27. **Provider-neutral media architecture is mandatory.** OCI Object Storage → OCI Media Flow → R2 → CDN is one deployment path, not a product lock.
-28. **Generic media supports HLS, direct files, YouTube/external embeds, and custom/provider-specific playback.** Never restrict the core model to a `youtubeUrl` field.
-29. **Browser video cannot be made literally impossible to capture.** The enforceable goal is to prevent reusable permanent direct URLs and unauthorized playback; optional personalized watermarking may discourage redistribution.
-30. **PostgreSQL is the relational model, not a vendor.** Supabase, self-hosted, managed PostgreSQL, etc. remain valid.
-31. **Storage is provider-neutral.** R2, S3, OCI Object Storage, MinIO, Supabase Storage, and compatible services belong behind adapters.
-32. **Email is provider-neutral.** SMTP, SES, Resend, Postmark, SendGrid, Brevo, custom, or none must remain possible.
-33. **Authentication/access is provider-neutral.** Access-code authentication is default, but password, magic-link, OIDC/SSO, enterprise identity, or custom adapters remain possible.
-34. **Do not merge `mkwebinar` directly into `main`.** Extract proven behavior and rebuild it as Next.js features inside MkLMS.
-35. **Retain the `mklms/main` feature/service abstraction pattern.** Domain/UI code depends on stable interfaces rather than provider SDKs wherever practical.
-36. **Remove boilerplate-specific business assumptions** including Bkash/Nagad subscription approval, hardcoded support names, payment flows, and customer-specific membership language.
-37. **Security responses must avoid leaking enrollment/customer information.** Failed claim attempts use neutral wording such as “We couldn't verify access with those details.”
-38. **Never commit secrets, credentials, private keys, webhook secrets, origin-storage secrets, SMTP passwords, or private customer data into Git.**
-39. **Update this file whenever a major product/architecture decision is finalized or implementation status materially changes.**
-40. **Every meaningful implementation batch must update the Progress Ledger below.** Use `PLANNED`, `IN PROGRESS`, `IMPLEMENTED`, `VERIFIED`, or `DEFERRED`; never invent completion status.
+1. **MkLMS is reusable and white-label.** Never hardcode Starpips, Mkety, Foyzul, one course type, certificate prefix, domain, Telegram account, provider, or customer brand into reusable logic.
+2. **Admin configuration controls deployment identity.** Logo, colors, organization/product name, support identity, domain, certificate template/prefix/layout, email sender, access-code rules, live CTAs, Telegram destination, and similar customer-specific values belong in settings.
+3. **Payments and marketing are external.** Core MkLMS does not own registration funnels, checkout, payment gateways, payment webhooks, acquisition CRM, fake-purchase activity, or advertising integrations.
+4. **Paid portal URL may be public, but first-time access is preauthorization-only.** Only an approved paid-student record may successfully claim access.
+5. **Preauthorization must scale.** Support manual add, bulk paste, CSV import, and API/webhook adapters without forcing one-by-one work.
+6. **First-time claim verification is configurable.** OTP is optional. Supported strategies include preauth-only, email OTP, SMS OTP, self-hosted claim code, manual approval, and custom verification.
+7. **Persistent student access code is separate from first-time verification.** Default student authentication uses a persistent access code and a separate short-lived server session.
+8. **Credentials are protected.** Access codes use secure one-way verification material; session tokens are random and stored hashed. Admin can reset/regenerate, suspend, revoke, restore, and remove access.
+9. **Certificate identity is locked at first successful claim.** Certificate name/email is distinct from ordinary editable profile data; later profile edits must not silently rewrite issued certificates.
+10. **Course access is enrollment-based, never payment-provider-based.**
+11. **Course lessons unlock sequentially until completion.** After 100% completion/certificate issuance, the completed student may revisit lessons in any order.
+12. **Only published content affects students.** Draft lessons/courses are hidden and do not block sequential progress.
+13. **Completion modes are explicit.** MANUAL lessons may use manual completion. VIDEO_PROGRESS lessons cannot be completed through the manual endpoint.
+14. **Trusted video progress must not trust browser-reported percentage alone.** It requires a server-issued playback grant and credits no more progress than credible server-side elapsed watch time.
+15. **Certificates are automatic and idempotent at 100% completion.** Snapshot the locked identity, generate a configurable certificate ID, render the admin template, store the PDF privately, attempt configured email delivery, retain admin/student access, and expose public verification.
+16. **Admin certificate controls:** private download, regenerate/redeliver, resend by email, send through internal messages, revoke, restore.
+17. **Certificate templates are white-label and admin-managed.** Existing signed PDF/PNG/JPEG templates are supported; name/date/certificate-ID placement is configurable and may be global or course-specific.
+18. **Internal messaging is core.** Real PostgreSQL student↔admin conversations support general support, certificate context, and future live-class inquiries. Do not revert to the original mock/Foyzul/Rahim message data.
+19. **Live classes/webinars are temporary scheduled experiences, not registration products.** Audience acquisition remains external and owner shares the live link directly.
+20. **A live batch supports 1, 2, or 3 sessions initially.** Keep the model extensible without building a general event-management suite.
+21. **Admin controls each live session:** schedule, media, countdown/waiting content, staged chat, CTA timing/link, expiry message/redirect, viewer display, and notification routing.
+22. **Simulated-live timeline uses server-defined `startsAt`, never viewer registration time.** All attendees resolve to approximately the same live offset: `serverNow - startsAt`.
+23. **Before start:** countdown/waiting and no playback authorization. **During:** LIVE state and playback at current offset. **After:** deny playback and show/redirect to configured destination.
+24. **The active live page must visibly show `LIVE`.** This is a product requirement for the real-live experience; do not show LIVE before/after the active session window.
+25. **Viewer-count display is admin-configurable and never hardcoded.** At minimum support an expected-audience/baseline value set by admin. Architecture should allow modes such as configured baseline, actual-active only, or baseline-plus-active. The public count should remain stable enough to preserve the live-room feel and must not reset randomly on refresh.
+26. **Imported webinar comments are timeline-driven.** Late attendees should see the correct current/recent staged-chat state instead of replaying from minute zero.
+27. **Real attendee comments are private to that attendee and admin.** Attendee sees staged comments plus their own real messages only; never expose other current attendees' real comments.
+28. **Real attendee comments enter the core messaging/inquiry system** with LIVE_CLASS context and may also dispatch through an optional NotificationProvider such as Telegram.
+29. **Webinar CTAs are external links only.** Per-session CTA text, URL, reveal timing, and post-session behavior are configurable; no internal sales/payment funnel is required.
+30. **Media origin URLs must not be permanent/public.** Course and webinar playback use controlled short-lived authorization where the provider supports it.
+31. **Protect the complete playback chain where possible.** For HLS, protection should cover manifests and segments, not only the first `.m3u8` request.
+32. **Private origin is preferred.** Never render permanent object-storage origin references into student/live-page HTML.
+33. **Provider-neutral media architecture is mandatory.** OCI Object Storage → OCI Media Flow → R2 → CDN is one valid deployment path, not a product lock.
+34. **Generic media supports HLS, protected direct files, YouTube/external embeds, and custom providers.**
+35. **Screen capture cannot be made literally impossible.** The enforceable goal is preventing reusable permanent direct URLs/unauthorized playback. Optional personalized watermarking may discourage redistribution.
+36. **PostgreSQL is the relational model, not a vendor.** Supabase, self-hosted, and other managed PostgreSQL deployments remain valid.
+37. **Storage is provider-neutral.** R2, S3, OCI Object Storage, MinIO, Supabase Storage, etc. belong behind StorageProvider adapters.
+38. **Email is provider-neutral and optional.** SMTP, SES, Resend, Postmark, SendGrid, Brevo, custom, or no-email deployments remain possible.
+39. **Authentication/access remains provider-neutral.** Access-code auth is default; password, magic link, OIDC/SSO, enterprise identity, or custom adapters may be substituted.
+40. **Notification integrations are provider-neutral.** Telegram is an adapter, not a hardcoded dependency.
+41. **Do not merge `mkwebinar` into `main`.** Extract its proven simulated-live/player/chat behavior and rebuild it as proper Next.js features inside MkLMS.
+42. **Retain feature/service/provider boundaries.** Domain/UI logic should not scatter provider SDK calls.
+43. **Retire original boilerplate business assumptions.** Bkash/Nagad subscriptions, hardcoded support names, old Questions/Q&A demo surfaces, and fake member data are not reusable-core product features.
+44. **Security responses must avoid customer/enrollment leakage.** Public claim failures use neutral wording.
+45. **Never commit secrets/private customer data.** No credentials, signing keys, SMTP passwords, object-store secrets, webhook secrets, or private media.
+46. **Update this file whenever a major decision or implementation status changes.**
+47. **Every meaningful implementation batch updates the Progress Ledger.** Use PLANNED, IN PROGRESS, IMPLEMENTED, VERIFIED, or DEFERRED accurately.
 
 ---
 
@@ -61,46 +69,47 @@
 
 ```text
 MkLMS
-├── Public home / access entry
+├── Public home / paid access entry
 ├── Student LMS
+│   ├── Dashboard
 │   ├── My Courses
-│   ├── Courses → Modules → Lessons
+│   ├── Course → Modules → Lessons
 │   ├── Protected media
 │   ├── Progress
 │   ├── Certificates
 │   ├── Messages
 │   └── Profile
 ├── Admin
+│   ├── Access & Enrollments
 │   ├── Students
-│   ├── Pre-authorizations / Enrollments
 │   ├── Courses / Modules / Lessons
-│   ├── Media
-│   ├── Progress oversight
-│   ├── Certificates
+│   ├── Media Library
+│   ├── Certificates / Templates
 │   ├── Messages
 │   ├── Live Classes
 │   └── Settings
 └── Live Classes / Webinar
     ├── Batches
-    ├── 1–3 scheduled sessions initially
+    ├── 1–3 sessions initially
     ├── Countdown / waiting room
+    ├── LIVE indicator + configured viewer display
     ├── Server-clock simulated-live player
     ├── Imported timeline comments
     ├── Private attendee messages
-    ├── Admin inquiry inbox + optional notifications
-    └── External CTA / post-session redirect
+    ├── Admin inbox + optional notifications
+    └── External CTA / expiry redirect
 ```
 
-Out of core scope: marketing funnels, public webinar registration, checkout, payment processing, payment webhooks, acquisition CRM, fake-purchase activity, and advertising integrations.
+Out of reusable core: marketing funnels, public webinar registration, checkout/payment processing, acquisition CRM, advertising workflows, and payment-receipt/subscription approval screens.
 
 ---
 
-# 2. Paid Student Claim / Access Lifecycle
+# 2. Paid Student Access Lifecycle
 
 ```text
 External payment/sales
       ↓
-Admin/system pre-authorizes student
+Preauthorize paid student
 (manual | bulk paste | CSV | API/webhook)
       ↓
 Student opens public portal
@@ -112,18 +121,18 @@ Match approved record
 Configured verification
 (preauth-only | OTP optional | claim code | manual | custom)
       ↓
-Capture certificate identity
+Lock certificate identity
       ↓
 Create student + activate enrollment
       ↓
-Generate persistent access code
+Issue persistent access code
       ↓
-Store only credential hash
+Store secure verification material
       ↓
-Student enters portal
+Login creates separate hashed server session
 ```
 
-Suggested states:
+Suggested access/enrollment lifecycle:
 
 ```text
 PREAUTHORIZED → CLAIMED → ACTIVE → COMPLETED
@@ -133,74 +142,121 @@ PREAUTHORIZED → CLAIMED → ACTIVE → COMPLETED
 
 ---
 
-# 3. Course / Certificate / Media Rules
+# 3. Learning / Protected Media / Certificate Flow
 
 ```text
-Authorized student opens lesson
-        ↓
-Check active enrollment + sequential rule
-        ↓
-Create short-lived protected playback authorization
-        ↓
-Completion event/threshold
-        ↓
-Recalculate progress + unlock next lesson
-        ↓
-100% completion
-        ↓
-Generate/store/email certificate
-        ↓
-Completed student may revisit lessons freely
+Authenticated student
+      ↓
+Active/completed enrollment
+      ↓
+Published course + sequential lesson access
+      ↓
+Short-lived playback authorization
+      ↓
+Server playback grant
+      ↓
+Trusted learning completion
+      ↓
+Recalculate course progress
+      ↓
+100%
+      ↓
+Enrollment COMPLETED
+      ↓
+Idempotent certificate issuance
+      ↓
+Render admin template → private storage
+      ↓
+Optional email + student/admin download + verification + internal message
 ```
 
-Certificate identifiers, templates, signatures, branding and provider details are deployment-configurable.
-
-For protectable HLS media, protect both manifests and segments. The known OCI → Media Flow → R2 → CDN route is only the first deployment option.
+Known deployment stack OCI → Media Flow → R2 → Cloudflare is supported conceptually but remains an adapter choice.
 
 ---
 
 # 4. Live Class Rules
 
 ```text
-Admin creates batch + 1–3 sessions
+Admin creates batch
       ↓
-Sets time/media/CTA/expiry/chat
+Adds 1–3 scheduled sessions
       ↓
-Shares public link externally
+Selects media + schedule + staged chat + CTA + expiry
+      ↓
+Sets viewer-display mode/baseline
+      ↓
+Shares public live link externally
 ```
+
+Public state resolution:
 
 ```text
-Before startsAt → countdown; no playback authorization
-During         → offset = serverNow - startsAt; authorize at offset
-After          → deny playback; configured message/CTA/redirect
+Before startsAt
+  → countdown/waiting
+  → no LIVE badge
+  → no playback auth
+
+During active window
+  → LIVE badge visible
+  → liveOffset = serverNow - startsAt
+  → authorize media at liveOffset
+  → display admin-configured viewer count behavior
+  → synchronized staged comments
+  → private attendee message input
+
+After session/batch
+  → no LIVE badge
+  → no playback auth
+  → configured message / CTA / redirect
 ```
 
-Viewer sees imported timeline comments and their own real comments only. Real comments are persisted into admin messaging and may be forwarded through `NotificationProvider`.
+### Viewer display
+
+At minimum store `expectedViewerBaseline` (or equivalent) in admin-controlled live-session/batch configuration. Keep the domain extensible for:
+
+- `CONFIGURED_BASELINE` — display the admin-set expected/baseline audience.
+- `ACTIVE_ONLY` — display measured currently-active viewers when presence tracking is enabled.
+- `BASELINE_PLUS_ACTIVE` — combine configured baseline with actual presence when desired.
+
+Do not hardcode counts or use uncontrolled per-refresh randomness. If a simulated display adjustment is later supported, it must be deterministic/configurable and stable for the session.
+
+### Chat
+
+```text
+Imported staged timeline message → visible to all at correct offset
+Attendee's own live message       → visible to that attendee + admin
+Other attendees' live messages   → not visible to attendee
+Real live message                → core Messages/LIVE_CLASS + optional NotificationProvider
+```
 
 ---
 
 # 5. Provider Abstractions
 
-- `AccessProvider`
-- `ClaimVerificationProvider`
-- PostgreSQL repository/data layer
-- `StorageProvider`
-- `MediaProvider`
-- `EmailProvider`
-- `NotificationProvider`
-- optional `IdentityProvider`
+Core/accepted boundaries include:
 
-Provider SDK calls must not leak throughout feature UI/domain code.
+- Access/identity adapter
+- ClaimVerificationProvider
+- PostgreSQL repositories/data layer
+- StorageProvider
+- MediaProvider
+- CertificateRenderer
+- EmailProvider
+- NotificationProvider
+
+Concrete adapters currently implemented include S3-compatible private storage, SMTP email, `pdf-lib` certificate rendering, and generic signed/private media delivery contracts. Additional providers must fit these boundaries rather than rewriting business logic.
 
 ---
 
 # 6. Repository Strategy
 
-- `main` — LMS foundation and eventual consolidated product.
+- `main` — eventual consolidated product branch.
 - `mkwebinar` — legacy behavior reference only.
 - `architecture/mklms-reusable-platform` — approved architecture/spec branch.
-- `feature/mklms-phase-1-foundation-access` — verified Phase 1 implementation branch.
-- `feature/mklms-phase-2-learning-progress` — verified Phase 2 learning/progress branch.
+- `feature/mklms-phase-1-foundation-access` — verified Phase 1.
+- `feature/mklms-phase-2-learning-progress` — verified Phase 2.
+- `feature/mklms-phase-3-certificates-media` — verified Phase 3.
+- Next: `feature/mklms-phase-4-live-classes`.
 - Implementation plan: `docs/superpowers/plans/2026-08-30-mklms-implementation-plan.md`.
 - Design spec: `docs/superpowers/specs/2026-08-30-mklms-reusable-learning-platform-design.md`.
 
@@ -211,27 +267,18 @@ Provider SDK calls must not leak throughout feature UI/domain code.
 | Date | Area | Status | Progress / Evidence |
 |---|---|---|---|
 | 2026-08-30 | Product scope | VERIFIED | Reusable white-label LMS + temporary scheduled simulated-live class module. Payments/marketing remain external. |
-| 2026-08-30 | Repository audit | VERIFIED | `mklms/main` is the Next.js 16 LMS base; `mkwebinar` is a standalone static replacement branch and must not be merged directly. |
-| 2026-08-30 | Architecture documentation | IMPLEMENTED | Added `agentmklms.md` and the approved full design spec. |
-| 2026-08-30 | Implementation planning | IMPLEMENTED | Added phased implementation plan covering access, learning/progress, certificates/media, and live classes. |
-| 2026-08-30 | Phase 1 branch | VERIFIED | `feature/mklms-phase-1-foundation-access` passed GitHub Actions install, full tests, lint, and production build on run `33314139664`. |
-| 2026-08-30 | Access-code domain | VERIFIED | Cryptographically random configurable access codes, deterministic lookup digest, scrypt hashing/timing-safe verification, and hashed server sessions implemented. |
-| 2026-08-30 | Pre-authorization matching | VERIFIED | Normalized email/phone matching, duplicate-safe bulk/CSV authorization, neutral failed claims, manual authorization, and admin management implemented. |
-| 2026-08-30 | Claim verification strategies | VERIFIED | `preauth-only`, self-hosted claim code, manual approval request/approval loop, optional email/SMS OTP contracts, and custom strategy contract implemented. |
-| 2026-08-30 | White-label provider settings | VERIFIED | Provider-neutral settings and runtime repositories compile and build; no `SiteSettings` legacy type remains. |
-| 2026-08-30 | Student portal authentication | VERIFIED | First-time certificate identity claim + persistent access code login + httpOnly hashed-session storage + logout/current-session route implemented. |
-| 2026-08-30 | Admin authentication/access management | VERIFIED | Built-in signed admin session, protected admin layout, bulk preauthorization, claim approval, access-code reset, suspend/revoke/restore implemented. |
-| 2026-08-30 | PostgreSQL foundation | VERIFIED | Provider-neutral PostgreSQL schema/repositories for settings, students, preauthorizations, credentials, enrollments, and sessions compile in production build. |
-| 2026-08-30 | Phase 1 automated verification | VERIFIED | Latest CI: tests, lint, production build all successful. |
-| 2026-08-30 | Phase 2 course domain | VERIFIED | Replaced reachable flat Course→Video behavior with Course→Module→Lesson, ordered modules/lessons, published/draft filtering, and generic media asset references. |
-| 2026-08-30 | Phase 2 sequential progress | VERIFIED | Sequential unlocking, progress calculation, 100% enrollment completion, unrestricted completed-course revisit, and draft-content exclusion are covered by domain/service tests. |
-| 2026-08-30 | Phase 2 completion security | VERIFIED | Manual completion is limited to MANUAL lessons; VIDEO_PROGRESS lessons reject manual completion and await trusted media-progress completion in Phase 3. |
-| 2026-08-30 | Phase 2 PostgreSQL learning | VERIFIED | Added reusable course/module/lesson/lesson-progress schema plus PostgreSQL learning/admin repositories and re-runnable migration behavior. |
-| 2026-08-30 | Phase 2 student UX | VERIFIED | Authenticated Dashboard, My Courses, course detail, lesson, and Progress views now use enrollment/progress data; fake member/demo course assumptions removed from primary student flow. |
-| 2026-08-30 | Phase 2 admin UX | VERIFIED | Real course creation, module/lesson creation, generic media asset assignment, course publishing, and independent lesson publish/unpublish controls implemented. |
-| 2026-08-30 | Phase 2 legacy route retirement | VERIFIED | Legacy student/admin video routes redirect into the new learning model so hardcoded YouTube/Foyzul demo content is no longer reachable through those routes. |
-| 2026-08-30 | Phase 2 automated verification | VERIFIED | `feature/mklms-phase-2-learning-progress` passed 48/48 tests, lint, and production build in GitHub Actions run `33315644140`. |
-| 2026-08-30 | Phase 3 certificates/media | PLANNED | Certificate identity fields already exist on students and will be snapshotted for idempotent issuance; protected media/provider adapters not started yet. |
-| 2026-08-30 | Phase 4 live classes | PLANNED | Not started. |
+| 2026-08-30 | Repository audit | VERIFIED | `mklms/main` is the LMS base; `mkwebinar` is reference-only and must not be merged directly. |
+| 2026-08-30 | Architecture / plan | VERIFIED | Approved design spec, persistent blueprint, and phased implementation plan committed. |
+| 2026-08-30 | Phase 1 — access | VERIFIED | `feature/mklms-phase-1-foundation-access`; GitHub Actions run `33314139664` passed tests, lint, production build. Secure access codes/sessions, preauthorization, optional verification, admin access management, white-label settings and PostgreSQL foundation implemented. |
+| 2026-08-30 | Phase 2 — learning/progress | VERIFIED | `feature/mklms-phase-2-learning-progress`; GitHub Actions run `33315644140` passed 48/48 tests, lint, production build. Course→Module→Lesson, publishing, enrollment progress, sequential unlock, real student/admin learning UX implemented. |
+| 2026-08-30 | Phase 3 — certificate domain | VERIFIED | Idempotent issuance from locked identity, configurable IDs, revocation/restore and public verification implemented. |
+| 2026-08-30 | Phase 3 — certificate delivery | VERIFIED | Admin-uploaded PDF/PNG/JPEG templates with configurable coordinates; `pdf-lib` rendering; private storage; optional SMTP email; student/admin download; regenerate/resend; internal CERTIFICATE message action. |
+| 2026-08-30 | Phase 3 — protected media | VERIFIED | Generic Media Library, HLS/direct/embed/custom sources, session-bound playback authorization, playback grants, HLS player, short-lived auth refresh and no origin URL rendered into lesson HTML. |
+| 2026-08-30 | Phase 3 — trusted video progress | VERIFIED | Browser progress capped by credible server elapsed watch time; grants/enrollment/sequence validated; VIDEO_PROGRESS cannot use manual completion. |
+| 2026-08-30 | Phase 3 — messaging | VERIFIED | Replaced primary mock messaging with PostgreSQL student↔admin conversations and context fields for CERTIFICATE/LIVE_CLASS reuse. |
+| 2026-08-30 | Phase 3 — boilerplate retirement | VERIFIED | Direct student/admin subscription routes redirect to Courses/Access; legacy Questions route redirects to Messages and was removed from admin navigation. |
+| 2026-08-30 | Phase 3 automated verification | VERIFIED | Final `feature/mklms-phase-3-certificates-media` head passed **70/70 tests, lint, and Next.js production build** in GitHub Actions run `33318269966`. |
+| 2026-08-30 | Phase 4 — LIVE/viewer display | DECIDED | Active live page must show LIVE; viewer count is admin-configured, with baseline expected audience required and architecture extensible to active/baseline-plus-active modes. |
+| 2026-08-30 | Phase 4 — live classes | PLANNED | Scheduled batches, server-clock simulated-live player, staged chat, private attendee messaging, notification adapter, CTA/expiry controls and viewer display are next. |
 
 > **Progress update rule:** every meaningful design/code/testing batch must update this ledger in the same branch/PR before being considered complete.
