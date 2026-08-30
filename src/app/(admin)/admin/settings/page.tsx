@@ -2,6 +2,8 @@ import { AppLayout } from "@/components/layout/app-layout";
 import { SettingsForm } from "@/features/settings/components/settings-form";
 import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminSettingsPage() {
   const settings = await new PostgresSettingsRepository().getPlatformSettings();
 
@@ -9,7 +11,7 @@ export default async function AdminSettingsPage() {
     <AppLayout
       user={{
         name: settings.supportName ?? settings.organizationName,
-        email: settings.supportEmail ?? undefined,
+        email: settings.supportEmail ?? "",
         avatar: undefined,
       }}
       isAdmin={true}
