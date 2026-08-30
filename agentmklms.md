@@ -5,7 +5,7 @@
 >
 > **Product:** MkLMS — reusable white-label LMS + scheduled simulated-live class platform.
 > **Architecture branch:** `architecture/mklms-reusable-platform`.
-> **Current implementation branch:** `feature/mklms-phase-1-foundation-access`.
+> **Verified Phase 1 branch:** `feature/mklms-phase-1-foundation-access`.
 > **Legacy webinar reference:** `mkwebinar` branch — reference behavior only; do not merge as-is.
 > **Legacy Mkety production repo:** `MketyDigital/Mkety` — READ/REFERENCE ONLY. Never edit it for MkLMS work.
 
@@ -198,7 +198,7 @@ Provider SDK calls must not leak throughout feature UI/domain code.
 - `main` — LMS foundation and eventual consolidated product.
 - `mkwebinar` — legacy behavior reference only.
 - `architecture/mklms-reusable-platform` — approved architecture/spec branch.
-- `feature/mklms-phase-1-foundation-access` — current implementation branch for platform/access foundation.
+- `feature/mklms-phase-1-foundation-access` — verified Phase 1 implementation branch.
 - Implementation plan: `docs/superpowers/plans/2026-08-30-mklms-implementation-plan.md`.
 - Design spec: `docs/superpowers/specs/2026-08-30-mklms-reusable-learning-platform-design.md`.
 
@@ -212,17 +212,16 @@ Provider SDK calls must not leak throughout feature UI/domain code.
 | 2026-08-30 | Repository audit | VERIFIED | `mklms/main` is the Next.js 16 LMS base; `mkwebinar` is a standalone static replacement branch and must not be merged directly. |
 | 2026-08-30 | Architecture documentation | IMPLEMENTED | Added `agentmklms.md` and the approved full design spec. |
 | 2026-08-30 | Implementation planning | IMPLEMENTED | Added phased implementation plan covering access, learning/progress, certificates/media, and live classes. |
-| 2026-08-30 | Phase 1 branch | IMPLEMENTED | Created `feature/mklms-phase-1-foundation-access` from the approved architecture branch. |
-| 2026-08-30 | Access-code domain | VERIFIED | Implemented cryptographically random configurable access codes plus scrypt hashing/timing-safe verification. Tests pass. |
-| 2026-08-30 | Pre-authorization matching | VERIFIED | Implemented normalized email/phone matching that accepts only `PREAUTHORIZED` records and returns null for revoked/unknown records. Tests pass. |
-| 2026-08-30 | Claim verification strategies | VERIFIED | Implemented `preauth-only`, optional email/SMS OTP, claim code, manual approval, and custom strategy contracts. External delivery is required only for OTP strategies. Tests pass. |
-| 2026-08-30 | White-label provider settings | IMPLEMENTED | Added provider-neutral platform settings for access, claim verification, storage, media, email and notification providers with neutral defaults. |
-| 2026-08-30 | Bulk pre-authorization import | VERIFIED | Implemented CSV and bulk-paste parsers with normalization, duplicate detection and invalid-row reporting. Tests pass. |
-| 2026-08-30 | Access claim service | VERIFIED | Implemented claim orchestration: approved record → student → hashed credential → active enrollment → claimed preauthorization. Unknown claims return neutral message and persist nothing. Tests pass. |
-| 2026-08-30 | PostgreSQL foundation schema | IMPLEMENTED | Added provider-neutral `001_mklms_foundation.sql` for settings, students, preauthorizations, access credentials and enrollments. Runtime database adapter remains next. |
-| 2026-08-30 | Automated test harness | VERIFIED | Added Node 22 TypeScript domain test command. Local execution: 10 tests, 10 passing, 0 failures. |
-| 2026-08-30 | Phase 1 UI/runtime integration | IN PROGRESS | Login/claim UI, runtime PostgreSQL adapter, API routes/session cookies, admin access management/import screens remain to complete Phase 1. |
-| 2026-08-30 | Phase 2 courses/progress | PLANNED | Not started. |
+| 2026-08-30 | Phase 1 branch | VERIFIED | `feature/mklms-phase-1-foundation-access` passed GitHub Actions install, full tests, lint, and production build on run `33314139664`. |
+| 2026-08-30 | Access-code domain | VERIFIED | Cryptographically random configurable access codes, deterministic lookup digest, scrypt hashing/timing-safe verification, and hashed server sessions implemented. |
+| 2026-08-30 | Pre-authorization matching | VERIFIED | Normalized email/phone matching, duplicate-safe bulk/CSV authorization, neutral failed claims, manual authorization, and admin management implemented. |
+| 2026-08-30 | Claim verification strategies | VERIFIED | `preauth-only`, self-hosted claim code, manual approval request/approval loop, optional email/SMS OTP contracts, and custom strategy contract implemented. |
+| 2026-08-30 | White-label provider settings | VERIFIED | Provider-neutral settings and runtime repositories compile and build; no `SiteSettings` legacy type remains. |
+| 2026-08-30 | Student portal authentication | VERIFIED | First-time certificate identity claim + persistent access code login + httpOnly hashed-session storage + logout/current-session route implemented. |
+| 2026-08-30 | Admin authentication/access management | VERIFIED | Built-in signed admin session, protected admin layout, bulk preauthorization, claim approval, access-code reset, suspend/revoke/restore implemented. |
+| 2026-08-30 | PostgreSQL foundation | VERIFIED | Provider-neutral PostgreSQL schema/repositories for settings, students, preauthorizations, credentials, enrollments, and sessions compile in production build. |
+| 2026-08-30 | Phase 1 automated verification | VERIFIED | Latest CI: tests, lint, production build all successful. |
+| 2026-08-30 | Phase 2 courses/progress | IN PROGRESS | Audit complete: legacy model is flat Course→Video/youtubeUrl and contains customer-specific mock assumptions. Next implementation replaces it with Course→Module→Lesson and sequential progress domain. |
 | 2026-08-30 | Phase 3 certificates/media | PLANNED | Not started. |
 | 2026-08-30 | Phase 4 live classes | PLANNED | Not started. |
 
