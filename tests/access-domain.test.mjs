@@ -10,6 +10,11 @@ import {
   findMatchingPreauthorization,
   normalizeIdentity,
 } from '../src/features/access/domain/preauthorization.ts';
+import {
+  CLAIM_VERIFICATION_STRATEGIES,
+  isOtpStrategy,
+  requiresExternalDelivery,
+} from '../src/features/access/domain/claim-verification.ts';
 
 test('normalizeIdentity trims and lowercases emails', () => {
   assert.equal(normalizeIdentity('  Student@Example.COM  ', 'email'), 'student@example.com');
@@ -55,4 +60,24 @@ test('hashAccessCode and verifyAccessCode validate the right credential only', (
   assert.equal(verifyAccessCode(code, stored), true);
   assert.equal(verifyAccessCode('STUDENT-WRONG', stored), false);
   assert.notEqual(stored.hash, code);
+});
+
+test('claim verification supports free and paid delivery options', () => {
+  assert.deepEqual(CLAIM_VERIFICATION_STRATEGIES, [
+    'preauth-only',
+    'otp-email',
+    'otp-sms',
+    'claim-code',
+    'manual-approval',
+    'custom',
+  ]);
+
+  assert.equal(isOtpStrategy('otp-email'), true);
+  assert.equal(isOtpStrategy('otp-sms'), true);
+  assert.equal(isOtpStrategy('preauth-only'), false);
+  assert.equal(requiresExternalDelivery('preauth-only'), false);
+  assert.equal(requiresExternalDelivery('claim-code'), false);
+  assert.equal(requiresExternalDelivery('manual-approval'), false);
+  assert.equal(requiresExternalDelivery('otp-email'), true);
+  assert.equal(requiresExternalDelivery('otp-sms'), true);
 });
