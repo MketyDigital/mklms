@@ -1,10 +1,10 @@
-import type { CourseStructure } from "../../courses/domain/model";
+import type { CourseStructure } from "../../courses/domain/model.ts";
 import { canAccessLesson } from "../../courses/domain/progress.ts";
 import type {
   MediaAsset,
   MediaProvider,
   PlaybackAuthorization,
-} from "../../../providers/media-provider";
+} from "../../../providers/media-provider.ts";
 
 export interface MediaPlaybackEnrollment {
   studentId: string;
