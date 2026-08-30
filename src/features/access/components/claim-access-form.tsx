@@ -16,6 +16,7 @@ export function ClaimAccessForm({ verificationStrategy }: ClaimAccessFormProps) 
   const [phone, setPhone] = useState("");
   const [certificateName, setCertificateName] = useState("");
   const [certificateEmail, setCertificateEmail] = useState("");
+  const [claimCode, setClaimCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [issuedAccessCode, setIssuedAccessCode] = useState<string | null>(null);
@@ -35,6 +36,7 @@ export function ClaimAccessForm({ verificationStrategy }: ClaimAccessFormProps) 
           phone: phone || undefined,
           certificateName,
           certificateEmail: certificateEmail || undefined,
+          claimCode: claimCode || undefined,
         }),
       });
       const result = await response.json();
@@ -127,9 +129,23 @@ export function ClaimAccessForm({ verificationStrategy }: ClaimAccessFormProps) 
         />
       </div>
 
+      <div className="space-y-2">
+        <Label htmlFor="claim-code">One-time verification / claim code</Label>
+        <Input
+          id="claim-code"
+          value={claimCode}
+          onChange={(event) => setClaimCode(event.target.value.toUpperCase())}
+          placeholder="Leave blank unless the administrator gave you one"
+          autoComplete="one-time-code"
+        />
+        <p className="text-xs text-muted-foreground">
+          Some deployments use a free administrator-issued claim code instead of email or SMS OTP.
+        </p>
+      </div>
+
       {verificationStrategy !== "preauth-only" ? (
         <p className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
-          This portal is configured to require an additional verification step after your approved details are matched.
+          This portal may require an additional verification step after your approved details are matched.
         </p>
       ) : null}
 
