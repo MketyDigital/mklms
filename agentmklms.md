@@ -8,6 +8,7 @@
 > **Verified Phase 1 branch:** `feature/mklms-phase-1-foundation-access`.
 > **Verified Phase 2 branch:** `feature/mklms-phase-2-learning-progress`.
 > **Verified Phase 3 branch:** `feature/mklms-phase-3-certificates-media`.
+> **Verified Phase 4 branch:** `feature/mklms-phase-4-live-classes`.
 > **Legacy webinar reference:** `mkwebinar` branch — reference behavior only; never merge as-is.
 > **Legacy Mkety production repo:** `MketyDigital/Mkety` — READ/REFERENCE ONLY. Never edit it for MkLMS work.
 
@@ -42,7 +43,7 @@
 25. **Viewer-count display is admin-configurable and never hardcoded.** At minimum support an expected-audience/baseline value set by admin. Architecture should allow modes such as configured baseline, actual-active only, or baseline-plus-active. The public count should remain stable enough to preserve the live-room feel and must not reset randomly on refresh.
 26. **Imported webinar comments are timeline-driven.** Late attendees should see the correct current/recent staged-chat state instead of replaying from minute zero.
 27. **Real attendee comments are private to that attendee and admin.** Attendee sees staged comments plus their own real messages only; never expose other current attendees' real comments.
-28. **Real attendee comments enter the core messaging/inquiry system** with LIVE_CLASS context and may also dispatch through an optional NotificationProvider such as Telegram.
+28. **Real attendee comments are durably stored before notification.** PostgreSQL/live attendee inbox is the source of truth; optional NotificationProvider dispatch such as Telegram is convenience notification only and must never determine message persistence.
 29. **Webinar CTAs are external links only.** Per-session CTA text, URL, reveal timing, and post-session behavior are configurable; no internal sales/payment funnel is required.
 30. **Media origin URLs must not be permanent/public.** Course and webinar playback use controlled short-lived authorization where the provider supports it.
 31. **Protect the complete playback chain where possible.** For HLS, protection should cover manifests and segments, not only the first `.m3u8` request.
@@ -226,8 +227,10 @@ Do not hardcode counts or use uncontrolled per-refresh randomness. If a simulate
 Imported staged timeline message → visible to all at correct offset
 Attendee's own live message       → visible to that attendee + admin
 Other attendees' live messages   → not visible to attendee
-Real live message                → core Messages/LIVE_CLASS + optional NotificationProvider
+Real live message                → durable PostgreSQL live inbox + optional NotificationProvider
 ```
+
+The live attendee inbox is authoritative. Telegram or another notification adapter may alert an owner, but notification failure must not roll back or hide an already-persisted attendee message.
 
 ---
 
@@ -244,7 +247,21 @@ Core/accepted boundaries include:
 - EmailProvider
 - NotificationProvider
 
-Concrete adapters currently implemented include S3-compatible private storage, SMTP email, `pdf-lib` certificate rendering, and generic signed/private media delivery contracts. Additional providers must fit these boundaries rather than rewriting business logic.
+Concrete adapters currently implemented include S3-compatible private storage, SMTP email, `pdf-lib` certificate rendering, generic signed/private media delivery contracts, and Telegram notification delivery. Additional providers must fit these boundaries rather than rewriting business logic.
+
+### Phase 4 runtime configuration
+
+Protected live/course media uses the same provider-neutral media boundary. The currently implemented signed-delivery adapter reads:
+
+- `MKLMS_MEDIA_DELIVERY_BASE_URL`
+- `MKLMS_MEDIA_SIGNING_SECRET`
+
+The optional Telegram notification adapter reads:
+
+- `MKLMS_TELEGRAM_BOT_TOKEN`
+- `MKLMS_TELEGRAM_CHAT_ID`
+
+A live batch may override the default notification destination through admin configuration. Secrets remain server-only and must never be committed.
 
 ---
 
@@ -256,7 +273,7 @@ Concrete adapters currently implemented include S3-compatible private storage, S
 - `feature/mklms-phase-1-foundation-access` — verified Phase 1.
 - `feature/mklms-phase-2-learning-progress` — verified Phase 2.
 - `feature/mklms-phase-3-certificates-media` — verified Phase 3.
-- Next: `feature/mklms-phase-4-live-classes`.
+- `feature/mklms-phase-4-live-classes` — verified Phase 4 simulated-live classes/webinar.
 - Implementation plan: `docs/superpowers/plans/2026-08-30-mklms-implementation-plan.md`.
 - Design spec: `docs/superpowers/specs/2026-08-30-mklms-reusable-learning-platform-design.md`.
 
@@ -278,7 +295,11 @@ Concrete adapters currently implemented include S3-compatible private storage, S
 | 2026-08-30 | Phase 3 — messaging | VERIFIED | Replaced primary mock messaging with PostgreSQL student↔admin conversations and context fields for CERTIFICATE/LIVE_CLASS reuse. |
 | 2026-08-30 | Phase 3 — boilerplate retirement | VERIFIED | Direct student/admin subscription routes redirect to Courses/Access; legacy Questions route redirects to Messages and was removed from admin navigation. |
 | 2026-08-30 | Phase 3 automated verification | VERIFIED | Final `feature/mklms-phase-3-certificates-media` head passed **70/70 tests, lint, and Next.js production build** in GitHub Actions run `33318269966`. |
-| 2026-08-30 | Phase 4 — LIVE/viewer display | DECIDED | Active live page must show LIVE; viewer count is admin-configured, with baseline expected audience required and architecture extensible to active/baseline-plus-active modes. |
-| 2026-08-30 | Phase 4 — live classes | PLANNED | Scheduled batches, server-clock simulated-live player, staged chat, private attendee messaging, notification adapter, CTA/expiry controls and viewer display are next. |
+| 2026-08-30 | Phase 4 — live state / viewer presence | VERIFIED | PostgreSQL live batches/sessions/viewers, server-clock UPCOMING/LIVE/BETWEEN_SESSIONS/ENDED resolution, anonymous hashed viewer identity, heartbeat presence, and configurable `CONFIGURED_BASELINE`, `ACTIVE_ONLY`, and `BASELINE_PLUS_ACTIVE` display modes implemented. |
+| 2026-08-30 | Phase 4 — simulated-live playback | VERIFIED | Public `/live/[slug]` room uses protected viewer-scoped MediaProvider authorization, server-derived live offset, late-join/refresh synchronization, no playback outside LIVE, no normal seek controls, anti-seek correction, visible LIVE state, and click-to-unmute behavior. |
+| 2026-08-30 | Phase 4 — staged/private chat | VERIFIED | CSV/timestamped/Zoom-style staged-chat import, live-offset timeline delivery, attendee-visible staged chat plus own real comments only, durable PostgreSQL attendee inbox, and admin all-attendee view implemented. |
+| 2026-08-30 | Phase 4 — notifications / CTA / expiry | VERIFIED | Attendee message persistence precedes optional NotificationProvider dispatch; Telegram adapter and per-batch destination supported; per-session CTA timing plus session/batch ended message and redirect implemented. |
+| 2026-08-30 | Phase 4 — admin operations | VERIFIED | Admin Live Classes UI/API creates reusable batches, enforces 1–3 sessions, selects Media Library assets, configures schedule/viewer mode/CTA/expiry/notification routing, imports staged chat, publishes sessions, activates batches, copies public links, and displays real attendee inbox. |
+| 2026-08-30 | Phase 4 automated verification | VERIFIED | `feature/mklms-phase-4-live-classes` implementation head `41fe61399fc3dbc77dbe59aa71719430bc53623e` passed **112/112 tests, lint, and Next.js production build** in GitHub Actions run `33321397091`. |
 
 > **Progress update rule:** every meaningful design/code/testing batch must update this ledger in the same branch/PR before being considered complete.
