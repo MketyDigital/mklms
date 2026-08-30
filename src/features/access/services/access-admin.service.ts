@@ -4,6 +4,10 @@ import {
   hashAccessCode,
 } from "../domain/access-code";
 import { hashClaimCode } from "../domain/claim-code";
+import {
+  parsePreauthorizationCsv,
+  parsePreauthorizationPaste,
+} from "../domain/import-preauthorizations";
 import type {
   AdminAccessRepository,
   CreatePreauthorizationInput,
@@ -13,6 +17,7 @@ import type { ClaimVerificationStrategy } from "../domain/claim-verification";
 
 export interface AccessAdminServiceOptions {
   accessCodePrefix: string;
+  claimCodePrefix?: string;
 }
 
 export interface PreauthorizeStudentInput {
@@ -24,6 +29,14 @@ export interface PreauthorizeStudentInput {
   claimCode?: string | null;
   source?: string;
   externalReference?: string | null;
+}
+
+export interface BulkPreauthorizeInput {
+  mode: "csv" | "paste";
+  content: string;
+  courseId?: string | null;
+  claimStrategy: ClaimVerificationStrategy;
+  source?: string;
 }
 
 export class AccessAdminService {
@@ -61,7 +74,78 @@ export class AccessAdminService {
       throw new Error("A claim code is required for claim-code verification.");
     }
 
-    return this.repository.createPreauthorization(normalized);
+    const result = await this.repository.createPreauthorization(normalized);
+    return {
+      ...result.record,
+      created: result.created,
+    };
+  }
+
+  async bulkPreauthorize(input: BulkPreauthorizeInput) {
+    const imported =
+      input.mode === "csv"
+        ? parsePreauthorizationCsv(input.content)
+        : parsePreauthorizationPaste(input.content);
+
+    const created: Array<{
+      id: string;
+      email?: string | null;
+      phone?: string | null;
+      claimCode?: string;
+    }> = [];
+    let skippedDuplicates = 0;
+    const errors = [...imported.errors];
+
+    for (let index = 0; index < imported.rows.length; index += 1) {
+      const row = imported.rows[index];
+      const claimCode =
+        input.claimStrategy === "claim-code"
+          ? generateAccessCode({
+              prefix: this.options.claimCodePrefix ?? "CLAIM",
+              randomBytes: 12,
+            })
+          : undefined;
+
+      try {
+        const result = await this.preauthorize({
+          email: row.email,
+          phone: row.phone,
+          nameHint: row.name,
+          courseId: row.courseId ?? input.courseId,
+          claimStrategy: input.claimStrategy,
+          claimCode,
+          source: input.source ?? (input.mode === "csv" ? "csv-import" : "bulk-paste"),
+        });
+
+        if (!result.created) {
+          skippedDuplicates += 1;
+          continue;
+        }
+
+        created.push({
+          id: result.id,
+          email: result.email,
+          phone: result.phone,
+          ...(claimCode ? { claimCode } : {}),
+        });
+      } catch (error) {
+        errors.push({
+          line: index + 1,
+          code: "INVALID_IDENTITY",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Could not authorize this row.",
+        });
+      }
+    }
+
+    return {
+      createdCount: created.length,
+      skippedDuplicates,
+      created,
+      errors,
+    };
   }
 
   async resetStudentAccessCode(studentId: string) {
