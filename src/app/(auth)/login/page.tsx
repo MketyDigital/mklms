@@ -10,6 +10,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
+export const dynamic = "force-dynamic";
+
 export default async function LoginPage() {
   const settings = await new PostgresSettingsRepository().getPlatformSettings();
 
@@ -20,11 +22,8 @@ export default async function LoginPage() {
           <Link href="/" className="text-2xl font-semibold tracking-tight">
             {settings.productName}
           </Link>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {settings.organizationName}
-          </p>
+          <p className="mt-2 text-sm text-muted-foreground">{settings.organizationName}</p>
         </div>
-
         <Card className="mt-8">
           <CardHeader>
             <CardTitle>Student access</CardTitle>
@@ -32,16 +31,10 @@ export default async function LoginPage() {
               Returning paid students can enter the private access code issued when their course access was first claimed.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <AccessCodeForm />
-          </CardContent>
+          <CardContent><AccessCodeForm /></CardContent>
         </Card>
-
         <p className="mt-6 text-center text-sm text-muted-foreground">
-          First time here?{" "}
-          <Link href="/onboarding" className="font-medium text-foreground hover:underline">
-            Claim approved access
-          </Link>
+          First time here?{" "}<Link href="/onboarding" className="font-medium text-foreground hover:underline">Claim approved access</Link>
         </p>
       </div>
     </div>
