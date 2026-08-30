@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 
 import { getPostgresPool } from "@/lib/postgres";
+import type { CertificateDeliveryRepository } from "../services/certificate-delivery.service";
 import type {
   CertificateEnrollmentRecord,
   CertificateIssuanceRepository,
@@ -10,7 +11,9 @@ import type {
   LockedCertificateIdentity,
 } from "../services/certificate-issuance.service";
 
-export class PostgresCertificateRepository implements CertificateIssuanceRepository {
+export class PostgresCertificateRepository
+  implements CertificateIssuanceRepository, CertificateDeliveryRepository
+{
   private readonly pool: Pool;
 
   constructor(pool: Pool = getPostgresPool()) {
@@ -138,6 +141,35 @@ export class PostgresCertificateRepository implements CertificateIssuanceReposit
     );
 
     return this.mapCertificate(result.rows[0]);
+  }
+
+  async setPdfAsset(certificateId: string, assetId: string): Promise<void> {
+    await this.pool.query(
+      `UPDATE certificates
+       SET pdf_asset_id = $2, updated_at = NOW()
+       WHERE id = $1`,
+      [certificateId, assetId],
+    );
+  }
+
+  async markEmailSent(certificateId: string, sentAt: Date): Promise<void> {
+    await this.pool.query(
+      `UPDATE certificates
+       SET email_delivery_status = 'SENT', emailed_at = $2,
+           email_last_error = NULL, updated_at = NOW()
+       WHERE id = $1`,
+      [certificateId, sentAt],
+    );
+  }
+
+  async markEmailFailed(certificateId: string, error: string): Promise<void> {
+    await this.pool.query(
+      `UPDATE certificates
+       SET email_delivery_status = 'FAILED', email_last_error = $2,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [certificateId, error.slice(0, 4000)],
+    );
   }
 
   private mapCertificate(row: {
