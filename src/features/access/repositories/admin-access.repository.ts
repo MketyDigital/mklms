@@ -14,6 +14,11 @@ export interface CreatePreauthorizationInput {
   externalReference?: string | null;
 }
 
+export interface CreatePreauthorizationResult {
+  record: PreauthorizationRecord;
+  created: boolean;
+}
+
 export interface AdminStudentSummary {
   id: string;
   displayName: string;
@@ -26,7 +31,7 @@ export interface AdminStudentSummary {
 export interface AdminAccessRepository {
   createPreauthorization(
     input: CreatePreauthorizationInput,
-  ): Promise<PreauthorizationRecord>;
+  ): Promise<CreatePreauthorizationResult>;
   listPreauthorizations(limit?: number): Promise<PreauthorizationRecord[]>;
   listStudents(limit?: number): Promise<AdminStudentSummary[]>;
   replaceAccessCredential(
