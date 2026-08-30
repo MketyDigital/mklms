@@ -1,3 +1,4 @@
+import { normalizeSafeExternalUrl } from "@/lib/security/external-url.ts";
 import type { ViewerDisplayMode } from "../domain/live-session.ts";
 import {
   parseLiveChatCsv,
@@ -97,7 +98,7 @@ export class AdminLiveClassService {
       expectedViewerBaseline,
       viewerDisplayMode: input.viewerDisplayMode ?? "CONFIGURED_BASELINE",
       endedMessage: optionalText(input.endedMessage),
-      endedRedirectUrl: optionalText(input.endedRedirectUrl),
+      endedRedirectUrl: normalizeSafeExternalUrl(input.endedRedirectUrl),
       notificationDestination: optionalText(input.notificationDestination),
     });
   }
@@ -146,11 +147,11 @@ export class AdminLiveClassService {
       mediaAssetId: optionalText(input.mediaAssetId),
       status: input.status ?? "DRAFT",
       ctaText: optionalText(input.ctaText),
-      ctaUrl: optionalText(input.ctaUrl),
+      ctaUrl: normalizeSafeExternalUrl(input.ctaUrl),
       ctaRevealOffsetSeconds:
         ctaRevealOffsetSeconds === null ? null : Math.floor(ctaRevealOffsetSeconds),
       endedMessage: optionalText(input.endedMessage),
-      endedRedirectUrl: optionalText(input.endedRedirectUrl),
+      endedRedirectUrl: normalizeSafeExternalUrl(input.endedRedirectUrl),
     });
   }
 
