@@ -5,27 +5,34 @@ import { LearningProgressService } from '../src/features/courses/services/learni
 
 const structure = {
   id: 'course-1',
+  slug: 'course-one',
+  title: 'Course One',
+  status: 'PUBLISHED',
+  position: 1,
   modules: [
     {
       id: 'module-1',
+      courseId: 'course-1',
+      title: 'Module One',
       position: 1,
       lessons: [
-        { id: 'lesson-1', position: 1 },
-        { id: 'lesson-2', position: 2 },
+        { id: 'lesson-1', moduleId: 'module-1', title: 'Lesson 1', position: 1, status: 'PUBLISHED', completionMode: 'MANUAL', completionThresholdPercent: 100 },
+        { id: 'lesson-2', moduleId: 'module-1', title: 'Lesson 2', position: 2, status: 'PUBLISHED', completionMode: 'MANUAL', completionThresholdPercent: 100 },
       ],
     },
   ],
 };
 
 class InMemoryLearningRepository {
-  constructor({ enrollmentStatus = 'ACTIVE', completed = [] } = {}) {
+  constructor({ enrollmentStatus = 'ACTIVE', completed = [], course = structure } = {}) {
     this.enrollment = { studentId: 'student-1', courseId: 'course-1', status: enrollmentStatus };
     this.completed = new Set(completed);
     this.completedEnrollment = false;
+    this.course = course;
   }
 
   async getCourseStructure(courseId) {
-    return courseId === 'course-1' ? structure : null;
+    return courseId === 'course-1' ? this.course : null;
   }
 
   async getEnrollment(studentId, courseId) {
@@ -96,4 +103,29 @@ test('missing or inactive enrollment cannot complete lessons', async () => {
 
   const result = await service.completeLesson('student-1', 'course-1', 'lesson-1');
   assert.deepEqual(result, { ok: false, reason: 'ENROLLMENT_INACTIVE' });
+});
+
+test('draft lessons are not completable and do not block published lessons', async () => {
+  const course = {
+    ...structure,
+    modules: [{
+      ...structure.modules[0],
+      lessons: [
+        structure.modules[0].lessons[0],
+        { ...structure.modules[0].lessons[1], status: 'DRAFT' },
+        { id: 'lesson-3', moduleId: 'module-1', title: 'Lesson 3', position: 3, status: 'PUBLISHED', completionMode: 'MANUAL', completionThresholdPercent: 100 },
+      ],
+    }],
+  };
+  const repo = new InMemoryLearningRepository({ completed: ['lesson-1'], course });
+  const service = new LearningProgressService(repo);
+
+  assert.deepEqual(
+    await service.completeLesson('student-1', 'course-1', 'lesson-2'),
+    { ok: false, reason: 'LESSON_LOCKED' },
+  );
+  assert.deepEqual(
+    await service.completeLesson('student-1', 'course-1', 'lesson-3'),
+    { ok: true, progressPercent: 100, courseCompleted: true, nextLessonId: null },
+  );
 });
