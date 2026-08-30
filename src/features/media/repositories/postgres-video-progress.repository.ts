@@ -95,4 +95,31 @@ export class PostgresVideoProgressRepository
       ],
     );
   }
+
+  async recordCreditedWatch(
+    grantId: string,
+    studentId: string,
+    courseId: string,
+    lessonId: string,
+    creditedSeconds: number,
+  ): Promise<void> {
+    await this.mediaPool.query(
+      `INSERT INTO media_watch_credits (
+         grant_id, student_id, course_id, lesson_id,
+         credited_seconds, first_credited_at, last_credited_at
+       )
+       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+       ON CONFLICT (grant_id)
+       DO UPDATE SET
+         credited_seconds = GREATEST(media_watch_credits.credited_seconds, EXCLUDED.credited_seconds),
+         last_credited_at = NOW()`,
+      [
+        grantId,
+        studentId,
+        courseId,
+        lessonId,
+        Math.max(0, Math.floor(creditedSeconds)),
+      ],
+    );
+  }
 }
