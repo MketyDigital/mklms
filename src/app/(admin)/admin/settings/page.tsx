@@ -80,7 +80,7 @@ export default async function AdminSettingsPage() {
         </div>
 
         <div className="mt-8">
-          <SettingsForm initialSettings={settings} />
+          <SettingsForm settings={settings} />
         </div>
 
         <div className="mt-6 rounded-xl border p-5 text-sm text-muted-foreground">
