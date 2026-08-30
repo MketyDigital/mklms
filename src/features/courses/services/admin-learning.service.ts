@@ -4,6 +4,7 @@ import type {
   CourseStatus,
   LessonCompletionMode,
   LessonRecord,
+  LessonStatus,
 } from "../domain/model";
 
 export interface CreateCourseAdminInput {
@@ -42,6 +43,7 @@ export interface AdminLearningRepository {
     input: Omit<LessonRecord, "id" | "moduleId" | "position" | "status">,
   ): Promise<LessonRecord>;
   setCourseStatus(courseId: string, status: CourseStatus): Promise<void>;
+  setLessonStatus(lessonId: string, status: LessonStatus): Promise<void>;
 }
 
 function slugify(value: string): string {
@@ -114,5 +116,9 @@ export class AdminLearningService {
 
   setCourseStatus(courseId: string, status: CourseStatus): Promise<void> {
     return this.repository.setCourseStatus(courseId, status);
+  }
+
+  setLessonStatus(lessonId: string, status: LessonStatus): Promise<void> {
+    return this.repository.setLessonStatus(lessonId, status);
   }
 }
