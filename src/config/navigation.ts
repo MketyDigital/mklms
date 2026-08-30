@@ -36,6 +36,7 @@ export const adminNav: NavItem[] = [
   { label: "Access & Enrollments", href: ROUTES.adminAccess, icon: KeyRound },
   { label: "Students", href: ROUTES.adminMembers, icon: Users },
   { label: "Manage Courses", href: ROUTES.adminCourses, icon: FolderOpen },
+  { label: "Certificates", href: ROUTES.adminCertificates, icon: Award },
   { label: "Questions", href: ROUTES.adminQuestions, icon: HelpCircle },
   { label: "All Messages", href: ROUTES.adminMessages, icon: Inbox },
   { label: "Settings", href: ROUTES.adminSettings, icon: Settings },
