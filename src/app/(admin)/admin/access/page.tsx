@@ -3,6 +3,8 @@ import { AdminAccessPanel } from "@/features/access/components/admin/admin-acces
 import { PostgresAdminAccessRepository } from "@/features/access/repositories/postgres-admin-access.repository";
 import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminAccessPage() {
   const accessRepository = new PostgresAdminAccessRepository();
   const settingsRepository = new PostgresSettingsRepository();
@@ -16,7 +18,7 @@ export default async function AdminAccessPage() {
     <AppLayout
       user={{
         name: settings.supportName ?? settings.organizationName,
-        email: settings.supportEmail ?? undefined,
+        email: settings.supportEmail ?? "",
         avatar: undefined,
       }}
       isAdmin={true}
