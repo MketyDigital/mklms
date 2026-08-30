@@ -189,6 +189,42 @@ export class PostgresLearningRepository
     );
   }
 
+  async saveLessonProgress(
+    studentId: string,
+    courseId: string,
+    lessonId: string,
+    progressPercent: number,
+    lastPositionSeconds: number,
+    completed: boolean,
+  ): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO lesson_progress (
+         id, student_id, course_id, lesson_id, progress_percent,
+         last_position_seconds, completed_at, updated_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $7 THEN NOW() ELSE NULL END, NOW())
+       ON CONFLICT (student_id, lesson_id)
+       DO UPDATE SET
+         progress_percent = GREATEST(lesson_progress.progress_percent, EXCLUDED.progress_percent),
+         last_position_seconds = GREATEST(lesson_progress.last_position_seconds, EXCLUDED.last_position_seconds),
+         completed_at = CASE
+           WHEN lesson_progress.completed_at IS NOT NULL THEN lesson_progress.completed_at
+           WHEN $7 THEN NOW()
+           ELSE NULL
+         END,
+         updated_at = NOW()`,
+      [
+        randomUUID(),
+        studentId,
+        courseId,
+        lessonId,
+        progressPercent,
+        lastPositionSeconds,
+        completed,
+      ],
+    );
+  }
+
   async markEnrollmentCompleted(
     studentId: string,
     courseId: string,
