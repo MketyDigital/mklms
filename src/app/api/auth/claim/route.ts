@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { verifyClaimCode } from "@/features/access/domain/claim-code";
 import { getAccessRuntime } from "@/features/access/server/runtime";
 
 const claimSchema = z
@@ -9,6 +10,7 @@ const claimSchema = z
     phone: z.string().trim().max(40).optional().or(z.literal("")),
     certificateName: z.string().trim().min(2).max(160),
     certificateEmail: z.string().trim().email().optional().or(z.literal("")),
+    claimCode: z.string().trim().max(160).optional().or(z.literal("")),
   })
   .refine((value) => Boolean(value.email || value.phone), {
     message: "Email or phone is required.",
@@ -42,7 +44,24 @@ export async function POST(request: Request) {
   const strategy =
     preauthorization.claimStrategy || settings.claimVerificationStrategy;
 
-  if (strategy !== "preauth-only") {
+  let verified = strategy === "preauth-only";
+
+  if (strategy === "claim-code") {
+    verified = Boolean(
+      parsed.data.claimCode &&
+        preauthorization.claimCodeHash &&
+        verifyClaimCode(parsed.data.claimCode, preauthorization.claimCodeHash),
+    );
+
+    if (!verified) {
+      return NextResponse.json(
+        { ok: false, message: NEUTRAL_CLAIM_FAILURE },
+        { status: 401 },
+      );
+    }
+  }
+
+  if (!verified) {
     return NextResponse.json(
       {
         ok: false,
