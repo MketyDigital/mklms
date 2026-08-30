@@ -1,3 +1,5 @@
+import type { ClaimVerificationStrategy } from "./domain/claim-verification";
+
 export type PreauthorizationStatus =
   | "PREAUTHORIZED"
   | "CLAIMED"
@@ -13,6 +15,8 @@ export interface PreauthorizationRecord {
   nameHint?: string | null;
   courseId?: string | null;
   status: PreauthorizationStatus;
+  claimStrategy?: ClaimVerificationStrategy | null;
+  claimCodeHash?: string | null;
 }
 
 export interface ClaimIdentityInput {
