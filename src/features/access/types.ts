@@ -17,6 +17,8 @@ export interface PreauthorizationRecord {
   status: PreauthorizationStatus;
   claimStrategy?: ClaimVerificationStrategy | null;
   claimCodeHash?: string | null;
+  claimRequestedAt?: Date | null;
+  manualApprovedAt?: Date | null;
 }
 
 export interface ClaimIdentityInput {
