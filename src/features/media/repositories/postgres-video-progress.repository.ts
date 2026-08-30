@@ -53,9 +53,9 @@ export class PostgresVideoProgressRepository
       studentId: row.student_id,
       courseId: row.course_id,
       lessonId: row.lesson_id,
-      startedAt: row.started_at,
-      expiresAt: row.expires_at,
-      revokedAt: row.revoked_at,
+      startedAt: new Date(row.started_at),
+      expiresAt: new Date(row.expires_at),
+      revokedAt: row.revoked_at ? new Date(row.revoked_at) : null,
     };
   }
 
@@ -65,6 +65,7 @@ export class PostgresVideoProgressRepository
     lessonId: string,
     progressPercent: number,
     lastPositionSeconds: number,
+    lessonCompleted: boolean,
   ): Promise<void> {
     await this.mediaPool.query(
       `INSERT INTO lesson_progress (
@@ -74,21 +75,14 @@ export class PostgresVideoProgressRepository
        )
        VALUES (
          $1, $2, $3, $4, $5, $6,
-         CASE WHEN $5 >= (
-           SELECT completion_threshold_percent FROM lessons WHERE id = $4
-         ) THEN NOW() ELSE NULL END,
+         CASE WHEN $7::boolean THEN NOW() ELSE NULL END,
          NOW(), NOW()
        )
        ON CONFLICT (student_id, lesson_id)
        DO UPDATE SET
          progress_percent = GREATEST(lesson_progress.progress_percent, EXCLUDED.progress_percent),
          last_position_seconds = GREATEST(lesson_progress.last_position_seconds, EXCLUDED.last_position_seconds),
-         completed_at = COALESCE(
-           lesson_progress.completed_at,
-           CASE WHEN EXCLUDED.progress_percent >= (
-             SELECT completion_threshold_percent FROM lessons WHERE id = $4
-           ) THEN NOW() ELSE NULL END
-         ),
+         completed_at = COALESCE(lesson_progress.completed_at, EXCLUDED.completed_at),
          updated_at = NOW()`,
       [
         randomUUID(),
@@ -97,6 +91,7 @@ export class PostgresVideoProgressRepository
         lessonId,
         progressPercent,
         lastPositionSeconds,
+        lessonCompleted,
       ],
     );
   }
