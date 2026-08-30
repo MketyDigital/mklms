@@ -8,32 +8,23 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn, getInitials } from "@/lib/utils";
 import type { Thread, Message } from "@/types";
 
-export function AdminMessagePanel({
+function ThreadList({
   threads,
-  threadMessages,
+  selectedThread,
+  onSelect,
+  className,
 }: {
   threads: Thread[];
-  threadMessages: Record<string, Message[]>;
+  selectedThread: string | null;
+  onSelect: (threadId: string) => void;
+  className?: string;
 }) {
-  const [selectedThread, setSelectedThread] = useState<string | null>(
-    threads[0]?.id ?? null
-  );
-  const [reply, setReply] = useState("");
-
-  const messages = selectedThread ? threadMessages[selectedThread] ?? [] : [];
-  const selectedThreadData = threads.find((t) => t.id === selectedThread);
-
-  function handleSend() {
-    if (!reply.trim()) return;
-    setReply("");
-  }
-
-  const ThreadList = ({ className }: { className?: string }) => (
+  return (
     <div className={className}>
       {threads.map((thread) => (
         <button
           key={thread.id}
-          onClick={() => setSelectedThread(thread.id)}
+          onClick={() => onSelect(thread.id)}
           className={cn(
             "flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-accent",
             selectedThread === thread.id && "bg-accent"
@@ -67,10 +58,30 @@ export function AdminMessagePanel({
       ))}
     </div>
   );
+}
+
+export function AdminMessagePanel({
+  threads,
+  threadMessages,
+}: {
+  threads: Thread[];
+  threadMessages: Record<string, Message[]>;
+}) {
+  const [selectedThread, setSelectedThread] = useState<string | null>(
+    threads[0]?.id ?? null
+  );
+  const [reply, setReply] = useState("");
+
+  const messages = selectedThread ? threadMessages[selectedThread] ?? [] : [];
+  const selectedThreadData = threads.find((t) => t.id === selectedThread);
+
+  function handleSend() {
+    if (!reply.trim()) return;
+    setReply("");
+  }
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] lg:h-dvh">
-      {/* Thread list — desktop */}
       <div className="w-72 shrink-0 border-r overflow-y-auto hidden sm:block">
         <div className="px-4 py-3 border-b">
           <h1 className="text-base font-semibold tracking-tight">Messages</h1>
@@ -79,11 +90,14 @@ export function AdminMessagePanel({
           </p>
         </div>
         <div className="py-1">
-          <ThreadList />
+          <ThreadList
+            threads={threads}
+            selectedThread={selectedThread}
+            onSelect={setSelectedThread}
+          />
         </div>
       </div>
 
-      {/* Thread list — mobile (when no thread selected) */}
       {!selectedThread && (
         <div className="flex-1 sm:hidden overflow-y-auto">
           <div className="px-4 py-3 border-b">
@@ -92,15 +106,17 @@ export function AdminMessagePanel({
             </h1>
           </div>
           <div className="py-1">
-            <ThreadList />
+            <ThreadList
+              threads={threads}
+              selectedThread={selectedThread}
+              onSelect={setSelectedThread}
+            />
           </div>
         </div>
       )}
 
-      {/* Chat area */}
       {selectedThread ? (
         <div className="flex flex-1 flex-col">
-          {/* Chat header */}
           <div className="flex items-center gap-3 border-b px-4 py-3">
             <Button
               variant="ghost"
@@ -122,7 +138,6 @@ export function AdminMessagePanel({
             </p>
           </div>
 
-          {/* Messages */}
           <div className="flex-1 overflow-y-auto px-4 py-6">
             <div className="mx-auto max-w-2xl space-y-4">
               {messages.map((message) => {
@@ -168,7 +183,6 @@ export function AdminMessagePanel({
             </div>
           </div>
 
-          {/* Reply input */}
           <div className="border-t px-4 py-3">
             <div className="mx-auto flex max-w-2xl gap-2">
               <Textarea
