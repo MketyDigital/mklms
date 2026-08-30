@@ -70,8 +70,19 @@ CREATE INDEX IF NOT EXISTS lesson_progress_student_course_idx
 ALTER TABLE enrollments
   ADD COLUMN IF NOT EXISTS progress_percent INTEGER NOT NULL DEFAULT 0;
 
-ALTER TABLE enrollments
-  ADD CONSTRAINT enrollments_progress_percent_check
-  CHECK (progress_percent BETWEEN 0 AND 100) NOT VALID;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'enrollments_progress_percent_check'
+      AND conrelid = 'enrollments'::regclass
+  ) THEN
+    ALTER TABLE enrollments
+      ADD CONSTRAINT enrollments_progress_percent_check
+      CHECK (progress_percent BETWEEN 0 AND 100) NOT VALID;
+  END IF;
+END
+$$;
 
 COMMIT;
