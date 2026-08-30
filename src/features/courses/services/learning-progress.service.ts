@@ -39,7 +39,11 @@ export type CompleteLessonResult =
     }
   | {
       ok: false;
-      reason: "ENROLLMENT_INACTIVE" | "COURSE_NOT_FOUND" | "LESSON_LOCKED";
+      reason:
+        | "ENROLLMENT_INACTIVE"
+        | "COURSE_NOT_FOUND"
+        | "LESSON_LOCKED"
+        | "COMPLETION_NOT_ALLOWED";
     };
 
 export class LearningProgressService {
@@ -71,6 +75,14 @@ export class LearningProgressService {
 
     if (!canAccessLesson(course, lessonId, completedBefore, enrollment)) {
       return { ok: false, reason: "LESSON_LOCKED" };
+    }
+
+    const lesson = course.modules
+      .flatMap((module) => module.lessons)
+      .find((item) => item.id === lessonId);
+
+    if (!lesson || lesson.completionMode !== "MANUAL") {
+      return { ok: false, reason: "COMPLETION_NOT_ALLOWED" };
     }
 
     await this.repository.saveLessonCompletion(studentId, courseId, lessonId);
