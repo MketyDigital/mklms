@@ -105,22 +105,18 @@ export function LiveClassRoom({ slug, organizationName }: { slug: string; organi
   const roomSessionId = roomState?.session?.id ?? null;
 
   useEffect(() => {
-    if (roomState?.state !== "LIVE" || !roomSessionId) {
-      playbackRef.current = null;
-      setPlayback(null);
-      return;
-    }
+    if (roomState?.state !== "LIVE" || !roomSessionId) return;
     if (playbackRef.current?.sessionId === roomSessionId) return;
     const timer = window.setTimeout(() => { void requestPlayback().catch((caught) => setError(caught instanceof Error ? caught.message : "Live playback unavailable.")); }, 0);
     return () => window.clearTimeout(timer);
   }, [requestPlayback, roomSessionId, roomState?.state]);
 
   useEffect(() => {
-    if (!playback?.authorization.expiresAt) return;
+    if (!playback?.authorization.expiresAt || roomState?.state !== "LIVE") return;
     const refreshIn = Math.max(5_000, new Date(playback.authorization.expiresAt).getTime() - Date.now() - 30_000);
     const timer = window.setTimeout(() => { void requestPlayback().catch(() => undefined); }, refreshIn);
     return () => window.clearTimeout(timer);
-  }, [playback?.authorization.expiresAt, requestPlayback]);
+  }, [playback?.authorization.expiresAt, requestPlayback, roomState?.state]);
 
   const expectedPosition = useCallback(() => {
     const currentState = roomStateRef.current;
@@ -135,7 +131,7 @@ export function LiveClassRoom({ slug, organizationName }: { slug: string; organi
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !playback || playback.authorization.playbackType === "EMBED") return;
+    if (!video || !playback || roomState?.state !== "LIVE" || playback.authorization.playbackType === "EMBED") return;
     let destroyed = false;
     let destroyHls: (() => void) | undefined;
     const positionAtLiveEdge = () => {
@@ -167,7 +163,7 @@ export function LiveClassRoom({ slug, organizationName }: { slug: string; organi
     }
 
     return () => { destroyed = true; destroyHls?.(); };
-  }, [expectedPosition, playback]);
+  }, [expectedPosition, playback, roomState?.state]);
 
   useEffect(() => {
     const redirectUrl = roomState?.ended?.redirectUrl;
