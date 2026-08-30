@@ -47,12 +47,11 @@ export async function GET(
     stagedMessages,
   });
 
-  const ctaVisible = session
-    ? isLiveCtaVisible(
-        state.state,
-        state.liveOffsetSeconds,
-        session.ctaRevealOffsetSeconds,
-      )
+  const ctaVisible = session && state.state === "LIVE"
+    ? isLiveCtaVisible({
+        liveOffsetSeconds: state.liveOffsetSeconds ?? 0,
+        revealOffsetSeconds: session.ctaRevealOffsetSeconds,
+      })
     : false;
 
   return NextResponse.json({
