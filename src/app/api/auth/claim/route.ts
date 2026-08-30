@@ -61,6 +61,24 @@ export async function POST(request: Request) {
     }
   }
 
+  if (strategy === "manual-approval") {
+    if (preauthorization.manualApprovedAt) {
+      verified = true;
+    } else {
+      await repository.markPreauthorizationClaimRequested(preauthorization.id);
+      return NextResponse.json(
+        {
+          ok: false,
+          verificationRequired: true,
+          strategy,
+          message:
+            "Your access request has been sent to the administrator for approval. Once approved, submit this same form again to receive your access code.",
+        },
+        { status: 409 },
+      );
+    }
+  }
+
   if (!verified) {
     return NextResponse.json(
       {
@@ -68,9 +86,7 @@ export async function POST(request: Request) {
         verificationRequired: true,
         strategy,
         message:
-          strategy === "manual-approval"
-            ? "Your access request requires administrator approval."
-            : "Additional verification is required before access can be issued.",
+          "Additional verification is required before access can be issued.",
       },
       { status: 409 },
     );
