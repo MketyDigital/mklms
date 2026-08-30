@@ -35,7 +35,7 @@ export async function GET(
     const storage = getConfiguredStorageProvider();
     if (!storage.createReadAuthorization) {
       return NextResponse.json(
-        { ok: false, message: "Private certificate downloads are not configured." },
+        { ok: false, message: "Certificate download is unavailable." },
         { status: 503 },
       );
     }
@@ -45,13 +45,9 @@ export async function GET(
       { ttlSeconds: 120 },
     );
     return NextResponse.redirect(authorization.url, { status: 307 });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      {
-        ok: false,
-        message:
-          error instanceof Error ? error.message : "Certificate download is unavailable.",
-      },
+      { ok: false, message: "Certificate download is unavailable." },
       { status: 503 },
     );
   }
