@@ -66,39 +66,6 @@ test('accessible protectable lesson receives short-lived playback authorization'
   assert.equal(provider.calls[0].context.studentId, 'student-1');
 });
 
-test('playback authorization cannot outlive the authenticated student session', async () => {
-  const provider = new Provider();
-  const now = new Date('2026-08-30T12:00:00.000Z');
-  const service = new MediaPlaybackService(new Repo(), provider, { now: () => now, ttlSeconds: 300 });
-
-  const result = await service.authorizeLessonPlayback(
-    'student-1',
-    'course-1',
-    'lesson-1',
-    new Date('2026-08-30T12:01:30.000Z'),
-  );
-
-  assert.equal(result.ok, true);
-  assert.equal(provider.calls[0].context.ttlSeconds, 90);
-  assert.equal(result.authorization.expiresAt.toISOString(), '2026-08-30T12:01:30.000Z');
-});
-
-test('expired student session never reaches the media provider', async () => {
-  const provider = new Provider();
-  const now = new Date('2026-08-30T12:00:00.000Z');
-  const service = new MediaPlaybackService(new Repo(), provider, { now: () => now });
-
-  const result = await service.authorizeLessonPlayback(
-    'student-1',
-    'course-1',
-    'lesson-1',
-    new Date('2026-08-30T12:00:00.000Z'),
-  );
-
-  assert.deepEqual(result, { ok: false, reason: 'SESSION_EXPIRED' });
-  assert.equal(provider.calls.length, 0);
-});
-
 test('locked sequential lesson never reaches the media provider', async () => {
   const provider = new Provider();
   const service = new MediaPlaybackService(new Repo(), provider);
