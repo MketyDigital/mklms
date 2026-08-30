@@ -1,10 +1,8 @@
 "use client";
 
 import { useState } from "react";
+
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
   CardContent,
@@ -12,76 +10,140 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import type { SiteSettings } from "../types";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { PlatformSettings } from "../platform-settings";
 
-export function SettingsForm({ settings }: { settings: SiteSettings }) {
+export function SettingsForm({ settings }: { settings: PlatformSettings }) {
+  const [form, setForm] = useState(settings);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  function update<K extends keyof PlatformSettings>(
+    key: K,
+    value: PlatformSettings[K],
+  ) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     setIsSubmitting(true);
-    // TODO: call settingsService.updateSettings(...)
-    setTimeout(() => setIsSubmitting(false), 1000);
+    setMessage(null);
+
+    try {
+      const response = await fetch("/api/admin/settings/platform", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.ok) {
+        setMessage(result.message ?? "Settings could not be saved.");
+        return;
+      }
+      setMessage("Platform settings saved.");
+    } catch {
+      setMessage("The settings service could not be reached.");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
-    <Card className="mt-8">
-      <CardHeader>
-        <CardTitle className="text-base">Live Session</CardTitle>
-        <CardDescription>
-          Set the next live session date and join link.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="session-date">Session date</Label>
-              <Input
-                id="session-date"
-                type="datetime-local"
-                defaultValue={settings.sessionDate}
-              />
-            </div>
+    <form onSubmit={handleSubmit} className="mt-8 space-y-6">
+      {message ? <div className="rounded-lg border bg-muted/40 p-4 text-sm">{message}</div> : null}
 
-            <div className="space-y-2">
-              <Label htmlFor="session-link">Session link</Label>
-              <Input
-                id="session-link"
-                type="url"
-                placeholder="https://meet.google.com/..."
-                defaultValue={settings.sessionLink}
-              />
-            </div>
-          </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Brand & portal identity</CardTitle>
+          <CardDescription>
+            These values make each MkLMS deployment white-label without changing source code.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-5 sm:grid-cols-2">
+          <Field label="Organization name"><Input value={form.organizationName} onChange={(e) => update("organizationName", e.target.value)} /></Field>
+          <Field label="Product/portal name"><Input value={form.productName} onChange={(e) => update("productName", e.target.value)} /></Field>
+          <Field label="Logo URL"><Input type="url" value={form.logoUrl ?? ""} onChange={(e) => update("logoUrl", e.target.value || null)} placeholder="https://..." /></Field>
+          <Field label="Favicon URL"><Input type="url" value={form.faviconUrl ?? ""} onChange={(e) => update("faviconUrl", e.target.value || null)} placeholder="https://..." /></Field>
+          <Field label="Primary color"><Input value={form.primaryColor ?? ""} onChange={(e) => update("primaryColor", e.target.value || null)} placeholder="#000000 or CSS value" /></Field>
+          <Field label="Secondary color"><Input value={form.secondaryColor ?? ""} onChange={(e) => update("secondaryColor", e.target.value || null)} placeholder="#ffffff or CSS value" /></Field>
+          <Field label="Support/admin display name"><Input value={form.supportName ?? ""} onChange={(e) => update("supportName", e.target.value || null)} /></Field>
+          <Field label="Support email"><Input type="email" value={form.supportEmail ?? ""} onChange={(e) => update("supportEmail", e.target.value || null)} /></Field>
+          <Field label="Public portal URL"><Input type="url" value={form.publicBaseUrl} onChange={(e) => update("publicBaseUrl", e.target.value)} /></Field>
+          <Field label="Timezone"><Input value={form.timezone} onChange={(e) => update("timezone", e.target.value)} placeholder="Africa/Lagos" /></Field>
+          <Field label="Locale"><Input value={form.locale} onChange={(e) => update("locale", e.target.value)} placeholder="en" /></Field>
+        </CardContent>
+      </Card>
 
-          <div className="space-y-2">
-            <Label htmlFor="session-title">Session title</Label>
-            <Input
-              id="session-title"
-              placeholder="Live Q&A: Topic Name"
-              defaultValue={settings.sessionTitle}
-            />
-          </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Student access & certificates</CardTitle>
+          <CardDescription>
+            OTP remains optional. Choose the default first-time claim method and credential formats for this deployment.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-5 sm:grid-cols-2">
+          <SelectField label="Access provider" value={form.accessProvider} onChange={(value) => update("accessProvider", value as PlatformSettings["accessProvider"])} options={["access-code", "password", "magic-link", "oidc", "custom"]} />
+          <SelectField label="Default claim verification" value={form.claimVerificationStrategy} onChange={(value) => update("claimVerificationStrategy", value as PlatformSettings["claimVerificationStrategy"])} options={["preauth-only", "claim-code", "manual-approval", "otp-email", "otp-sms", "custom"]} />
+          <Field label="Access code prefix"><Input value={form.accessCodePrefix} onChange={(e) => update("accessCodePrefix", e.target.value.toUpperCase())} /></Field>
+          <Field label="Certificate ID prefix"><Input value={form.certificatePrefix} onChange={(e) => update("certificatePrefix", e.target.value.toUpperCase())} /></Field>
+        </CardContent>
+      </Card>
 
-          <div className="space-y-2">
-            <Label htmlFor="announcement">Announcement</Label>
-            <Textarea
-              id="announcement"
-              placeholder="Write an announcement to show on the member dashboard..."
-              defaultValue={settings.announcement}
-              className="min-h-[80px] resize-none"
-            />
-            <p className="text-xs text-muted-foreground">
-              Leave empty to hide the announcement banner.
-            </p>
-          </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Provider adapters</CardTitle>
+          <CardDescription>
+            Select the deployment&apos;s adapters. Provider secrets remain in environment/secret storage, never in this public configuration row.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-5 sm:grid-cols-2">
+          <SelectField label="Storage" value={form.storageProvider} onChange={(value) => update("storageProvider", value as PlatformSettings["storageProvider"])} options={["r2", "s3", "oci", "supabase", "minio", "custom"]} />
+          <SelectField label="Media" value={form.mediaProvider} onChange={(value) => update("mediaProvider", value as PlatformSettings["mediaProvider"])} options={["generic-hls", "oci-media-flow", "youtube", "external-embed", "custom"]} />
+          <SelectField label="Email" value={form.emailProvider} onChange={(value) => update("emailProvider", value as PlatformSettings["emailProvider"])} options={["none", "smtp", "ses", "resend", "postmark", "sendgrid", "brevo", "custom"]} />
+          <SelectField label="Notifications" value={form.notificationProvider} onChange={(value) => update("notificationProvider", value as PlatformSettings["notificationProvider"])} options={["none", "telegram", "email", "webhook", "custom"]} />
+        </CardContent>
+      </Card>
 
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Saving..." : "Save settings"}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+      <Button type="submit" disabled={isSubmitting}>
+        {isSubmitting ? "Saving settings..." : "Save platform settings"}
+      </Button>
+    </form>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div className="space-y-2"><Label>{label}</Label>{children}</div>;
+}
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger><SelectValue /></SelectTrigger>
+        <SelectContent>
+          {options.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
