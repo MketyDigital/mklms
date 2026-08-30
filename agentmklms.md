@@ -1,367 +1,380 @@
 # MkLMS — Reusable Learning Platform Agent Blueprint
 
-> **Purpose:** Persistent source-of-truth for all AI agents and developers working on `MketyDigital/mklms`.
-> Read this file before changing architecture, product scope, data models, integrations, access rules, media delivery, live-class behavior, or branding.
+> **Purpose:** Persistent source-of-truth for agents and developers working on `MketyDigital/mklms`.
+> Read this before changing architecture, auth, data models, integrations, media delivery, live-class behavior, deployment or branding.
 >
-> **Product:** MkLMS — reusable white-label LMS + scheduled simulated-live class platform.
-> **Architecture branch:** `architecture/mklms-reusable-platform`.
-> **Verified Phase 1 branch:** `feature/mklms-phase-1-foundation-access`.
-> **Verified Phase 2 branch:** `feature/mklms-phase-2-learning-progress`.
-> **Verified Phase 3 branch:** `feature/mklms-phase-3-certificates-media`.
-> **Verified Phase 4 branch:** `feature/mklms-phase-4-live-classes`.
-> **Pre-test Cloudflare/scale branch:** `feature/mklms-pretest-cloudflare-scale`.
-> **Legacy webinar reference:** `mkwebinar` branch — reference behavior only; never merge as-is.
+> **Product:** reusable white-label LMS + scheduled simulated-live class platform.
+> **Current production-test branch:** `fix/mklms-production-audit`.
+> **Legacy webinar reference:** `mkwebinar` — behavior reference only; never merge as-is.
 > **Legacy Mkety production repo:** `MketyDigital/Mkety` — READ/REFERENCE ONLY. Never edit it for MkLMS work.
 
 ---
 
-## 0. Agent Rules — Read First
+## 0. Non-negotiable agent rules
 
-1. **MkLMS is reusable and white-label.** Never hardcode Starpips, Mkety, Foyzul, one course type, certificate prefix, domain, Telegram account, provider, or customer brand into reusable logic.
-2. **Admin configuration controls deployment identity.** Logo, colors, organization/product name, support identity, domain, certificate template/prefix/layout, email sender, access-code rules, live CTAs, Telegram destination, and similar customer-specific values belong in settings.
-3. **Payments and marketing are external.** Core MkLMS does not own registration funnels, checkout, payment gateways, payment webhooks, acquisition CRM, fake-purchase activity, or advertising integrations.
-4. **Paid portal URL may be public, but first-time access is preauthorization-only.** Only an approved paid-student record may successfully claim access.
-5. **Preauthorization must scale.** Support manual add, bulk paste, CSV import, and API/webhook adapters without forcing one-by-one work.
-6. **First-time claim verification is configurable.** OTP is optional. Supported strategies include preauth-only, email OTP, SMS OTP, self-hosted claim code, manual approval, and custom verification.
-7. **Persistent student access code is separate from first-time verification.** Default student authentication uses a persistent access code and a separate short-lived server session.
-8. **Credentials are protected.** Access codes use secure one-way verification material; session tokens are random and stored hashed. Admin can reset/regenerate, suspend, revoke, restore, and remove access.
-9. **Certificate identity is locked at first successful claim.** Certificate name/email is distinct from ordinary editable profile data; later profile edits must not silently rewrite issued certificates.
-10. **Course access is enrollment-based, never payment-provider-based.**
-11. **Course lessons unlock sequentially until completion.** After 100% completion/certificate issuance, the completed student may revisit lessons in any order.
-12. **Only published content affects students.** Draft lessons/courses are hidden and do not block sequential progress.
-13. **Completion modes are explicit.** MANUAL lessons may use manual completion. VIDEO_PROGRESS lessons cannot be completed through the manual endpoint.
-14. **Trusted video progress must not trust browser-reported percentage alone.** It requires a server-issued playback grant and credits no more progress than credible server-side elapsed watch time.
-15. **Certificates are automatic and idempotent at 100% completion.** Snapshot the locked identity, generate a configurable certificate ID, render the admin template, store the PDF privately, attempt configured email delivery, retain admin/student access, and expose public verification.
-16. **Admin certificate controls:** private download, regenerate/redeliver, resend by email, send through internal messages, revoke, restore.
-17. **Certificate templates are white-label and admin-managed.** Existing signed PDF/PNG/JPEG templates are supported; name/date/certificate-ID placement is configurable and may be global or course-specific.
-18. **Internal messaging is core.** Real PostgreSQL student↔admin conversations support general support, certificate context, and future live-class inquiries. Do not revert to the original mock/Foyzul/Rahim message data.
-19. **Live classes/webinars are temporary scheduled experiences, not registration products.** Audience acquisition remains external and owner shares the live link directly.
-20. **A live batch supports 1, 2, or 3 sessions initially.** Keep the model extensible without building a general event-management suite.
-21. **Admin controls each live session:** schedule, media, countdown/waiting content, staged chat, CTA timing/link, expiry message/redirect, viewer display, and notification routing.
-22. **Simulated-live timeline uses server-defined `startsAt`, never viewer registration time.** All attendees resolve to approximately the same live offset: `serverNow - startsAt`.
-23. **Before start:** countdown/waiting and no playback authorization. **During:** LIVE state and playback at current offset. **After:** deny playback and show/redirect to configured destination.
-24. **The active live page must visibly show `LIVE`.** This is a product requirement for the real-live experience; do not show LIVE before/after the active session window.
-25. **Viewer-count display is admin-configurable and never hardcoded.** At minimum support an expected-audience/baseline value set by admin. Architecture should allow modes such as configured baseline, actual-active only, or baseline-plus-active. The public count should remain stable enough to preserve the live-room feel and must not reset randomly on refresh.
-26. **Imported webinar comments are timeline-driven.** Late attendees should see the correct current/recent staged-chat state instead of replaying from minute zero.
-27. **Real attendee comments are private to that attendee and admin.** Attendee sees staged comments plus their own real messages only; never expose other current attendees' real comments.
-28. **Real attendee comments are durably stored before notification.** PostgreSQL/live attendee inbox is the source of truth; optional NotificationProvider dispatch such as Telegram is convenience notification only and must never determine message persistence.
-29. **Webinar CTAs are external links only.** Per-session CTA text, URL, reveal timing, and post-session behavior are configurable; no internal sales/payment funnel is required.
-30. **Media origin URLs must not be permanent/public.** Course and webinar playback use controlled short-lived authorization where the provider supports it.
-31. **Protect the complete playback chain where possible.** For HLS, protection should cover manifests and segments, not only the first `.m3u8` request.
-32. **Private origin is preferred.** Never render permanent object-storage origin references into student/live-page HTML.
-33. **Provider-neutral media architecture is mandatory.** OCI Object Storage → OCI Media Flow → R2 → CDN is one valid deployment path, not a product lock.
-34. **Generic media supports HLS, protected direct files, YouTube/external embeds, and custom providers.**
-35. **Screen capture cannot be made literally impossible.** The enforceable goal is preventing reusable permanent direct URLs/unauthorized playback. Optional personalized watermarking may discourage redistribution.
-36. **PostgreSQL is the relational model, not a vendor.** Supabase, self-hosted, and other managed PostgreSQL deployments remain valid.
-37. **Storage is provider-neutral.** R2, S3, OCI Object Storage, MinIO, Supabase Storage, etc. belong behind StorageProvider adapters.
-38. **Email is provider-neutral and optional.** SMTP, SES, Resend, Postmark, SendGrid, Brevo, custom, or no-email deployments remain possible.
-39. **Authentication/access remains provider-neutral.** Access-code auth is default; password, magic link, OIDC/SSO, enterprise identity, or custom adapters may be substituted.
-40. **Notification integrations are provider-neutral.** Telegram is an adapter, not a hardcoded dependency.
-41. **Do not merge `mkwebinar` into `main`.** Extract its proven simulated-live/player/chat behavior and rebuild it as proper Next.js features inside MkLMS.
-42. **Retain feature/service/provider boundaries.** Domain/UI logic should not scatter provider SDK calls.
-43. **Retire original boilerplate business assumptions.** Bkash/Nagad subscriptions, hardcoded support names, old Questions/Q&A demo surfaces, and fake member data are not reusable-core product features.
-44. **Security responses must avoid customer/enrollment leakage.** Public claim failures use neutral wording.
-45. **Never commit secrets/private customer data.** No credentials, signing keys, SMTP passwords, object-store secrets, webhook secrets, or private media.
-46. **Update this file whenever a major decision or implementation status changes.**
-47. **Every meaningful implementation batch updates the Progress Ledger.** Use PLANNED, IN PROGRESS, IMPLEMENTED, VERIFIED, or DEFERRED accurately.
-48. **Production edge protection is mandatory.** Put the deployed application behind Cloudflare or an equivalent WAF/DDoS/rate-limiting edge. The in-process limiter is defense-in-depth and must not be treated as a globally distributed abuse-control system.
-49. **External admin-configured navigation URLs are HTTP(S)-only.** Reject `javascript:`, `data:`, `file:`, malformed and protocol-relative destinations before storage/use.
-50. **Bound untrusted payloads.** Login credentials, live comments, live-class configuration and staged-chat imports must remain schema-limited so attackers cannot create uncontrolled memory/database/notification work.
-51. **For high-audience webinars, prefer `CONFIGURED_BASELINE`.** In this mode the shared `/api/live/[slug]/state` response contains no viewer identity/private comments, performs no presence heartbeat/count, and is eligible for a short Cloudflare edge cache. `ACTIVE_ONLY` and `BASELINE_PLUS_ACTIVE` remain private/no-store because they intentionally measure presence.
-52. **Do not serve video bytes from PostgreSQL or the Next.js app.** Production HLS/static media belongs on object storage + CDN. Use versioned immutable segment keys, CDN caching, and short-lived edge authorization without destroying the shared cache key.
-53. **High-scale baseline live rooms do not continuously poll state.** The browser advances live offset, staged timeline messages, CTA reveal timing and playback position from the server-clock snapshot. Refresh shared state at session boundaries, when a hidden tab becomes visible, and only on a low-frequency safety interval.
-54. **Attendee-facing private live-comment history is browser-local after submission.** Each comment is persisted once to PostgreSQL for the authoritative admin inbox/notification path, then mirrored into that attendee browser storage (bounded recent history). Shared state must never refetch that attendee's private comments.
-55. **Cloudflare is the primary production runtime/edge target, starting on Workers Free.** Vercel is a compatibility/test deployment. Node/OCI remains a portable fallback. Do not require Cloudflare Pro or other paid Cloudflare products; Workers Paid may be adopted later when usage requires it.
-56. **Runtime compatibility target is Node.js 24.x and Next.js 16.3.3+ security-compatible releases.** CI must verify Node 24, the standard Next.js production build, and the Cloudflare OpenNext bundle before deployment changes are merged.
-57. **Cloudflare Hyperdrive is optional, not a database vendor lock.** MkLMS continues to use PostgreSQL; free Supabase PostgreSQL, self-hosted PostgreSQL, and other compatible deployments may all sit behind the same data layer. Hyperdrive may provide Worker-side connection pooling/caching where useful.
-58. **OCI Media Flow transcoding is not yet implemented as an MkLMS adapter.** The intended production behavior is one-time ingest/transcode per source+encoding profile, persistent immutable HLS output in object storage/CDN, and indefinite reuse by future viewers. Do not claim automatic OCI transcoding is operational until that adapter/job lifecycle is implemented and verified.
+1. MkLMS is reusable and white-label. Never hardcode Starpips, Mkety, Foyzul, one customer, one certificate prefix/domain, one Telegram account or one infrastructure provider into reusable logic.
+2. Payments, marketing and acquisition funnels are external. MkLMS begins at preauthorization/enrollment/access.
+3. Paid student first claim is preauthorization-only. Preauthorization supports manual add, bulk paste, CSV and future API/webhook adapters.
+4. Claim verification is configurable. OTP is optional; supported strategies include preauth-only, claim code, manual approval, email/SMS OTP and custom adapters.
+5. Persistent student access code is separate from first-time verification. Access codes and session credentials use secure one-way verification material; sessions are separate random server sessions.
+6. **The real browser student endpoints are `/api/access/claim` and `/api/access/login`.** `/api/auth/*` is obsolete and must not be reintroduced.
+7. Admin testing auth remains the built-in `MKLMS_ADMIN_ACCESS_KEY` + signed `MKLMS_ADMIN_SESSION_SECRET` session unless a deployment intentionally swaps the auth adapter.
+8. Certificate identity is locked at successful claim and is separate from ordinary profile edits.
+9. Course access is enrollment-based. Course → Module → Lesson publishing and sequential unlocking remain the learning model.
+10. Draft content is invisible to students and does not block progress.
+11. MANUAL lessons may be manually completed. VIDEO_PROGRESS lessons require trusted playback progress and cannot use the manual completion endpoint.
+12. Trusted video progress requires a server-issued playback grant and cannot credit more progress than credible server elapsed watch time.
+13. Certificates are automatic/idempotent at 100% completion and support private storage, optional email, internal-message delivery and public verification.
+14. Internal messaging is core and PostgreSQL-backed. Student `/messages` and admin `/admin/messages` must remain real runtime surfaces; do not restore mock message data. Student send is rate-limited as defense in depth.
+15. Live classes are scheduled temporary experiences, not registration/payment products. A batch supports 1–3 sessions initially.
+16. Server `startsAt` defines the simulated-live timeline. Never use viewer registration time as broadcast time.
+17. Before a session: countdown and no LIVE badge. During: visible **LIVE**, current server-clock offset, viewer display, staged timeline/chat and attendee input. After: no LIVE and configured ended behavior.
+18. Viewer count is admin-configurable: `CONFIGURED_BASELINE`, `ACTIVE_ONLY` or `BASELINE_PLUS_ACTIVE`. For high audience, prefer `CONFIGURED_BASELINE`.
+19. Imported webinar comments are timeline-driven. Admin chat import accepts offset CSV and timestamped/Zoom-style text. Offsets are relative to the session/video start.
+20. Real attendee comments are private to that attendee and admin. Other attendees' real comments are never exposed.
+21. Real attendee comments are persisted to PostgreSQL before optional notification. Telegram is convenience notification only and must never determine whether the message is saved.
+22. Attendee-facing own-comment history is mirrored to bounded browser `localStorage`; shared live state must not repeatedly fetch it from PostgreSQL.
+23. High-scale baseline live rooms do not poll every 10 seconds. Shared state is viewer-neutral/cacheable; browser advances deterministic live offset, staged chat and CTA timing locally and resynchronizes at boundaries/visibility plus a low-frequency safety refresh.
+24. **No-media live test mode is supported.** An ACTIVE batch with a PUBLISHED active session and no media may show the full LIVE room with viewer count, staged chat, attendee comment UI and CTA timing. The player area clearly says test mode. This must not require media-signing configuration.
+25. If a media asset ID is configured but missing/not READY, playback fails closed. No-media test mode must never weaken real-media authorization.
+26. Admin `/admin/live-classes` exposes a quick 15-minute test-now action and a prominent per-session **Chat Sync / Import** workflow.
+27. Private media origin URLs must not be permanent/public. Course/live playback uses short-lived authorization where supported; HLS protection should cover manifests/segments where the delivery provider supports it.
+28. Do not stream large video bytes through PostgreSQL, Next.js or Workers. Media belongs on object storage + CDN.
+29. Provider-neutral media is mandatory. OCI Object Storage → OCI Media Flow → R2 → CDN is one deployment path, not a product lock.
+30. Automatic OCI Media Flow transcoding is **not yet implemented**. The intended future pipeline is one-time source/profile transcode → permanent immutable HLS in R2/object storage → indefinite reuse. Never claim that automated pipeline is operational until implemented and verified.
+31. PostgreSQL is the relational model, not a vendor. Supabase, self-hosted PostgreSQL and compatible managed PostgreSQL remain valid.
+32. Storage, email, auth, notification and media integrations remain behind adapters. R2/S3, SMTP/custom email, Telegram/custom notifications and alternative identity providers must not rewrite domain logic.
+33. Public/admin-configured external URLs are HTTP(S)-only. Reject javascript/data/file/malformed destinations.
+34. All protected admin/student APIs re-check server sessions. SQL remains parameterized. Untrusted inputs remain bounded and sensitive endpoints remain rate-limited.
+35. Cloudflare is the primary production edge/runtime target starting on Workers Free. Vercel is a compatibility/test target. Node/OCI remains portable fallback.
+36. Node runtime target is 24.x and Next.js is 16.3.3+ security-compatible. CI must verify Node tests, lint, normal Next build and Cloudflare OpenNext build.
+37. Hyperdrive is optional and does not change PostgreSQL portability.
+38. Database schema changes are explicit release operations. **Do not auto-run migrations inside ordinary Vercel/Cloudflare builds.** Run `npm run db:migrate` with the target DATABASE_URL before/with a release that introduces migrations.
+39. Migration history lives in `_mklms_migrations` with SHA-256 checksums. Applied migration files must never be edited; create a new migration instead.
+40. Admin Settings must expose integration configured/not-configured status and guidance without returning secret values.
+41. Cloudflare dashboard uses **Build command `npm run cf:build`** and then **Deploy command `npx opennextjs-cloudflare deploy`**. `npm run build` alone only creates `.next` and cannot be followed by OpenNext deploy.
+42. Never commit credentials, private customer data or media secrets.
+43. Every meaningful implementation/testing batch updates this file and the Progress Ledger using PLANNED, IN PROGRESS, IMPLEMENTED, VERIFIED or DEFERRED accurately.
 
 ---
 
-# 1. Product Boundary
+## 1. Product surface
 
 ```text
 MkLMS
-├── Public home / paid access entry
-├── Student LMS
+├── Public
+│   ├── /                     test/access gateway
+│   ├── /login                returning student access-code login
+│   ├── /onboarding           first-time approved student claim
+│   ├── /live/[slug]          scheduled simulated-live room
+│   └── /verify/[id]          public certificate verification
+├── Student
 │   ├── Dashboard
-│   ├── My Courses
-│   ├── Course → Modules → Lessons
-│   ├── Protected media
+│   ├── Courses → Modules → Lessons
 │   ├── Progress
 │   ├── Certificates
 │   ├── Messages
 │   └── Profile
-├── Admin
-│   ├── Access & Enrollments
-│   ├── Students
-│   ├── Courses / Modules / Lessons
-│   ├── Media Library
-│   ├── Certificates / Templates
-│   ├── Messages
-│   ├── Live Classes
-│   └── Settings
-└── Live Classes / Webinar
-    ├── Batches
-    ├── 1–3 sessions initially
-    ├── Countdown / waiting room
-    ├── LIVE indicator + configured viewer display
-    ├── Server-clock simulated-live player
-    ├── Imported timeline comments
-    ├── Private attendee messages
-    ├── Admin inbox + optional notifications
-    └── External CTA / expiry redirect
+└── Admin
+    ├── Dashboard (real DB metrics/actions)
+    ├── Access & Enrollments
+    ├── Students
+    ├── Courses / Modules / Lessons
+    ├── Media Library
+    ├── Live Classes
+    │   ├── quick no-media live test
+    │   ├── 1–3 scheduled sessions
+    │   ├── viewer baseline/mode
+    │   ├── Chat Sync / Import
+    │   ├── CTA / ended behavior
+    │   └── attendee inbox
+    ├── Certificates / Templates
+    ├── Internal Messages
+    └── Settings & Integrations
 ```
 
-Out of reusable core: marketing funnels, public webinar registration, checkout/payment processing, acquisition CRM, advertising workflows, and payment-receipt/subscription approval screens.
+Out of core: checkout/payment gateways, public webinar registration, acquisition CRM, marketing automation and ad workflows.
 
 ---
 
-# 2. Paid Student Access Lifecycle
+## 2. Student access lifecycle
 
 ```text
 External payment/sales
-      ↓
-Preauthorize paid student
-(manual | bulk paste | CSV | API/webhook)
-      ↓
-Student opens public portal
-      ↓
-First-time claim
-      ↓
-Match approved record
-      ↓
-Configured verification
-(preauth-only | OTP optional | claim code | manual | custom)
-      ↓
-Lock certificate identity
-      ↓
-Create student + activate enrollment
-      ↓
-Issue persistent access code
-      ↓
-Store secure verification material
-      ↓
-Login creates separate hashed server session
+  ↓
+Admin preauthorizes paid identity
+  ↓
+Student /onboarding
+  ↓
+/api/access/claim
+  ↓
+match PREAUTHORIZED record + configured claim verification
+  ↓
+lock certificate identity
+  ↓
+create student + activate enrollment
+  ↓
+issue persistent access code once
+  ↓
+student /login
+  ↓
+/api/access/login
+  ↓
+separate hashed server session
+  ↓
+student dashboard/courses/messages/etc.
 ```
 
-Suggested access/enrollment lifecycle:
-
-```text
-PREAUTHORIZED → CLAIMED → ACTIVE → COMPLETED
-                      ↘ SUSPENDED
-                      ↘ REVOKED
-```
+Suggested enrollment lifecycle:
+`PREAUTHORIZED → CLAIMED → ACTIVE → COMPLETED`, with `SUSPENDED` / `REVOKED` controls.
 
 ---
 
-# 3. Learning / Protected Media / Certificate Flow
+## 3. Learning / media / certificate flow
 
 ```text
 Authenticated student
-      ↓
-Active/completed enrollment
-      ↓
-Published course + sequential lesson access
-      ↓
-Short-lived playback authorization
-      ↓
-Server playback grant
-      ↓
-Trusted learning completion
-      ↓
-Recalculate course progress
-      ↓
+  ↓
+active/completed enrollment
+  ↓
+published sequential lesson authorization
+  ↓
+short-lived media playback authorization
+  ↓
+server playback grant
+  ↓
+trusted completion/progress
+  ↓
 100%
-      ↓
-Enrollment COMPLETED
-      ↓
-Idempotent certificate issuance
-      ↓
-Render admin template → private storage
-      ↓
-Optional email + student/admin download + verification + internal message
+  ↓
+enrollment COMPLETED
+  ↓
+idempotent certificate issuance
+  ↓
+render configured template → private storage
+  ↓
+optional email + student/admin download + internal message + public verify
 ```
 
-Known deployment stack OCI → Media Flow → R2 → Cloudflare remains the intended low-cost media path, but automatic OCI Media Flow ingest/transcoding is still a PLANNED provider/job adapter rather than an implemented upload feature. Once implemented, each source/profile is transcoded once and its stored HLS output is reused.
+Media Library supports HLS, direct, external embed/YouTube/custom provider records. The current media admin can register already-prepared assets. Automatic OCI ingest/transcode/copy-to-R2 remains PLANNED.
 
 ---
 
-# 4. Live Class Rules
+## 4. Live-class model
+
+Normal production flow:
 
 ```text
 Admin creates batch
-      ↓
-Adds 1–3 scheduled sessions
-      ↓
-Selects media + schedule + staged chat + CTA + expiry
-      ↓
-Sets viewer-display mode/baseline
-      ↓
-Shares public live link externally
+  ↓
+adds 1–3 sessions
+  ↓
+sets startsAt + duration + optional media + viewer mode/baseline
+  ↓
+imports staged chat offsets + CTA + ended behavior
+  ↓
+activates batch and shares /live/[slug]
 ```
 
-Public state resolution:
+State resolution:
+- `UPCOMING`: countdown, no playback.
+- `LIVE`: visible LIVE badge, `serverNow - startsAt` offset, viewer display, staged chat and attendee comment input.
+- `BETWEEN_SESSIONS`: countdown to next published session.
+- `ENDED`: no playback, configured message/redirect.
+
+### No-media test mode
+
+Admin can click **Start 15-minute live test**. MkLMS creates an ACTIVE test batch and a PUBLISHED 15-minute session that starts immediately with `mediaAssetId = null`. The public room must show the actual LIVE layout and no-media test panel. This is the supported way to test LIVE/viewer/chat/comment behavior before R2/media signing/OCI transcoding is configured.
+
+### Chat Sync / Import
+
+Each session exposes a prominent import section:
 
 ```text
-Before startsAt
-  → countdown/waiting
-  → no LIVE badge
-  → no playback auth
+Timestamped text:
+00:00:10 Ada: Good evening
+00:01:05 John: I can hear you
 
-During active window
-  → LIVE badge visible
-  → liveOffset = serverNow - startsAt
-  → authorize media at liveOffset
-  → display admin-configured viewer count behavior
-  → synchronized staged comments
-  → private attendee message input
-
-After session/batch
-  → no LIVE badge
-  → no playback auth
-  → configured message / CTA / redirect
+CSV:
+offset_seconds,display_name,message
+10,Ada,Good evening
+65,John,I can hear you
 ```
 
-### Viewer display
+The offset is relative to the session/video start. The browser reveals staged messages at the corresponding simulated-live offset.
 
-At minimum store `expectedViewerBaseline` (or equivalent) in admin-controlled live-session/batch configuration. Keep the domain extensible for:
-
-- `CONFIGURED_BASELINE` — display the admin-set expected/baseline audience. This is the preferred high-scale mode. Its shared state has no viewer identity/presence work and may be edge-cached for a few seconds.
-- `ACTIVE_ONLY` — display measured currently-active viewers when presence tracking is enabled. This intentionally updates presence and queries active viewers and therefore remains private/no-store.
-- `BASELINE_PLUS_ACTIVE` — combine configured baseline with actual presence when desired. This intentionally carries the same presence cost as active measurement and remains private/no-store.
-
-Do not hardcode counts or use uncontrolled per-refresh randomness. If a simulated display adjustment is later supported, it must be deterministic/configurable and stable for the session.
-
-### High-scale shared timeline
-
-For `CONFIGURED_BASELINE`, one shared server snapshot provides the current session, server time, complete staged timeline and CTA reveal offset. The browser advances the deterministic timeline locally. Do not restore 10-second per-viewer state polling. Current resynchronization rules are session-boundary refresh, tab-visibility refresh, and a five-minute safety refresh. Cloudflare should apply a Free-plan Cache Rule to `/api/live/*/state` and respect the origin short CDN cache headers.
-
-### Chat
-
-```text
-Imported staged timeline message → shared snapshot, revealed locally at correct offset
-Attendee's own live message       → persisted once for admin + mirrored to that browser storage
-Other attendees' live messages   → not visible to attendee
-Real live message                → durable PostgreSQL live inbox + optional NotificationProvider
-```
-
-The live attendee inbox is authoritative. Telegram or another notification adapter may alert an owner, but notification failure must not roll back or hide an already-persisted attendee message. The attendee-facing browser history is a convenience copy only and is bounded to the recent local history; shared live-state reads must not retrieve it from PostgreSQL.
+Real attendee comments are saved once for the admin inbox and optional notification; the attendee sees only their own real comments plus staged chat.
 
 ---
 
-# 5. Provider Abstractions
+## 5. Integrations / environment contract
 
-Core/accepted boundaries include:
+Admin **Settings & Integrations** reports only configured/not-configured status and required variable names. It must never echo secret values.
 
-- Access/identity adapter
-- ClaimVerificationProvider
-- PostgreSQL repositories/data layer
-- StorageProvider
-- MediaProvider
-- CertificateRenderer
-- EmailProvider
-- NotificationProvider
+### PostgreSQL
 
-Concrete adapters currently implemented include S3-compatible private storage, SMTP email, `pdf-lib` certificate rendering, generic signed/private media delivery contracts, and Telegram notification delivery. Additional providers must fit these boundaries rather than rewriting business logic.
+```env
+DATABASE_URL=
+DATABASE_SSL=require
+DATABASE_POOL_MAX=5
+```
 
-### Phase 4 runtime configuration
+Works with Supabase Free PostgreSQL for testing and self-hosted/managed PostgreSQL later. Hyperdrive is optional on Cloudflare.
 
-Protected live/course media uses the same provider-neutral media boundary. The currently implemented signed-delivery adapter reads:
+### Admin auth
 
-- `MKLMS_MEDIA_DELIVERY_BASE_URL`
-- `MKLMS_MEDIA_SIGNING_SECRET`
+```env
+MKLMS_ADMIN_ACCESS_KEY=
+MKLMS_ADMIN_SESSION_SECRET=
+```
 
-The optional Telegram notification adapter reads:
+This is the simplest testing/admin auth and does not require a third-party identity service.
 
-- `MKLMS_TELEGRAM_BOT_TOKEN`
-- `MKLMS_TELEGRAM_CHAT_ID`
+### Telegram notifications
 
-A live batch may override the default notification destination through admin configuration. Secrets remain server-only and must never be committed.
+```env
+MKLMS_TELEGRAM_BOT_TOKEN=
+MKLMS_TELEGRAM_CHAT_ID=
+```
 
-### Production hardening / scale contract
+Setup:
+1. Create bot through Telegram `@BotFather`.
+2. Save bot token as `MKLMS_TELEGRAM_BOT_TOKEN`.
+3. Add bot to the destination group/channel and give required posting permission.
+4. Obtain numeric group/channel/user ID and save as `MKLMS_TELEGRAM_CHAT_ID`.
+5. A live batch may set a per-batch notification destination, which overrides the default.
 
-Implemented application controls:
+Telegram is optional. Persistence occurs before notification; Telegram failure must never lose the attendee message.
 
-- Signed/hash-backed admin and student sessions with HttpOnly cookies and production Secure flags.
-- Server-side authorization on protected admin/member/API operations.
-- Parameterized PostgreSQL queries on the inspected repository paths.
-- No reusable permanent private media origin URLs in student/live HTML.
-- HTTP(S)-only validation for live CTA and ended redirect destinations.
-- Bounded Zod input sizes for authentication, live comments, live-class configuration and timeline imports.
-- Bounded application rate limiting on admin login, student access-code login and live attendee comments.
-- Security response headers including HSTS in production, nosniff, frame restrictions, referrer policy, permissions policy and a base CSP.
-- High-scale baseline live state avoids viewer identity, recurring active-viewer counts, recurring heartbeat writes and high-frequency shared-state polling.
-- Baseline staged chat/CTA advance in the browser from a server-clock snapshot; private attendee history is browser-local after one authoritative server write.
-- Node.js 24.x + Next.js 16.3.3 standard production build and Cloudflare OpenNext build are CI contracts.
+### SMTP
 
-Required production infrastructure controls:
+```env
+MKLMS_EMAIL_PROVIDER=smtp
+MKLMS_SMTP_HOST=
+MKLMS_SMTP_PORT=587
+MKLMS_SMTP_SECURE=false
+MKLMS_SMTP_USER=
+MKLMS_SMTP_PASSWORD=
+MKLMS_EMAIL_FROM=
+```
 
-- Cloudflare Free may be used as the initial production edge/runtime. Use Workers, Cache Rules, DNS/TLS and available free protections first; no Cloudflare Pro dependency is required.
-- Create a narrow cache rule for the shared baseline `/api/live/*/state` GET route. Never cache login, claim, playback authorization, admin, student-session or message mutation endpoints.
-- TLS-only production traffic; strong randomly generated server secrets stored only in deployment secret management.
-- PostgreSQL connection pooling, backups/PITR, monitoring, slow-query visibility and sensible connection/query limits.
-- Cloudflare Hyperdrive is optional for Worker→PostgreSQL connection management and does not change MkLMS's PostgreSQL portability.
-- Object storage + CDN for all large media; never proxy large video streams through the application server/Worker.
-- HLS media should use immutable/versioned segment paths, long cache lifetime for segments and short-lived authorization at the edge. Token validation should not produce a unique CDN cache object per viewer.
-- Monitoring/alerting for auth failures, 429s, elevated 5xx, DB saturation, storage failures and notification failures.
+Use `MKLMS_EMAIL_PROVIDER=none` for no-email deployments.
 
-### Cloudflare / Vercel deployment contract
+### S3-compatible / Cloudflare R2 storage
 
-- Cloudflare Workers is the intended production runtime, starting on the Free plan.
-- `wrangler.jsonc` + `open-next.config.ts` define the OpenNext Worker bundle.
-- `npm run cf:build` must pass before Cloudflare deployment changes are accepted.
-- A known OpenNext/node-postgres tracing issue requires Next `outputFileTracingIncludes` to retain `pg-cloudflare/dist/**` and `pg-cloudflare/esm/**` in the Worker bundle until the upstream issue is resolved.
-- Vercel is a test/compatibility target. `npm run build` on Node 24 must remain green; OCI Node/container deployment should use the same Node major for parity.
-- `DATABASE_URL` remains the generic direct PostgreSQL configuration for Node/Vercel. Cloudflare Hyperdrive may later supply a pooled PostgreSQL connection string/binding without changing domain repositories.
+```env
+MKLMS_STORAGE_BUCKET=
+MKLMS_STORAGE_REGION=auto
+MKLMS_STORAGE_ENDPOINT=
+MKLMS_STORAGE_ACCESS_KEY_ID=
+MKLMS_STORAGE_SECRET_ACCESS_KEY=
+MKLMS_STORAGE_FORCE_PATH_STYLE=false
+```
+
+For R2, use its S3-compatible endpoint plus an R2 API token/access-key pair.
+
+### Protected media delivery
+
+```env
+MKLMS_MEDIA_DELIVERY_BASE_URL=
+MKLMS_MEDIA_SIGNING_SECRET=
+```
+
+These configure the current signed-delivery adapter. No-media live test mode intentionally does not require them.
 
 ---
 
-# 6. Repository Strategy
+## 6. Database migrations
 
-- `main` — consolidated product branch after approved cumulative Phase 4 merge.
+Migrations live in `db/migrations/001...008`.
+
+Run from a trusted release shell/machine:
+
+```bash
+export DATABASE_URL='postgresql://...'
+export DATABASE_SSL=require
+npm run db:migrate
+```
+
+The runner creates `_mklms_migrations`, stores migration filename + SHA-256 checksum + applied timestamp, skips already-applied files, and refuses to continue if an applied migration file has been modified.
+
+Do not attach `npm run db:migrate` to ordinary web builds. Vercel/Cloudflare can execute multiple/retried/preview builds concurrently; migrations are a release operation.
+
+Admin Settings performs a lightweight database/schema health check and reports whether core tables are present.
+
+---
+
+## 7. Deployment contract
+
+### Vercel / Node / OCI
+
+- Node 24.x.
+- Build: `npm run build`.
+- Vercel is for compatibility/testing; OCI Node/container may later run the same major runtime.
+
+### Cloudflare Workers Free / OpenNext
+
+Cloudflare is the intended production runtime/edge.
+
+When dashboard has separate commands:
+
+```text
+Build command: npm run cf:build
+Deploy command: npx opennextjs-cloudflare deploy
+```
+
+When one command performs both:
+
+```text
+npm run deploy
+```
+
+Do **not** configure Cloudflare Build as `npm run build` followed by OpenNext deploy. `npm run build` creates `.next`, while OpenNext deployment requires `.open-next`.
+
+For high-audience `CONFIGURED_BASELINE`, add a Cloudflare Free Cache Rule for `/api/live/*/state`; never cache login, claim, playback authorization, admin/session or message mutation endpoints.
+
+---
+
+## 8. Repository strategy
+
+- `main` — deployable consolidated MkLMS.
+- `architecture/mklms-reusable-platform` — architecture/spec reference.
+- `feature/mklms-phase-1-foundation-access` — verified access foundation.
+- `feature/mklms-phase-2-learning-progress` — verified learning/progress.
+- `feature/mklms-phase-3-certificates-media` — verified certificates/media/messaging.
+- `feature/mklms-phase-4-live-classes` — verified live classes.
+- `feature/mklms-pretest-cloudflare-scale` — Node 24/OpenNext/high-audience optimization reference.
+- `fix/mklms-production-audit` — current production-test repair before merge.
 - `mkwebinar` — legacy behavior reference only.
-- `architecture/mklms-reusable-platform` — approved architecture/spec branch.
-- `feature/mklms-phase-1-foundation-access` — verified Phase 1.
-- `feature/mklms-phase-2-learning-progress` — verified Phase 2.
-- `feature/mklms-phase-3-certificates-media` — verified Phase 3.
-- `feature/mklms-phase-4-live-classes` — verified Phase 4 simulated-live classes/webinar plus production hardening before consolidation.
-- `feature/mklms-pretest-cloudflare-scale` — Node 24, Next 16.3.3, Cloudflare Free/OpenNext compatibility and high-audience live-state/browser-chat optimization before external deployment testing.
-- Implementation plan: `docs/superpowers/plans/2026-08-30-mklms-implementation-plan.md`.
-- Design spec: `docs/superpowers/specs/2026-08-30-mklms-reusable-learning-platform-design.md`.
+
+Design/plan for this audit:
+- `docs/superpowers/specs/2026-08-30-mklms-production-audit-repair-design.md`
+- `docs/superpowers/plans/2026-08-30-mklms-production-audit-repair.md`
 
 ---
 
-# 7. Progress Ledger
+## 9. Progress Ledger
 
-| Date | Area | Status | Progress / Evidence |
+| Date | Area | Status | Progress / evidence |
 |---|---|---|---|
-| 2026-08-30 | Product scope | VERIFIED | Reusable white-label LMS + temporary scheduled simulated-live class module. Payments/marketing remain external. |
-| 2026-08-30 | Repository audit | VERIFIED | `mklms/main` is the LMS base; `mkwebinar` is reference-only and must not be merged directly. |
-| 2026-08-30 | Architecture / plan | VERIFIED | Approved design spec, persistent blueprint, and phased implementation plan committed. |
-| 2026-08-30 | Phase 1 — access | VERIFIED | `feature/mklms-phase-1-foundation-access`; GitHub Actions run `33314139664` passed tests, lint, production build. Secure access codes/sessions, preauthorization, optional verification, admin access management, white-label settings and PostgreSQL foundation implemented. |
-| 2026-08-30 | Phase 2 — learning/progress | VERIFIED | `feature/mklms-phase-2-learning-progress`; GitHub Actions run `33315644140` passed 48/48 tests, lint, production build. Course→Module→Lesson, publishing, enrollment progress, sequential unlock, real student/admin learning UX implemented. |
-| 2026-08-30 | Phase 3 — certificate domain | VERIFIED | Idempotent issuance from locked identity, configurable IDs, revocation/restore and public verification implemented. |
-| 2026-08-30 | Phase 3 — certificate delivery | VERIFIED | Admin-uploaded PDF/PNG/JPEG templates with configurable coordinates; `pdf-lib` rendering; private storage; optional SMTP email; student/admin download; regenerate/resend; internal CERTIFICATE message action. |
-| 2026-08-30 | Phase 3 — protected media | VERIFIED | Generic Media Library, HLS/direct/embed/custom sources, session-bound playback authorization, playback grants, HLS player, short-lived auth refresh and no origin URL rendered into lesson HTML. |
-| 2026-08-30 | Phase 3 — trusted video progress | VERIFIED | Browser progress capped by credible server elapsed watch time; grants/enrollment/sequence validated; VIDEO_PROGRESS cannot use manual completion. |
-| 2026-08-30 | Phase 3 — messaging | VERIFIED | Replaced primary mock messaging with PostgreSQL student↔admin conversations and context fields for CERTIFICATE/LIVE_CLASS reuse. |
-| 2026-08-30 | Phase 3 — boilerplate retirement | VERIFIED | Direct student/admin subscription routes redirect to Courses/Access; legacy Questions route redirects to Messages and was removed from admin navigation. |
-| 2026-08-30 | Phase 3 automated verification | VERIFIED | Final `feature/mklms-phase-3-certificates-media` head passed **70/70 tests, lint, and Next.js production build** in GitHub Actions run `33318269966`. |
-| 2026-08-30 | Phase 4 — live state / viewer presence | VERIFIED | PostgreSQL live batches/sessions/viewers, server-clock UPCOMING/LIVE/BETWEEN_SESSIONS/ENDED resolution, anonymous hashed viewer identity, heartbeat presence, and configurable `CONFIGURED_BASELINE`, `ACTIVE_ONLY`, and `BASELINE_PLUS_ACTIVE` display modes implemented. |
-| 2026-08-30 | Phase 4 — simulated-live playback | VERIFIED | Public `/live/[slug]` room uses protected viewer-scoped MediaProvider authorization, server-derived live offset, late-join/refresh synchronization, no playback outside LIVE, no normal seek controls, anti-seek correction, visible LIVE state, and click-to-unmute behavior. |
-| 2026-08-30 | Phase 4 — staged/private chat | VERIFIED | CSV/timestamped/Zoom-style staged-chat import, live-offset timeline delivery, attendee-visible staged chat plus own real comments only, durable PostgreSQL attendee inbox, and admin all-attendee view implemented. |
-| 2026-08-30 | Phase 4 — notifications / CTA / expiry | VERIFIED | Attendee message persistence precedes optional NotificationProvider dispatch; Telegram adapter and per-batch destination supported; per-session CTA timing plus session/batch ended message and redirect implemented. |
-| 2026-08-30 | Phase 4 — admin operations | VERIFIED | Admin Live Classes UI/API creates reusable batches, enforces 1–3 sessions, selects Media Library assets, configures schedule/viewer mode/CTA/expiry/notification routing, imports staged chat, publishes sessions, activates batches, copies public links, and displays real attendee inbox. |
-| 2026-08-30 | Phase 4 automated verification | VERIFIED | Initial complete Phase 4 implementation head `41fe61399fc3dbc77dbe59aa71719430bc53623e` passed **112/112 tests, lint, and Next.js production build** in GitHub Actions run `33321397091`. |
-| 2026-08-30 | Production hardening — abuse/XSS/input limits | VERIFIED | Added HTTP(S)-only external URL validation, bounded request payloads, bounded per-process rate limits for admin/student login and live comments, and security response headers. Security/rate-limit regressions are covered by automated tests. |
-| 2026-08-30 | Production hardening — high-viewer database cost | VERIFIED | `CONFIGURED_BASELINE` originally removed recurring active-viewer counts/heartbeat writes and is now further optimized into fully shared state with no viewer identity/presence work. |
-| 2026-08-30 | Hardened automated verification | VERIFIED | Hardened implementation head `1916fdc78ceafaad20b4512286fd42bc0d3fe9bb` passed the then-current test suite, lint, and Next.js production build in GitHub Actions run `33322834903`. |
-| 2026-08-30 | Pre-test runtime — Node/Vercel/OCI parity | VERIFIED | Runtime pinned to Node 24.x; Next.js upgraded to 16.3.3; standard Next.js production build passes under Node 24. Vercel is test/compatibility only; OCI Node/container should use the same major. |
-| 2026-08-30 | Pre-test runtime — Cloudflare Free/OpenNext | VERIFIED | OpenNext 1.20.4 + Wrangler configuration added; known `pg-cloudflare` trace files explicitly included. Exact feature head passed the Cloudflare OpenNext build in GitHub Actions run `33325488318`. |
-| 2026-08-30 | Pre-test scale — shared webinar state | VERIFIED | `CONFIGURED_BASELINE` state is viewer-neutral/cacheable; staged timeline and CTA reveal advance locally; 10-second state polling removed in favor of session-boundary, visibility and five-minute safety synchronization. |
-| 2026-08-30 | Pre-test scale — attendee private chat | VERIFIED | Server persists each real attendee comment once for authoritative admin/notification use; attendee-facing history is restored from bounded browser `localStorage`, eliminating repeated PostgreSQL reads for own live comments. |
-| 2026-08-30 | Pre-test automated verification | VERIFIED | Feature head before this ledger-only update passed **121/121 tests, lint, Node 24 Next.js production build, and Cloudflare OpenNext production bundle** in GitHub Actions run `33325488318`. |
-| 2026-08-30 | OCI automatic media transcode adapter | PLANNED | Architecture is fixed as one-time source/profile transcode → persistent HLS output → object storage/CDN reuse, but the actual OCI Media Flow job adapter/orchestration is not yet implemented in MkLMS. |
+| 2026-08-30 | Product architecture | VERIFIED | Reusable white-label LMS + temporary scheduled simulated-live system; payments/marketing external. |
+| 2026-08-30 | Phase 1 — access | VERIFIED | Secure access codes/sessions, scalable preauthorization, optional verification, admin access management and PostgreSQL foundation. |
+| 2026-08-30 | Phase 2 — learning/progress | VERIFIED | Course→Module→Lesson, publishing, enrollment progress, sequential unlock and real student/admin learning UX. |
+| 2026-08-30 | Phase 3 — certificates/media | VERIFIED | Idempotent certificates, template renderer/storage/email, protected media/playback grants, trusted video progress, Media Library. |
+| 2026-08-30 | Phase 3 — internal messaging | VERIFIED | PostgreSQL student↔admin conversations, student send/admin reply, certificate context and admin inbox. |
+| 2026-08-30 | Phase 4 — live classes | VERIFIED | 1–3 sessions, server-clock LIVE state, viewer modes, protected simulated playback, staged chat import, private attendee messages, Telegram adapter, CTA/end behavior. |
+| 2026-08-30 | Security/high-view hardening | VERIFIED | URL scheme safety, input bounds, rate limits, security headers, shared baseline state cacheability, local browser live timing/private-comment history. |
+| 2026-08-30 | Node/Vercel/Cloudflare compatibility | VERIFIED | Node 24 + Next 16.3.3; CI verifies standard Next build and Cloudflare OpenNext bundle. |
+| 2026-08-30 | Legacy cleanup | VERIFIED | Original Foyzul/payment/subscription/mock product surfaces removed/retired from active product; MkLMS system is the only intended product surface. |
+| 2026-08-30 | Production audit — student login regression | VERIFIED | Browser forms corrected from obsolete `/api/auth/*` to `/api/access/claim` and `/api/access/login`; regression test added. |
+| 2026-08-30 | Production audit — no-media live testing | VERIFIED | Quick 15-minute test-now flow, active no-media LIVE room, visible LIVE/viewer/chat/comment UI, while configured-but-broken media still fails closed. |
+| 2026-08-30 | Production audit — live chat sync visibility | VERIFIED | Admin session cards expose prominent Chat Sync / Import UI, format examples, offset semantics and imported count/warnings. |
+| 2026-08-30 | Production audit — messaging visibility/security | VERIFIED | Real messaging surfaced from admin dashboard/navigation; PostgreSQL paths contract-tested; student sends now have burst rate limiting. |
+| 2026-08-30 | Production audit — admin dashboard | VERIFIED | Hardcoded Foyzul/subscription/payment stats replaced with real DB metrics and direct operational shortcuts. |
+| 2026-08-30 | Production audit — integrations/settings | VERIFIED | Database health plus secret-safe configured/not-configured status/guidance for admin auth, Telegram, SMTP, R2/S3 and protected media. |
+| 2026-08-30 | Production audit — migrations | VERIFIED | `npm run db:migrate` now tracks `_mklms_migrations` with checksums, skips applied files, rejects edits to applied migrations; migrations remain explicit release operations. |
+| 2026-08-30 | Production audit — Cloudflare commands | VERIFIED | Docs/settings lock Cloudflare build=`npm run cf:build`, deploy=`npx opennextjs-cloudflare deploy`; fixes observed `.open-next` missing deploy failure. |
+| 2026-08-30 | Production audit automated verification | VERIFIED | Implementation head `cf5f6a799852c971b7c59946109fdd6ee259edaf` passed **126/126 tests, lint, Node 24 Next.js production build, and Cloudflare OpenNext build** in GitHub Actions run `33336563595`. |
+| 2026-08-30 | OCI automatic one-time Media Flow → permanent R2 HLS | PLANNED | Architecture is defined but automatic upload/job/event/copy/verification/cleanup adapter is not yet implemented. Current Media Library can use already-prepared HLS/provider assets. |
 
-> **Progress update rule:** every meaningful design/code/testing batch must update this ledger in the same branch/PR before being considered complete.
+> **Progress rule:** update this ledger for every meaningful architecture/code/testing batch before considering work complete.
