@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type { CourseStructure } from "../../courses/domain/model.ts";
 import { canAccessLesson } from "../../courses/domain/progress.ts";
 import type {
@@ -10,6 +12,16 @@ export interface MediaPlaybackEnrollment {
   studentId: string;
   courseId: string;
   status: string;
+}
+
+export interface CreatePlaybackGrantInput {
+  id: string;
+  studentId: string;
+  courseId: string;
+  lessonId: string;
+  mediaAssetId: string;
+  startedAt: Date;
+  expiresAt: Date;
 }
 
 export interface MediaPlaybackRepository {
@@ -26,6 +38,7 @@ export interface MediaPlaybackRepository {
     courseId: string,
     lessonId: string,
   ): Promise<MediaAsset | null>;
+  createPlaybackGrant?(input: CreatePlaybackGrantInput): Promise<void>;
 }
 
 export interface MediaPlaybackOptions {
@@ -38,7 +51,11 @@ export interface MediaPlaybackViewerContext {
 }
 
 export type MediaPlaybackResult =
-  | { ok: true; authorization: PlaybackAuthorization }
+  | {
+      ok: true;
+      authorization: PlaybackAuthorization;
+      grantId?: string;
+    }
   | {
       ok: false;
       reason:
@@ -47,7 +64,8 @@ export type MediaPlaybackResult =
         | "LESSON_NOT_AVAILABLE"
         | "LESSON_LOCKED"
         | "MEDIA_NOT_AVAILABLE"
-        | "SESSION_EXPIRED";
+        | "SESSION_EXPIRED"
+        | "PLAYBACK_PROVIDER_INVALID";
     };
 
 export class MediaPlaybackService {
@@ -157,10 +175,38 @@ export class MediaPlaybackService {
       ttlSeconds: effectiveTtlSeconds,
     });
 
+    if (!authorization.expiresAt || authorization.expiresAt <= now) {
+      return { ok: false, reason: "PLAYBACK_PROVIDER_INVALID" };
+    }
+
+    const grantExpiresAt = viewerContext.sessionExpiresAt
+      ? new Date(
+          Math.min(
+            authorization.expiresAt.getTime(),
+            viewerContext.sessionExpiresAt.getTime(),
+          ),
+        )
+      : authorization.expiresAt;
+
+    const grantId = randomUUID();
+    if (this.repository.createPlaybackGrant) {
+      await this.repository.createPlaybackGrant({
+        id: grantId,
+        studentId,
+        courseId,
+        lessonId,
+        mediaAssetId: asset.id,
+        startedAt: now,
+        expiresAt: grantExpiresAt,
+      });
+    }
+
     return {
       ok: true,
+      grantId,
       authorization: {
         ...authorization,
+        expiresAt: grantExpiresAt,
         protection: authorization.protection ?? "PRIVATE_AUTHORIZATION",
       },
     };
