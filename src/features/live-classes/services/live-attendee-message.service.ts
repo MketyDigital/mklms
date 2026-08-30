@@ -1,3 +1,4 @@
+import type { NotificationProvider } from "@/providers/notification-provider";
 import type { LiveAttendeeMessageRecord } from "./live-room.service.ts";
 
 export interface LiveAttendeeMessageRepository {
@@ -8,15 +9,6 @@ export interface LiveAttendeeMessageRepository {
     displayName?: string | null;
     message: string;
   }): Promise<LiveAttendeeMessageRecord>;
-}
-
-export interface NotificationProvider {
-  notify(input: {
-    title: string;
-    message: string;
-    destination?: string | null;
-    context?: Record<string, string>;
-  }): Promise<void>;
 }
 
 export class LiveAttendeeMessageService {
