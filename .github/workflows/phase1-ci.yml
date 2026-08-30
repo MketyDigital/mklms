@@ -5,6 +5,7 @@ on:
     branches:
       - architecture/mklms-reusable-platform
       - feature/mklms-phase-1-foundation-access
+      - feature/mklms-phase-2-learning-progress
   workflow_dispatch:
 
 jobs:
