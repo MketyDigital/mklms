@@ -21,6 +21,7 @@ export interface LiveBatchRuntimeRecord extends LiveBatchDefinition {
   viewerDisplayMode: ViewerDisplayMode;
   endedMessage?: string | null;
   endedRedirectUrl?: string | null;
+  notificationDestination?: string | null;
 }
 
 export interface LiveSessionRuntimeRecord extends LiveSessionDefinition {
@@ -50,10 +51,11 @@ export class PostgresLiveClassRepository implements LiveRoomRepository {
       viewer_display_mode: ViewerDisplayMode;
       ended_message: string | null;
       ended_redirect_url: string | null;
+      notification_destination: string | null;
     }>(
       `SELECT id, slug, title, description, status,
               expected_viewer_baseline, viewer_display_mode,
-              ended_message, ended_redirect_url
+              ended_message, ended_redirect_url, notification_destination
        FROM live_batches
        WHERE slug = $1 AND status = 'ACTIVE'
        LIMIT 1`,
@@ -73,6 +75,7 @@ export class PostgresLiveClassRepository implements LiveRoomRepository {
       viewerDisplayMode: batch.viewer_display_mode,
       endedMessage: batch.ended_message,
       endedRedirectUrl: batch.ended_redirect_url,
+      notificationDestination: batch.notification_destination,
       sessions,
     };
   }
