@@ -179,14 +179,10 @@ export class MediaPlaybackService {
       return { ok: false, reason: "PLAYBACK_PROVIDER_INVALID" };
     }
 
-    const grantExpiresAt = viewerContext.sessionExpiresAt
-      ? new Date(
-          Math.min(
-            authorization.expiresAt.getTime(),
-            viewerContext.sessionExpiresAt.getTime(),
-          ),
-        )
-      : authorization.expiresAt;
+    const grantExpiresAt =
+      viewerContext.sessionExpiresAt && viewerContext.sessionExpiresAt > now
+        ? viewerContext.sessionExpiresAt
+        : authorization.expiresAt;
 
     const grantId = randomUUID();
     if (this.repository.createPlaybackGrant) {
@@ -206,7 +202,6 @@ export class MediaPlaybackService {
       grantId,
       authorization: {
         ...authorization,
-        expiresAt: grantExpiresAt,
         protection: authorization.protection ?? "PRIVATE_AUTHORIZATION",
       },
     };
