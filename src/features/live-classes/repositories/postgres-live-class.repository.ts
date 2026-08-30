@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 
 import { getPostgresPool } from "@/lib/postgres";
+import type { MediaAsset } from "@/providers/media-provider";
 import type {
   LiveBatchDefinition,
   LiveSessionDefinition,
@@ -116,6 +117,30 @@ export class PostgresLiveClassRepository implements LiveRoomRepository {
       endedMessage: row.ended_message,
       endedRedirectUrl: row.ended_redirect_url,
     }));
+  }
+
+  async getMediaAsset(id: string): Promise<MediaAsset | null> {
+    const result = await this.pool.query<{
+      id: string;
+      source_type: string;
+      provider_asset_id: string | null;
+      processing_status: string;
+    }>(
+      `SELECT id, source_type, provider_asset_id, processing_status
+       FROM media_assets
+       WHERE id = $1
+       LIMIT 1`,
+      [id],
+    );
+    const row = result.rows[0];
+    return row
+      ? {
+          id: row.id,
+          sourceType: row.source_type,
+          providerAssetId: row.provider_asset_id,
+          status: row.processing_status,
+        }
+      : null;
   }
 
   async listTimelineMessages(sessionId: string): Promise<LiveTimelineMessage[]> {
