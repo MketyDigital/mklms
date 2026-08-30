@@ -1,165 +1,292 @@
 # OCI Media Flow -> Cloudflare R2 — One-Time Transcode Runbook
 
-This is the MkLMS production media rule:
+MkLMS production rule:
 
 ```text
-source video -> OCI Object Storage -> OCI Media Flow ONCE -> verify HLS -> R2 -> future playback
+original video
+  → private OCI Object Storage
+  → OCI Media Flow ONCE
+  → private OCI HLS output
+  → verify output
+  → copy complete HLS folder to Cloudflare R2
+  → verify R2
+  → register R2 master.m3u8 in MkLMS
+  → all future viewers use R2/CDN
 ```
 
-Do not run Media Flow on every playback or every deployment. Re-transcode only when the source video or encoding profile changes.
+Do not run Media Flow on playback or on deployment. Re-transcode only when the source video or encoding profile changes. Automatic paid OCI orchestration remains OFF by default.
 
-## Recommended first-launch path: manual and observable
+## Fastest first-launch choice
 
-For the first production videos, keep `MKLMS_OCI_MEDIA_AUTOMATION_ENABLED=false` and complete the steps manually. This removes untested paid-event automation from the launch critical path.
+You do **not** need an OCI VM to transcode video. Media Flow and Object Storage are managed OCI services. For the first launch, use the OCI web Console + OCI Cloud Shell. Create an Always Free VM later only if you specifically want a permanent admin/publisher machine.
 
-### 1. Prepare OCI buckets
+## Part A — OCI from zero
 
-Create or choose two private Object Storage locations in the same OCI region used by Media Flow:
+### 1. Create/sign in to OCI and choose the home region carefully
 
-- source bucket/prefix: original MP4/MOV uploads
-- output bucket/prefix: completed Media Flow HLS output
+Create the OCI tenancy and note its **home region**. Always Free Compute is created in the home region. For the first media launch, keep Object Storage and Media Flow in the same region.
 
-Use unique prefixes, for example:
+Use one compartment such as `mklms-media` if you want resources separated cleanly from other OCI work.
+
+### 2. Create two private Object Storage buckets
+
+OCI Console → Storage → Object Storage & Archive Storage → Buckets.
+
+Create:
+
+- `mklms-media-source` — original MP4/MOV files
+- `mklms-media-output` — Media Flow HLS output
+
+Keep both **private / NoPublicAccess**. Do not make the buckets public.
+
+Use predictable object prefixes:
 
 ```text
 source/free-class-2026/day-1/source.mp4
+source/free-class-2026/day-2/source.mp4
+source/free-class-2026/day-3/source.mp4
+
 output/free-class-2026/day-1/v1/
+output/free-class-2026/day-2/v1/
+output/free-class-2026/day-3/v1/
 ```
 
-### 2. Estimate before starting a paid job
+### 3. Upload each original video
 
-Admin -> Media Library -> OCI Media Flow -> R2 publishing:
+Open `mklms-media-source` → Objects → Upload.
 
-- enter video title
-- enter duration in minutes
-- create estimate
-- inspect the estimated Standard H264 cost
-- explicitly accept the estimate
+For the first three videos, upload through OCI Console directly. The Console uses multipart upload for large files. Do not upload a multi-GB source through the MkLMS Cloudflare Worker.
 
-The default conservative MkLMS launch profile estimates three output rungs: one SD + two HD outputs in the 30-60fps price band. This is an estimate, not an Oracle invoice.
+Optional later: use OCI CLI or a short-lived Pre-Authenticated Request for direct uploads.
 
-### 3. Upload source directly to OCI
+### 4. Estimate before starting a paid Media Flow job
 
-For the first launch, use one of:
+In MkLMS Admin → Media Library → OCI Media Flow → R2, enter title + duration and create the estimate. The estimator uses a conservative 3-rung Standard H264 profile. Explicitly accepting the estimate records your acknowledgement; it does not start a paid job while automation is OFF.
 
-- OCI Console Object Storage upload
-- OCI CLI `oci os object put`
-- a deliberately time-limited OCI Pre-Authenticated Request (PAR)
+### 5. Create the reusable Media Flow workflow
 
-Do not send multi-gigabyte source video through the Cloudflare Worker.
+OCI Console → navigation menu → Analytics & AI → Media Services → Media Flow → **Create media workflow**.
 
-### 4. Create/reuse one Media Flow workflow
+Basic setup:
 
-Create a reusable Media Flow workflow that:
+- Name: `mklms-hls-standard`
+- Compartment: your media compartment
+- Input: OCI Object Storage source video
+- Codec: H.264 Standard
+- Packaging/output: HLS/adaptive bitrate
+- Starting rendition plan for this launch: mobile/SD + 720p + 1080p
+- Output bucket: `mklms-media-output`
+- Job output prefix: a unique video/version prefix
+- **Do not enable Media Streams** for this architecture; R2 becomes the permanent playback store.
 
-1. reads the source object from OCI Object Storage;
-2. transcodes Standard H264 adaptive-bitrate outputs;
-3. packages output as HLS;
-4. writes the finished output to the selected private OCI output prefix.
+The workflow is created once and reused. Each video starts one **job** using that workflow.
 
-The workflow itself is reusable. Each source video creates one Media Flow **job**.
+### 6. Run Day 1, Day 2 and Day 3 as separate jobs
 
-For a simple free-class launch, a reasonable ABR starting point is approximately:
+For each source video:
 
-- SD/mobile rendition
-- 720p HD rendition
-- 1080p HD rendition
+1. Open the workflow → Run Job.
+2. Select the correct source object.
+3. Set a unique output prefix such as `output/free-class-2026/day-1/v1/`.
+4. Review before starting because Media Flow is paid usage.
+5. Run the job once.
+6. Wait until OCI reports success.
 
-Exact bitrates/resolutions should be tested against source quality and expected audience bandwidth before standardizing the encoding profile.
+Do not retry by creating a new job just because the browser was refreshed. Check the existing job state first.
 
-### 5. Run the job and wait for success
+### 7. Verify OCI HLS output
 
-From OCI Media Flow, run the workflow against the source object and unique output prefix. Do not start the R2 copy until OCI reports the job succeeded.
+Open `mklms-media-output` and the job prefix. Before copying, confirm there is:
 
-Verify output contains:
+- a master `.m3u8` playlist;
+- one or more variant `.m3u8` playlists;
+- media segment files referenced by those playlists.
 
-- master `.m3u8` manifest
-- variant `.m3u8` playlists
-- referenced media segments
+If these are missing, do not register the asset in MkLMS and do not delete the source.
 
-### 6. Copy completed HLS output to R2
+## Part B — Create R2 from zero
 
-Use a trusted machine, OCI Cloud Shell/VM, or a dedicated OCI-side publisher. For the manual path, `rclone` is a practical vendor-neutral option because OCI Object Storage and Cloudflare R2 both expose compatible object-storage interfaces.
+### 1. Activate R2 and create a bucket
 
-Conceptual rclone workflow:
+Cloudflare Dashboard → Storage & databases → R2 → Overview.
+
+Activate R2 if the account asks you to complete R2 checkout/subscription activation. Then Create bucket:
+
+- bucket name example: `mklms-media`
+- storage class: **Standard**
+- keep it private.
+
+### 2. Create bucket-scoped S3 credentials
+
+R2 → Overview → Manage R2 API Tokens → Create token.
+
+Use **Object Read & Write**, scoped only to the `mklms-media` bucket where practical.
+
+Save these once:
+
+- Access Key ID
+- Secret Access Key
+- S3 endpoint: `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`
+
+Never commit these values to git.
+
+## Part C — Safest manual OCI → R2 copy
+
+For a first launch, the easiest observable method is OCI Cloud Shell + the OCI CLI + rclone for R2.
+
+### 1. Open OCI Cloud Shell
+
+OCI Console → Cloud Shell icon. The OCI CLI is already available in this authenticated shell.
+
+### 2. Download one completed HLS prefix from OCI to Cloud Shell
+
+Example:
 
 ```bash
-rclone copy oci:OCI_OUTPUT_BUCKET/free-class-2026/day-1/v1/ \
-  r2:R2_MEDIA_BUCKET/live/free-class-2026/day-1/v1/ \
-  --checksum --progress
+mkdir -p ~/mklms-hls/day1
+
+oci os object bulk-download \
+  --bucket-name mklms-media-output \
+  --prefix 'output/free-class-2026/day-1/v1/' \
+  --download-dir ~/mklms-hls/day1
 ```
 
-Configure both remotes using secrets outside git. Do not paste access keys into MkLMS source files or documentation commits.
+Repeat for day2/day3 after their jobs succeed. Inspect the downloaded directory and locate the master `.m3u8`.
 
-### 7. Verify R2 before deleting OCI output
+### 3. Configure rclone for R2 once
 
-Check that the R2 destination contains the master manifest, all variant playlists and segments. Test playback from the final delivery domain/path.
+Use rclone v1.59+.
 
-Only after successful R2 playback verification should OCI source/output cleanup be considered. Keeping the original source elsewhere is recommended if future re-encoding may be required.
+Run:
 
-### 8. Register final media in MkLMS
+```bash
+rclone config
+```
 
-Create/register an HLS media asset using the final R2-relative provider path, for example:
+Choose:
+
+```text
+n = New remote
+name = r2
+storage = Amazon S3 Compliant Storage Providers
+provider = Cloudflare R2
+access_key_id = <your R2 Access Key ID>
+secret_access_key = <your R2 Secret Access Key>
+endpoint = https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+```
+
+Keep defaults for options you do not need to change. Credentials live only in your shell/rclone config, not in MkLMS source.
+
+### 4. Copy the complete HLS directory to R2
+
+Example:
+
+```bash
+rclone copy ~/mklms-hls/day1 \
+  r2:mklms-media/live/free-class-2026/day-1/v1 \
+  --progress --checksum
+```
+
+Then verify:
+
+```bash
+rclone tree r2:mklms-media/live/free-class-2026/day-1/v1
+```
+
+Do the same for Day 2 and Day 3.
+
+### 5. Do not delete OCI yet
+
+First verify the R2 tree contains the master playlist, variants and all referenced segments. Keep the original video at least until R2 playback is proven. Cleanup can be a later cost/storage decision.
+
+## Part D — Register R2 media in MkLMS
+
+Admin → Media Library → Register media asset:
+
+- Provider label: `r2`
+- Source type: `HLS`
+- Duration: actual video duration
+- Private provider playback reference: the final R2-relative master path, for example:
 
 ```text
 live/free-class-2026/day-1/v1/master.m3u8
 ```
 
-Attach the same Media Library asset to either:
+Use the exact master filename OCI generated; it may not literally be named `master.m3u8`.
 
-- a Live Class session; or
-- a paid Course lesson.
+Then Admin → Live Classes → attach Day 1 asset to Day 1 session, Day 2 to Day 2, Day 3 to Day 3.
 
-Live Classes and paid Courses do not depend on each other. They simply share the Media Library/platform.
+A Live Class batch is standalone from paid Courses. Paid Courses may later reuse the same Media Library asset, but the live event does not require a Course or student enrollment.
 
-## Future automatic path — keep disabled until smoke tested
+## Optional Always Free OCI VM
 
-Oracle provides a pre-built Media Workflow Job Spawner Function that can react to an Object Storage **Object Create** event and start a Media Flow workflow. The spawner starts the job but does not wait for it to finish.
+The VM is **not required** for Media Flow or tomorrow's manual copy. If you still want one later:
 
-Preferred future automation:
+1. OCI Console → Compute → Instances → Create instance.
+2. Use the home region.
+3. Choose an image such as Ubuntu or Oracle Linux.
+4. Change shape → select `VM.Standard.A1.Flex` and confirm the Console labels the resources Always Free eligible.
+5. Stay within your tenancy's Always Free Ampere allocation rather than increasing paid OCPU/RAM.
+6. Use only the boot/block storage allowance you intend to keep inside the free tier.
+7. Add/download your SSH key safely.
+8. Before clicking Create, review every resource for an Always Free indication/cost estimate.
+
+Avoid adding unrelated paid resources such as non-free compute shapes, unnecessary load balancers or oversized storage just to run this media workflow.
+
+## Cost formula used by MkLMS
+
+OCI Media Flow is charged per **minute of output media**, so every rendition contributes minutes.
+
+Current conservative MkLMS launch estimate assumes one SD + two HD outputs in the 30–60 fps band:
 
 ```text
-admin obtains time-limited OCI upload authorization
-        ↓
-browser uploads directly to OCI source bucket
-        ↓
-OCI Object Create event
-        ↓
-Media Workflow Job Spawner Function
-        ↓
-ONE Media Flow job
-        ↓
-Media Flow completion event
-        ↓
-OCI-side R2 publisher/copy job
-        ↓
-verify R2 master + referenced segments
-        ↓
-MkLMS authenticated completion callback/status update
-        ↓
-media asset READY
+SD:  $0.002 per output minute
+HD:  $0.004 per output minute
+HD:  $0.004 per output minute
+-------------------------------
+total estimated rate = $0.010 per source-video minute
 ```
 
-The large file does not pass through the MkLMS Worker. A paid transcode must still have an accepted cost estimate recorded before MkLMS considers automatic processing authorized.
+Therefore:
 
-### Smoke-test rule
+```text
+estimated three-video Media Flow cost
+= combined duration of all three videos in minutes × $0.010
+```
 
-Before enabling production automation:
+Examples:
 
-1. use a tiny non-sensitive sample video;
-2. create and accept the estimate;
-3. upload it to the isolated test prefix;
-4. confirm exactly one Media Flow job starts;
-5. verify HLS is generated;
-6. verify the publisher copies the complete HLS tree to the test R2 prefix;
-7. verify playback from R2;
-8. verify failure/retry does not create uncontrolled duplicate paid jobs;
-9. only then set `MKLMS_OCI_MEDIA_AUTOMATION_ENABLED=true` for the real deployment.
+```text
+3 × 45 min = 135 min  → ~$1.35
+3 × 60 min = 180 min  → ~$1.80
+3 × 90 min = 270 min  → ~$2.70
+3 × 120 min = 360 min → ~$3.60
+```
 
-The current MkLMS implementation intentionally keeps the paid automation flag OFF by default. The manual path is production-supported even when automation is disabled.
+These are processing estimates, not Oracle invoices and not including any storage or other provider usage.
 
-## Cost responsibility
+## Future automatic path — intentionally OFF
 
-OCI Media Flow cost is based on output-media minutes and the selected codec/resolution/frame-rate profile. Multiple ABR renditions each contribute output minutes. MkLMS estimates should be checked against Oracle's current price list before a large batch.
+Preferred future automation remains:
 
-R2 storage/read-operation costs are separate. R2 Internet egress is currently free. OCI source/output storage and any non-free data transfer are also separate from Media Flow processing.
+```text
+admin gets time-limited direct OCI upload authorization
+  ↓
+browser uploads directly to OCI source bucket
+  ↓
+Object Create event
+  ↓
+Media Workflow Job Spawner
+  ↓
+ONE Media Flow job
+  ↓
+completion event
+  ↓
+OCI-side R2 publisher
+  ↓
+verify complete R2 HLS tree
+  ↓
+MkLMS status/media asset becomes READY
+```
+
+`MKLMS_OCI_MEDIA_AUTOMATION_ENABLED=false` remains the production default until a tiny paid sample has successfully completed this entire loop without duplicate Media Flow jobs.
