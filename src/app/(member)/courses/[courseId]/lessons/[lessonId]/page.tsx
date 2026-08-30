@@ -105,11 +105,19 @@ export default async function LessonPage({
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <CompleteLessonButton
-                  courseId={courseId}
-                  lessonId={lessonId}
-                  completed={lesson.completed}
-                />
+                {lesson.completionMode === "MANUAL" ? (
+                  <CompleteLessonButton
+                    courseId={courseId}
+                    lessonId={lessonId}
+                    completed={lesson.completed}
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {lesson.completed
+                      ? "Lesson completed."
+                      : "This lesson records completion automatically from its configured learning activity. The protected video player will report progress without exposing a manual completion shortcut."}
+                  </p>
+                )}
               </CardContent>
             </Card>
           </div>
