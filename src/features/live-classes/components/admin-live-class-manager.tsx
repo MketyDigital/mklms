@@ -1,13 +1,20 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Copy, MessageSquareText, Plus, Radio, Upload } from "lucide-react";
+import { Copy, Inbox, MessageSquareText, Plus, Radio, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+
+export interface AdminLiveAttendeeMessageItem {
+  id: string;
+  displayName?: string | null;
+  message: string;
+  createdAt: string;
+}
 
 export interface AdminLiveBatchItem {
   id: string;
@@ -21,6 +28,7 @@ export interface AdminLiveBatchItem {
   endedRedirectUrl?: string | null;
   notificationDestination?: string | null;
   sessions: AdminLiveSessionItem[];
+  attendeeMessages: AdminLiveAttendeeMessageItem[];
 }
 
 export interface AdminLiveSessionItem {
@@ -221,6 +229,32 @@ export function AdminLiveClassManager({
                   <div className="md:col-span-2"><Button type="submit" size="sm" disabled={busy}><Plus className="mr-1.5 size-4" /> Add session</Button></div>
                 </form>
               ) : null}
+
+              <div className="rounded-lg border bg-muted/10 p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <Inbox className="size-4" />
+                  <div>
+                    <p className="text-sm font-medium">Live attendee inbox</p>
+                    <p className="text-xs text-muted-foreground">All real attendee comments for this batch. Attendees never see each other&apos;s real comments.</p>
+                  </div>
+                  <span className="ml-auto rounded-full border px-2 py-0.5 text-xs text-muted-foreground">{batch.attendeeMessages.length}</span>
+                </div>
+                {batch.attendeeMessages.length ? (
+                  <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+                    {batch.attendeeMessages.map((item) => (
+                      <div key={item.id} className="rounded-md border bg-background p-3 text-sm">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="font-medium">{item.displayName || "Attendee"}</span>
+                          <span className="text-[11px] text-muted-foreground">{new Date(item.createdAt).toLocaleString()}</span>
+                        </div>
+                        <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{item.message}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No real attendee comments yet.</p>
+                )}
+              </div>
             </CardContent>
           </Card>
         );
