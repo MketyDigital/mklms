@@ -41,9 +41,10 @@ export class AdminAccessService {
         : parsePreauthorizationPaste(input.input);
 
     let created = 0;
+    let skippedDuplicates = 0;
 
     for (const row of parsed.rows) {
-      await this.repository.createPreauthorization({
+      const result = await this.repository.createPreauthorization({
         email: row.email ?? null,
         phone: row.phone ?? null,
         nameHint: row.name ?? null,
@@ -51,11 +52,14 @@ export class AdminAccessService {
         claimStrategy: input.claimStrategy,
         source: input.source,
       });
-      created += 1;
+
+      if (result.created) created += 1;
+      else skippedDuplicates += 1;
     }
 
     return {
       created,
+      skippedDuplicates,
       errors: parsed.errors,
     };
   }
