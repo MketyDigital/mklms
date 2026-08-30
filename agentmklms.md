@@ -26,23 +26,25 @@
 17. Media providers remain portable. OCI Object Storage → OCI Media Flow → R2 is one deployment path, not a product lock.
 18. **OCI Media Flow runs once per source + encoding profile.** Finished immutable HLS is copied to R2 and reused indefinitely for Courses and/or Live Classes. Re-transcode only if source/profile changes.
 19. Paid OCI automation defaults OFF. No automatic paid transcode is authorized without an estimate and explicit accepted-cost record.
-20. Manual OCI Console/CLI/PAR → one Media Flow job → verify HLS → copy to R2 → verify R2 → register Media Library asset is a supported production path.
+20. Manual OCI Console/CLI/PAR → one Media Flow job → verify HLS → copy to R2 → verify R2 → register Media Library asset is the preferred first-production path.
 21. A media ingest job cannot move to TRANSCODING until cost is accepted, and cannot become READY without an R2 master manifest.
 22. Future automation should be: direct OCI upload → Object Create event → Oracle Media Workflow Job Spawner → one Media Flow job → completion event → OCI-side R2 publisher → verification → MkLMS READY callback/status.
-23. Do not call automatic OCI→R2 orchestration VERIFIED until a small paid end-to-end smoke test succeeds in the target OCI tenancy/region. Current automation flag remains OFF.
+23. Automatic paid OCI→R2 orchestration remains OFF/DEFERRED until a tiny paid end-to-end smoke test succeeds in the target OCI tenancy/region.
 24. PostgreSQL is a database engine, not a vendor. Supabase/self-hosted/managed PostgreSQL remain valid.
 25. Database migrations are release operations, not Vercel/Cloudflare/OCI web-build steps.
-26. Run `npm run db:status`; if pending, run `npm run db:migrate`; run status again; then deploy. `_mklms_migrations` stores filename/checksum/applied time. Never edit an applied SQL migration.
-27. Cloudflare Workers/OpenNext is the primary production runtime. Vercel is compatibility/testing; OCI/Node remains portable and can also host separate installations.
-28. Cloudflare dashboard: Build=`npm run cf:build`; Deploy=`npx opennextjs-cloudflare deploy`. `npm run build` alone is not an OpenNext build.
-29. Cloudflare Workers Free request/CPU limits mean HLS segment traffic must go directly through media storage/CDN, not the app Worker.
-30. Independent customer installations should normally have independent database/env/secrets/storage. Cloudflare and OCI copies may coexist.
-31. Integrations remain adapter/config driven. Secret values are never rendered in Admin Settings or committed.
-32. Hosting/usage metrics must distinguish **MEASURED** from **ESTIMATED**. Never fabricate usage or provider invoices.
-33. Course watch minutes are measured from trusted playback-grant credits. Baseline live audience-minutes are explicitly ESTIMATED (`baseline × session duration`).
-34. Managed-hosting fee is a service/management charge, not an infrastructure-cost claim. Deployment settings support configurable min/max/current fee and USDT payment details (TRC20, TON or custom).
-35. Security: parameterized SQL, server-side auth, bounded inputs, rate limits, HTTP(S)-only configured URLs, no committed secrets.
-36. Every meaningful implementation/testing batch updates this file and verification evidence.
+26. Preferred migration operation is GitHub Actions → `Run MkLMS DB migrations` → type `MIGRATE`; it reads `MKLMS_DATABASE_URL`, applies only pending migrations and verifies status. Manual `db:status`/`db:migrate` remains a fallback.
+27. `_mklms_migrations` stores filename/checksum/applied time. Never edit an applied SQL migration; add a new numbered migration.
+28. Cloudflare Workers/OpenNext is the primary production runtime. Vercel is compatibility/testing; OCI/Node remains portable and can also host separate installations.
+29. Cloudflare dashboard: Build=`npm run cf:build`; Deploy=`npx opennextjs-cloudflare deploy`. `npm run build` alone is not an OpenNext build.
+30. Cloudflare Workers Free request/CPU limits mean HLS segment traffic must go directly through media storage/CDN, not the app Worker.
+31. Independent customer installations should normally have independent database/env/secrets/storage. Cloudflare and OCI copies may coexist.
+32. Integrations remain adapter/config driven. Secret values are never rendered in Admin Settings or committed.
+33. Hosting/usage metrics must distinguish **MEASURED** from **ESTIMATED**. Never fabricate usage or provider invoices.
+34. Course watch minutes are measured from trusted playback-grant credits. Baseline live audience-minutes are explicitly ESTIMATED (`baseline × session duration`).
+35. Managed-hosting fee is a service/management charge, not an infrastructure-cost claim. Deployment settings support configurable min/max/current fee and USDT payment details (TRC20, TON or custom).
+36. When managed-hosting billing is enabled, the portal owner sees the amount due, network/payment details and the instruction to pay **on or before the 28th of every month**. It does not automatically collect or verify crypto payment.
+37. Security: parameterized SQL, server-side auth, bounded inputs, rate limits, HTTP(S)-only configured URLs, no committed secrets.
+38. Every meaningful implementation/testing batch updates this file and verification evidence.
 
 ## Runtime integration variables
 
@@ -63,7 +65,7 @@ MKLMS_STORAGE_FORCE_PATH_STYLE=false
 MKLMS_MEDIA_DELIVERY_BASE_URL=
 MKLMS_MEDIA_SIGNING_SECRET=
 
-# Paid OCI media automation stays OFF until smoke-tested.
+# Paid OCI media automation stays OFF until deliberately smoke-tested.
 MKLMS_OCI_MEDIA_AUTOMATION_ENABLED=false
 MKLMS_OCI_SOURCE_BUCKET=
 MKLMS_OCI_OUTPUT_BUCKET=
@@ -82,24 +84,24 @@ MKLMS_SMTP_PASSWORD=
 MKLMS_EMAIL_FROM=
 ```
 
-## Deployment/release workflow
+## Database release workflow
 
 ```text
-Choose target installation/database
+GitHub repository secret MKLMS_DATABASE_URL
   ↓
-set direct DATABASE_URL in trusted Node 24 release shell
+Actions → Run MkLMS DB migrations
   ↓
-npm run db:status
+type MIGRATE
   ↓
-if pending: npm run db:migrate
+db:status → db:migrate → db:status
   ↓
-npm run db:status
-  ↓
-Cloudflare production: npm run cf:build → OpenNext deploy
-Vercel/Node/OCI: npm run build → deploy runtime
+Cloudflare production: cf:build → OpenNext deploy
+Vercel/Node/OCI: build → deploy runtime
   ↓
 Admin Settings DB/integration health check
 ```
+
+Migrations belong to the database, not the host. If Cloudflare and Vercel share one PostgreSQL database, migrate once. If they use separate databases, migrate each database separately.
 
 Detailed docs:
 - `docs/deployment/database-migrations.md`
@@ -136,7 +138,7 @@ Failure may enter `FAILED` and retry only from an intentional stage. Do not auto
 - `/admin/live-classes` — standalone live batches/sessions, no-media test, Chat Sync, attendee inbox
 - `/admin/messages` — internal student conversations
 - `/admin/certificates` + `/admin/certificate-templates`
-- `/admin/hosting` — measured/estimated usage + optional managed-hosting payment details
+- `/admin/hosting` — measured/estimated usage + managed-hosting monthly payment notice due by the 28th
 - `/admin/settings` — white-label settings + integration/database health
 
 ## Progress Ledger
@@ -148,9 +150,9 @@ Failure may enter `FAILED` and retry only from an intentional stage. Do not auto
 | 2026-08-30 | Phase 3 certificates/media/messages | VERIFIED | Certificates, protected playback/trusted progress, PostgreSQL messaging. |
 | 2026-08-30 | Phase 4 live classes | VERIFIED | 1–3 session simulated-live, staged/private chat, viewer modes, Telegram adapter. |
 | 2026-08-30 | Production audit | VERIFIED | Access route regression, no-media live test, real dashboard, integration status, migration history, Cloudflare commands. Exact audit head `dd0b8a7c1a9ed4368f74258eadefdf7f9376bbe4` passed CI run `33336737088`. |
-| 2026-08-30 | Migration operations | VERIFIED | `db:status`, checksum migration history, explicit cross-platform release runbook, migration `009_mklms_media_ingest_hosting.sql`. |
-| 2026-08-30 | Safe media ingest control plane | VERIFIED | Cost estimator, accepted-cost guard, ingest state machine, manual OCI→R2 production runbook, R2-manifest readiness guard. No paid OCI call occurs in CI. |
-| 2026-08-30 | Trusted hosting usage | VERIFIED | Per-playback-grant credible watch credits; measured course minutes; baseline live audience-minutes labeled estimated. |
-| 2026-08-30 | Managed hosting billing | VERIFIED | `/admin/hosting`; configurable fee range/current charge; USDT TRC20/TON/custom details; service fee separated from provider estimates. |
-| 2026-08-30 | Cloudflare production compatibility | VERIFIED | Feature head before this ledger update passed tests, lint, Node 24 Next.js production build and Cloudflare OpenNext build in CI run `33338940687`. |
-| 2026-08-30 | Automatic paid OCI Object Create→Media Flow→R2 event orchestration | IN PROGRESS | Architecture/env/guardrails defined and automation defaults OFF. Requires isolated tiny paid smoke test in target OCI tenancy before enabling/marking VERIFIED. |
+| 2026-08-31 | Migration operations | VERIFIED | Checksum migration history plus manual GitHub Actions migration workflow guarded by explicit `MIGRATE` confirmation. Current schema through migration 009. |
+| 2026-08-31 | Safe media ingest control plane | VERIFIED | Cost estimator, accepted-cost guard, ingest state machine, manual OCI→R2 runbook, R2-manifest readiness guard. Automatic paid OCI calls stay OFF. |
+| 2026-08-31 | Trusted hosting usage | VERIFIED | Per-playback-grant credible watch credits; measured course minutes; baseline live audience-minutes labeled estimated. |
+| 2026-08-31 | Managed hosting billing | VERIFIED | `/admin/hosting`; configurable fee range/current charge; USDT TRC20/TON/custom details; explicit payment-due notice on/before the 28th; service fee separated from provider estimates. |
+| 2026-08-31 | Cloudflare production compatibility | VERIFIED | Feature implementation head passed tests, lint, Node 24 Next.js production build and Cloudflare OpenNext build before final documentation changes. |
+| 2026-08-31 | Automatic paid OCI Object Create→Media Flow→R2 event orchestration | DEFERRED | Architecture/env/guardrails defined; automation defaults OFF. Enable only after isolated tiny paid smoke test in target OCI tenancy. |
