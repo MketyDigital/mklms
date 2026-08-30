@@ -25,7 +25,7 @@ export async function POST(
 
   const { courseId } = await context.params;
   const service = new AdminLearningService(new PostgresAdminLearningRepository());
-  const module = await service.createModule(courseId, parsed.data);
+  const courseModule = await service.createModule(courseId, parsed.data);
 
-  return NextResponse.json({ ok: true, module }, { status: 201 });
+  return NextResponse.json({ ok: true, module: courseModule }, { status: 201 });
 }
