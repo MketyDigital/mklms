@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS student_access_credentials (
   id TEXT PRIMARY KEY,
   student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
   provider_type TEXT NOT NULL DEFAULT 'access-code',
+  credential_lookup_hash TEXT NOT NULL,
   credential_hash TEXT NOT NULL,
   credential_salt TEXT NOT NULL,
   credential_algorithm TEXT NOT NULL DEFAULT 'scrypt',
@@ -95,6 +96,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS student_access_active_provider_unique
   ON student_access_credentials (student_id, provider_type)
   WHERE status = 'ACTIVE';
 
+CREATE UNIQUE INDEX IF NOT EXISTS student_access_lookup_unique
+  ON student_access_credentials (credential_lookup_hash)
+  WHERE status = 'ACTIVE';
+
 CREATE TABLE IF NOT EXISTS enrollments (
   id TEXT PRIMARY KEY,
   student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
@@ -109,5 +114,22 @@ CREATE TABLE IF NOT EXISTS enrollments (
 
 CREATE UNIQUE INDEX IF NOT EXISTS enrollments_student_course_unique
   ON enrollments (student_id, course_id);
+
+CREATE TABLE IF NOT EXISTS student_sessions (
+  id TEXT PRIMARY KEY,
+  student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  revoked_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_seen_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS student_sessions_student_idx
+  ON student_sessions (student_id);
+
+CREATE INDEX IF NOT EXISTS student_sessions_active_idx
+  ON student_sessions (token_hash, expires_at)
+  WHERE revoked_at IS NULL;
 
 COMMIT;
