@@ -2,10 +2,12 @@ import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 
 import { getPostgresPool } from "@/lib/postgres";
+import { normalizeIdentity } from "../domain/preauthorization";
 import type {
   AdminAccessRepository,
   AdminStudentSummary,
   CreatePreauthorizationInput,
+  CreatePreauthorizationResult,
   StudentAccessStatus,
 } from "./admin-access.repository";
 import type { AccessCodeHash, PreauthorizationRecord } from "../types";
@@ -19,7 +21,52 @@ export class PostgresAdminAccessRepository implements AdminAccessRepository {
 
   async createPreauthorization(
     input: CreatePreauthorizationInput,
-  ): Promise<PreauthorizationRecord> {
+  ): Promise<CreatePreauthorizationResult> {
+    const email = input.email ? normalizeIdentity(input.email, "email") : null;
+    const phone = input.phone ? normalizeIdentity(input.phone, "phone") : null;
+    const courseId = input.courseId ?? null;
+
+    const existing = await this.pool.query<{
+      id: string;
+      email: string | null;
+      phone: string | null;
+      name_hint: string | null;
+      course_id: string | null;
+      status: PreauthorizationRecord["status"];
+      claim_strategy: NonNullable<PreauthorizationRecord["claimStrategy"]>;
+      claim_code_hash: string | null;
+    }>(
+      `SELECT id, email, phone, name_hint, course_id, status,
+              claim_strategy, claim_code_hash
+       FROM preauthorizations
+       WHERE status IN ('PREAUTHORIZED', 'CLAIMED')
+         AND COALESCE(course_id, '') = COALESCE($3, '')
+         AND (
+           ($1::text IS NOT NULL AND LOWER(email) = $1)
+           OR ($2::text IS NOT NULL AND phone = $2)
+         )
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [email, phone, courseId],
+    );
+
+    if (existing.rows[0]) {
+      const row = existing.rows[0];
+      return {
+        created: false,
+        record: {
+          id: row.id,
+          email: row.email,
+          phone: row.phone,
+          nameHint: row.name_hint,
+          courseId: row.course_id,
+          status: row.status,
+          claimStrategy: row.claim_strategy,
+          claimCodeHash: row.claim_code_hash,
+        },
+      };
+    }
+
     const id = randomUUID();
     const result = await this.pool.query<{
       id: string;
@@ -34,16 +81,15 @@ export class PostgresAdminAccessRepository implements AdminAccessRepository {
       `INSERT INTO preauthorizations (
          id, email, phone, name_hint, course_id, claim_strategy,
          claim_code_hash, source, external_reference
-       )
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        RETURNING id, email, phone, name_hint, course_id, status,
                  claim_strategy, claim_code_hash`,
       [
         id,
-        input.email ?? null,
-        input.phone ?? null,
+        email,
+        phone,
         input.nameHint ?? null,
-        input.courseId ?? null,
+        courseId,
         input.claimStrategy,
         input.claimCodeHash ?? null,
         input.source,
@@ -53,14 +99,17 @@ export class PostgresAdminAccessRepository implements AdminAccessRepository {
 
     const row = result.rows[0];
     return {
-      id: row.id,
-      email: row.email,
-      phone: row.phone,
-      nameHint: row.name_hint,
-      courseId: row.course_id,
-      status: row.status,
-      claimStrategy: row.claim_strategy,
-      claimCodeHash: row.claim_code_hash,
+      created: true,
+      record: {
+        id: row.id,
+        email: row.email,
+        phone: row.phone,
+        nameHint: row.name_hint,
+        courseId: row.course_id,
+        status: row.status,
+        claimStrategy: row.claim_strategy,
+        claimCodeHash: row.claim_code_hash,
+      },
     };
   }
 
@@ -143,8 +192,7 @@ export class PostgresAdminAccessRepository implements AdminAccessRepository {
            id, student_id, provider_type, credential_lookup_hash,
            credential_hash, credential_salt, credential_algorithm,
            credential_prefix, status
-         )
-         VALUES ($1,$2,'access-code',$3,$4,$5,$6,$7,'ACTIVE')`,
+         ) VALUES ($1,$2,'access-code',$3,$4,$5,$6,$7,'ACTIVE')`,
         [
           randomUUID(),
           studentId,
