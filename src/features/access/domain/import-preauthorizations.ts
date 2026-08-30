@@ -1,4 +1,4 @@
-import { normalizeIdentity } from "./preauthorization";
+import { normalizeIdentity } from "./preauthorization.ts";
 
 export interface PreauthorizationImportRow {
   name?: string | null;
