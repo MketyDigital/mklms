@@ -3,6 +3,8 @@ export const ROUTES = {
   home: "/",
   login: "/login",
   onboarding: "/onboarding",
+  verifyCertificate: (certificateId: string) =>
+    `/verify/${encodeURIComponent(certificateId)}` as const,
 
   // Student
   dashboard: "/dashboard",
@@ -26,6 +28,8 @@ export const ROUTES = {
   adminCourseDetail: (courseId: string) => `/admin/courses/${courseId}` as const,
   adminCourseVideos: (courseId: string) =>
     `/admin/courses/${courseId}/videos` as const,
+  adminCertificates: "/admin/certificates",
+  adminCertificateTemplates: "/admin/certificate-templates",
   adminQuestions: "/admin/questions",
   adminMessages: "/admin/messages",
   adminSettings: "/admin/settings",
