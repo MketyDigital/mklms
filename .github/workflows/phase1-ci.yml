@@ -13,23 +13,28 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+
       - name: Upload regenerated lockfile
         uses: actions/upload-artifact@v4
         with:
           name: phase1-package-lock
           path: package-lock.json
           retention-days: 3
+
       - name: Domain tests
         run: npm test
+
       - name: Lint
         run: npm run lint
+
       - name: Build
         env:
           DATABASE_URL: postgresql://user:pass@127.0.0.1:5432/mklms
