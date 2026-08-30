@@ -33,6 +33,7 @@ export interface AdminAccessRepository {
     input: CreatePreauthorizationInput,
   ): Promise<CreatePreauthorizationResult>;
   listPreauthorizations(limit?: number): Promise<PreauthorizationRecord[]>;
+  approveManualClaim(preauthorizationId: string): Promise<void>;
   listStudents(limit?: number): Promise<AdminStudentSummary[]>;
   replaceAccessCredential(
     studentId: string,
