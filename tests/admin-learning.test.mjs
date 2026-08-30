@@ -56,13 +56,13 @@ test('admin can add ordered modules and lessons with generic media asset IDs', a
   const repo = new Repo();
   const service = new AdminLearningService(repo);
   const course = await service.createCourse({ title: 'Course One' });
-  const module = await service.createModule(course.id, { title: 'Foundation' });
-  const lesson = await service.createLesson(module.id, {
+  const courseModule = await service.createModule(course.id, { title: 'Foundation' });
+  const lesson = await service.createLesson(courseModule.id, {
     title: 'Lesson One',
     mediaAssetId: 'media-123',
   });
 
-  assert.equal(module.position, 1);
+  assert.equal(courseModule.position, 1);
   assert.equal(lesson.position, 1);
   assert.equal(lesson.mediaAssetId, 'media-123');
   assert.equal(lesson.completionMode, 'VIDEO_PROGRESS');
@@ -81,8 +81,8 @@ test('lesson can be published independently after content is ready', async () =>
   const repo = new Repo();
   const service = new AdminLearningService(repo);
   const course = await service.createCourse({ title: 'Course One' });
-  const module = await service.createModule(course.id, { title: 'Foundation' });
-  const lesson = await service.createLesson(module.id, { title: 'Lesson One' });
+  const courseModule = await service.createModule(course.id, { title: 'Foundation' });
+  const lesson = await service.createLesson(courseModule.id, { title: 'Lesson One' });
 
   await service.setLessonStatus(lesson.id, 'PUBLISHED');
   assert.equal(repo.lessons[0].status, 'PUBLISHED');
