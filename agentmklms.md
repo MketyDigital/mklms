@@ -323,5 +323,6 @@ No reusable UI should assume one business identity.
 | 2026-08-30 | Live classes | DECIDED | 1–3 session batches initially; server-clock simulated-live offset; imported timeline chat; attendee messages private-to-self + admin; optional Telegram/admin notifications; external CTA only. |
 | 2026-08-30 | Provider portability | DECIDED | PostgreSQL vendor-neutral; storage/email/auth/media/notification provider adapters required. |
 | 2026-08-30 | Architecture documentation | IMPLEMENTED | Created this persistent `agentmklms.md` blueprint and progress ledger on `architecture/mklms-reusable-platform`. |
+| 2026-08-30 | Full design specification | IMPLEMENTED | Added `docs/superpowers/specs/2026-08-30-mklms-reusable-learning-platform-design.md` covering data model, access, providers, security, certificates, messaging, live classes, migration, testing, and acceptance criteria. Placeholder scan passed. |
 
 > **Progress update rule:** every significant code/design/testing batch must update this table in the same branch/PR before being considered complete.
