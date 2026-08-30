@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { resolveLiveBatchState } from "@/features/live-classes/domain/live-session";
-import { isLiveCtaVisible } from "@/features/live-classes/domain/live-timeline";
+import { LIVE_STATE_CACHE_CONTROL } from "@/features/live-classes/domain/live-client-cache";
+import { resolveLiveBatchState, resolveViewerDisplayCount } from "@/features/live-classes/domain/live-session";
 import { PostgresLiveClassRepository } from "@/features/live-classes/repositories/postgres-live-class.repository";
 import { getOrCreateLiveViewerIdentity } from "@/features/live-classes/server/live-viewer";
 import { LiveRoomService } from "@/features/live-classes/services/live-room.service";
@@ -18,81 +18,90 @@ export async function GET(
   if (!batch) {
     return NextResponse.json(
       { ok: false, message: "This live class is not available." },
-      { status: 404 },
+      { status: 404, headers: { "Cache-Control": "public, max-age=0, s-maxage=15" } },
     );
   }
 
   const now = new Date();
   const state = resolveLiveBatchState(batch, now);
-  const viewerIdentity = await getOrCreateLiveViewerIdentity();
-  const room = new LiveRoomService(repository);
-  const heartbeat = await room.heartbeat({
-    batchId: batch.id,
-    sessionId: state.session?.id ?? null,
-    viewerTokenHash: viewerIdentity.tokenHash,
-    viewerDisplayMode: batch.viewerDisplayMode,
-    expectedViewerBaseline: batch.expectedViewerBaseline,
-    now,
-  });
-
   const session = state.session
     ? batch.sessions.find((item) => item.id === state.session?.id) ?? null
     : null;
   const stagedMessages = session
     ? await repository.listTimelineMessages(session.id)
     : [];
-  const chat = await room.getPublicChat({
-    viewerId: heartbeat.viewerId,
-    liveOffsetSeconds: state.liveOffsetSeconds ?? 0,
-    stagedMessages,
+
+  let activeViewers = 0;
+  let displayViewerCount = resolveViewerDisplayCount({
+    mode: "CONFIGURED_BASELINE",
+    baseline: batch.expectedViewerBaseline,
+    activeViewers: 0,
   });
 
-  const ctaVisible = session && state.state === "LIVE"
-    ? isLiveCtaVisible({
-        liveOffsetSeconds: state.liveOffsetSeconds ?? 0,
-        revealOffsetSeconds: session.ctaRevealOffsetSeconds,
-      })
-    : false;
+  const usesSharedCachedState = batch.viewerDisplayMode === "CONFIGURED_BASELINE";
+  if (!usesSharedCachedState) {
+    const viewerIdentity = await getOrCreateLiveViewerIdentity();
+    const heartbeat = await new LiveRoomService(repository).heartbeat({
+      batchId: batch.id,
+      sessionId: state.session?.id ?? null,
+      viewerTokenHash: viewerIdentity.tokenHash,
+      viewerDisplayMode: batch.viewerDisplayMode,
+      expectedViewerBaseline: batch.expectedViewerBaseline,
+      now,
+    });
+    activeViewers = heartbeat.activeViewers;
+    displayViewerCount = heartbeat.displayViewerCount;
+  }
 
-  return NextResponse.json({
-    ok: true,
-    serverNow: now.toISOString(),
-    batch: {
-      id: batch.id,
-      slug: batch.slug,
-      title: batch.title,
-      description: batch.description ?? null,
+  return NextResponse.json(
+    {
+      ok: true,
+      serverNow: now.toISOString(),
+      batch: {
+        id: batch.id,
+        slug: batch.slug,
+        title: batch.title,
+        description: batch.description ?? null,
+      },
+      state: state.state,
+      isLive: state.isLive,
+      liveOffsetSeconds: state.liveOffsetSeconds,
+      nextStartsAt: state.countdownTo?.toISOString() ?? null,
+      displayViewerCount,
+      activeViewers,
+      session: session
+        ? {
+            id: session.id,
+            title: session.title,
+            position: session.position,
+            startsAt: session.startsAt.toISOString(),
+            durationSeconds: session.durationSeconds,
+          }
+        : null,
+      chat: { staged: stagedMessages },
+      cta: session?.ctaText && session.ctaUrl
+        ? {
+            text: session.ctaText,
+            url: session.ctaUrl,
+            revealOffsetSeconds: session.ctaRevealOffsetSeconds ?? null,
+          }
+        : null,
+      ended: state.state === "ENDED"
+        ? {
+            message: session?.endedMessage ?? batch.endedMessage ?? "This live class has ended.",
+            redirectUrl: session?.endedRedirectUrl ?? batch.endedRedirectUrl ?? null,
+          }
+        : null,
     },
-    state: state.state,
-    isLive: state.isLive,
-    liveOffsetSeconds: state.liveOffsetSeconds,
-    nextStartsAt: state.countdownTo?.toISOString() ?? null,
-    displayViewerCount: heartbeat.displayViewerCount,
-    activeViewers: heartbeat.activeViewers,
-    session: session
-      ? {
-          id: session.id,
-          title: session.title,
-          position: session.position,
-          startsAt: session.startsAt.toISOString(),
-          durationSeconds: session.durationSeconds,
-        }
-      : null,
-    chat: {
-      staged: chat.staged,
-      own: chat.own.map((item) => ({
-        ...item,
-        createdAt: item.createdAt.toISOString(),
-      })),
+    {
+      headers: usesSharedCachedState
+        ? {
+            "Cache-Control": LIVE_STATE_CACHE_CONTROL,
+            "CDN-Cache-Control": LIVE_STATE_CACHE_CONTROL,
+          }
+        : {
+            "Cache-Control": "private, no-store",
+          },
     },
-    cta: ctaVisible && session?.ctaText && session.ctaUrl
-      ? { text: session.ctaText, url: session.ctaUrl }
-      : null,
-    ended: state.state === "ENDED"
-      ? {
-          message: session?.endedMessage ?? batch.endedMessage ?? "This live class has ended.",
-          redirectUrl: session?.endedRedirectUrl ?? batch.endedRedirectUrl ?? null,
-        }
-      : null,
-  });
+  );
 }

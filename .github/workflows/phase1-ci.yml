@@ -17,7 +17,7 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,7 +25,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
@@ -43,9 +43,16 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Build
+      - name: Next.js production build
         env:
           DATABASE_URL: postgresql://user:pass@127.0.0.1:5432/mklms
           MKLMS_ADMIN_ACCESS_KEY: ci-admin-key
           MKLMS_ADMIN_SESSION_SECRET: ci-admin-session-secret
         run: npm run build
+
+      - name: Cloudflare OpenNext build
+        env:
+          DATABASE_URL: postgresql://user:pass@127.0.0.1:5432/mklms
+          MKLMS_ADMIN_ACCESS_KEY: ci-admin-key
+          MKLMS_ADMIN_SESSION_SECRET: ci-admin-session-secret
+        run: npm run cf:build
