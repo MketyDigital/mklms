@@ -55,12 +55,19 @@ const sessionStatusSchema = z.object({
   status: z.enum(["DRAFT", "PUBLISHED"]),
 });
 
+const testNowSchema = z.object({
+  action: z.literal("testNow"),
+  title: z.string().trim().max(200).optional(),
+  expectedViewerBaseline: z.number().int().min(0).max(10_000_000).optional(),
+});
+
 const payloadSchema = z.discriminatedUnion("action", [
   createBatchSchema,
   createSessionSchema,
   timelineSchema,
   batchStatusSchema,
   sessionStatusSchema,
+  testNowSchema,
 ]);
 
 export async function POST(request: Request) {
@@ -100,6 +107,13 @@ export async function POST(request: Request) {
       case "setSessionStatus": {
         await repository.setSessionStatus(parsed.data.sessionId, parsed.data.status);
         return NextResponse.json({ ok: true, status: parsed.data.status });
+      }
+      case "testNow": {
+        const result = await service.createQuickTest({
+          title: parsed.data.title,
+          expectedViewerBaseline: parsed.data.expectedViewerBaseline,
+        });
+        return NextResponse.json({ ok: true, ...result }, { status: 201 });
       }
     }
   } catch (error) {
