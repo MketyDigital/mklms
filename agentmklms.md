@@ -9,6 +9,7 @@
 > **Verified Phase 2 branch:** `feature/mklms-phase-2-learning-progress`.
 > **Verified Phase 3 branch:** `feature/mklms-phase-3-certificates-media`.
 > **Verified Phase 4 branch:** `feature/mklms-phase-4-live-classes`.
+> **Pre-test Cloudflare/scale branch:** `feature/mklms-pretest-cloudflare-scale`.
 > **Legacy webinar reference:** `mkwebinar` branch — reference behavior only; never merge as-is.
 > **Legacy Mkety production repo:** `MketyDigital/Mkety` — READ/REFERENCE ONLY. Never edit it for MkLMS work.
 
@@ -66,8 +67,14 @@
 48. **Production edge protection is mandatory.** Put the deployed application behind Cloudflare or an equivalent WAF/DDoS/rate-limiting edge. The in-process limiter is defense-in-depth and must not be treated as a globally distributed abuse-control system.
 49. **External admin-configured navigation URLs are HTTP(S)-only.** Reject `javascript:`, `data:`, `file:`, malformed and protocol-relative destinations before storage/use.
 50. **Bound untrusted payloads.** Login credentials, live comments, live-class configuration and staged-chat imports must remain schema-limited so attackers cannot create uncontrolled memory/database/notification work.
-51. **For high-audience webinars, prefer `CONFIGURED_BASELINE`.** Once a viewer identity exists, this mode reuses it without recurring presence writes or active-viewer count queries. `ACTIVE_ONLY` and `BASELINE_PLUS_ACTIVE` intentionally cost more because they measure presence.
+51. **For high-audience webinars, prefer `CONFIGURED_BASELINE`.** In this mode the shared `/api/live/[slug]/state` response contains no viewer identity/private comments, performs no presence heartbeat/count, and is eligible for a short Cloudflare edge cache. `ACTIVE_ONLY` and `BASELINE_PLUS_ACTIVE` remain private/no-store because they intentionally measure presence.
 52. **Do not serve video bytes from PostgreSQL or the Next.js app.** Production HLS/static media belongs on object storage + CDN. Use versioned immutable segment keys, CDN caching, and short-lived edge authorization without destroying the shared cache key.
+53. **High-scale baseline live rooms do not continuously poll state.** The browser advances live offset, staged timeline messages, CTA reveal timing and playback position from the server-clock snapshot. Refresh shared state at session boundaries, when a hidden tab becomes visible, and only on a low-frequency safety interval.
+54. **Attendee-facing private live-comment history is browser-local after submission.** Each comment is persisted once to PostgreSQL for the authoritative admin inbox/notification path, then mirrored into that attendee browser storage (bounded recent history). Shared state must never refetch that attendee's private comments.
+55. **Cloudflare is the primary production runtime/edge target, starting on Workers Free.** Vercel is a compatibility/test deployment. Node/OCI remains a portable fallback. Do not require Cloudflare Pro or other paid Cloudflare products; Workers Paid may be adopted later when usage requires it.
+56. **Runtime compatibility target is Node.js 24.x and Next.js 16.3.3+ security-compatible releases.** CI must verify Node 24, the standard Next.js production build, and the Cloudflare OpenNext bundle before deployment changes are merged.
+57. **Cloudflare Hyperdrive is optional, not a database vendor lock.** MkLMS continues to use PostgreSQL; free Supabase PostgreSQL, self-hosted PostgreSQL, and other compatible deployments may all sit behind the same data layer. Hyperdrive may provide Worker-side connection pooling/caching where useful.
+58. **OCI Media Flow transcoding is not yet implemented as an MkLMS adapter.** The intended production behavior is one-time ingest/transcode per source+encoding profile, persistent immutable HLS output in object storage/CDN, and indefinite reuse by future viewers. Do not claim automatic OCI transcoding is operational until that adapter/job lifecycle is implemented and verified.
 
 ---
 
@@ -176,7 +183,7 @@ Render admin template → private storage
 Optional email + student/admin download + verification + internal message
 ```
 
-Known deployment stack OCI → Media Flow → R2 → Cloudflare is supported conceptually but remains an adapter choice.
+Known deployment stack OCI → Media Flow → R2 → Cloudflare remains the intended low-cost media path, but automatic OCI Media Flow ingest/transcoding is still a PLANNED provider/job adapter rather than an implemented upload feature. Once implemented, each source/profile is transcoded once and its stored HLS output is reused.
 
 ---
 
@@ -220,22 +227,26 @@ After session/batch
 
 At minimum store `expectedViewerBaseline` (or equivalent) in admin-controlled live-session/batch configuration. Keep the domain extensible for:
 
-- `CONFIGURED_BASELINE` — display the admin-set expected/baseline audience. This is the preferred high-scale/low-write mode; an existing viewer identity is reused without recurring heartbeat writes or active-count queries.
-- `ACTIVE_ONLY` — display measured currently-active viewers when presence tracking is enabled. This intentionally updates presence and queries active viewers.
-- `BASELINE_PLUS_ACTIVE` — combine configured baseline with actual presence when desired. This intentionally carries the same presence cost as active measurement.
+- `CONFIGURED_BASELINE` — display the admin-set expected/baseline audience. This is the preferred high-scale mode. Its shared state has no viewer identity/presence work and may be edge-cached for a few seconds.
+- `ACTIVE_ONLY` — display measured currently-active viewers when presence tracking is enabled. This intentionally updates presence and queries active viewers and therefore remains private/no-store.
+- `BASELINE_PLUS_ACTIVE` — combine configured baseline with actual presence when desired. This intentionally carries the same presence cost as active measurement and remains private/no-store.
 
 Do not hardcode counts or use uncontrolled per-refresh randomness. If a simulated display adjustment is later supported, it must be deterministic/configurable and stable for the session.
+
+### High-scale shared timeline
+
+For `CONFIGURED_BASELINE`, one shared server snapshot provides the current session, server time, complete staged timeline and CTA reveal offset. The browser advances the deterministic timeline locally. Do not restore 10-second per-viewer state polling. Current resynchronization rules are session-boundary refresh, tab-visibility refresh, and a five-minute safety refresh. Cloudflare should apply a Free-plan Cache Rule to `/api/live/*/state` and respect the origin short CDN cache headers.
 
 ### Chat
 
 ```text
-Imported staged timeline message → visible to all at correct offset
-Attendee's own live message       → visible to that attendee + admin
+Imported staged timeline message → shared snapshot, revealed locally at correct offset
+Attendee's own live message       → persisted once for admin + mirrored to that browser storage
 Other attendees' live messages   → not visible to attendee
 Real live message                → durable PostgreSQL live inbox + optional NotificationProvider
 ```
 
-The live attendee inbox is authoritative. Telegram or another notification adapter may alert an owner, but notification failure must not roll back or hide an already-persisted attendee message.
+The live attendee inbox is authoritative. Telegram or another notification adapter may alert an owner, but notification failure must not roll back or hide an already-persisted attendee message. The attendee-facing browser history is a convenience copy only and is bounded to the recent local history; shared live-state reads must not retrieve it from PostgreSQL.
 
 ---
 
@@ -280,16 +291,29 @@ Implemented application controls:
 - Bounded Zod input sizes for authentication, live comments, live-class configuration and timeline imports.
 - Bounded application rate limiting on admin login, student access-code login and live attendee comments.
 - Security response headers including HSTS in production, nosniff, frame restrictions, referrer policy, permissions policy and a base CSP.
-- High-scale baseline live mode avoids recurring active-viewer counts and avoids recurring viewer heartbeat writes once identity exists.
+- High-scale baseline live state avoids viewer identity, recurring active-viewer counts, recurring heartbeat writes and high-frequency shared-state polling.
+- Baseline staged chat/CTA advance in the browser from a server-clock snapshot; private attendee history is browser-local after one authoritative server write.
+- Node.js 24.x + Next.js 16.3.3 standard production build and Cloudflare OpenNext build are CI contracts.
 
 Required production infrastructure controls:
 
-- Cloudflare/equivalent DDoS protection, WAF managed rules, bot controls where available, and edge rate-limiting rules for login/claim/message/API endpoints.
+- Cloudflare Free may be used as the initial production edge/runtime. Use Workers, Cache Rules, DNS/TLS and available free protections first; no Cloudflare Pro dependency is required.
+- Create a narrow cache rule for the shared baseline `/api/live/*/state` GET route. Never cache login, claim, playback authorization, admin, student-session or message mutation endpoints.
 - TLS-only production traffic; strong randomly generated server secrets stored only in deployment secret management.
 - PostgreSQL connection pooling, backups/PITR, monitoring, slow-query visibility and sensible connection/query limits.
-- Object storage + CDN for all large media; never proxy large video streams through the application server.
+- Cloudflare Hyperdrive is optional for Worker→PostgreSQL connection management and does not change MkLMS's PostgreSQL portability.
+- Object storage + CDN for all large media; never proxy large video streams through the application server/Worker.
 - HLS media should use immutable/versioned segment paths, long cache lifetime for segments and short-lived authorization at the edge. Token validation should not produce a unique CDN cache object per viewer.
 - Monitoring/alerting for auth failures, 429s, elevated 5xx, DB saturation, storage failures and notification failures.
+
+### Cloudflare / Vercel deployment contract
+
+- Cloudflare Workers is the intended production runtime, starting on the Free plan.
+- `wrangler.jsonc` + `open-next.config.ts` define the OpenNext Worker bundle.
+- `npm run cf:build` must pass before Cloudflare deployment changes are accepted.
+- A known OpenNext/node-postgres tracing issue requires Next `outputFileTracingIncludes` to retain `pg-cloudflare/dist/**` and `pg-cloudflare/esm/**` in the Worker bundle until the upstream issue is resolved.
+- Vercel is a test/compatibility target. `npm run build` on Node 24 must remain green; OCI Node/container deployment should use the same Node major for parity.
+- `DATABASE_URL` remains the generic direct PostgreSQL configuration for Node/Vercel. Cloudflare Hyperdrive may later supply a pooled PostgreSQL connection string/binding without changing domain repositories.
 
 ---
 
@@ -302,6 +326,7 @@ Required production infrastructure controls:
 - `feature/mklms-phase-2-learning-progress` — verified Phase 2.
 - `feature/mklms-phase-3-certificates-media` — verified Phase 3.
 - `feature/mklms-phase-4-live-classes` — verified Phase 4 simulated-live classes/webinar plus production hardening before consolidation.
+- `feature/mklms-pretest-cloudflare-scale` — Node 24, Next 16.3.3, Cloudflare Free/OpenNext compatibility and high-audience live-state/browser-chat optimization before external deployment testing.
 - Implementation plan: `docs/superpowers/plans/2026-08-30-mklms-implementation-plan.md`.
 - Design spec: `docs/superpowers/specs/2026-08-30-mklms-reusable-learning-platform-design.md`.
 
@@ -330,7 +355,13 @@ Required production infrastructure controls:
 | 2026-08-30 | Phase 4 — admin operations | VERIFIED | Admin Live Classes UI/API creates reusable batches, enforces 1–3 sessions, selects Media Library assets, configures schedule/viewer mode/CTA/expiry/notification routing, imports staged chat, publishes sessions, activates batches, copies public links, and displays real attendee inbox. |
 | 2026-08-30 | Phase 4 automated verification | VERIFIED | Initial complete Phase 4 implementation head `41fe61399fc3dbc77dbe59aa71719430bc53623e` passed **112/112 tests, lint, and Next.js production build** in GitHub Actions run `33321397091`. |
 | 2026-08-30 | Production hardening — abuse/XSS/input limits | VERIFIED | Added HTTP(S)-only external URL validation, bounded request payloads, bounded per-process rate limits for admin/student login and live comments, and security response headers. Security/rate-limit regressions are covered by automated tests. |
-| 2026-08-30 | Production hardening — high-viewer database cost | VERIFIED | `CONFIGURED_BASELINE` now reuses existing viewer identity without recurring presence writes or active-viewer count queries; measured-presence modes retain their intentional heartbeat/count behavior. |
-| 2026-08-30 | Hardened automated verification | VERIFIED | Hardened implementation head `1916fdc78ceafaad20b4512286fd42bc0d3fe9bb` passed **114/114 tests, lint, and Next.js production build** in GitHub Actions run `33322834903`. |
+| 2026-08-30 | Production hardening — high-viewer database cost | VERIFIED | `CONFIGURED_BASELINE` originally removed recurring active-viewer counts/heartbeat writes and is now further optimized into fully shared state with no viewer identity/presence work. |
+| 2026-08-30 | Hardened automated verification | VERIFIED | Hardened implementation head `1916fdc78ceafaad20b4512286fd42bc0d3fe9bb` passed the then-current test suite, lint, and Next.js production build in GitHub Actions run `33322834903`. |
+| 2026-08-30 | Pre-test runtime — Node/Vercel/OCI parity | VERIFIED | Runtime pinned to Node 24.x; Next.js upgraded to 16.3.3; standard Next.js production build passes under Node 24. Vercel is test/compatibility only; OCI Node/container should use the same major. |
+| 2026-08-30 | Pre-test runtime — Cloudflare Free/OpenNext | VERIFIED | OpenNext 1.20.4 + Wrangler configuration added; known `pg-cloudflare` trace files explicitly included. Exact feature head passed the Cloudflare OpenNext build in GitHub Actions run `33325488318`. |
+| 2026-08-30 | Pre-test scale — shared webinar state | VERIFIED | `CONFIGURED_BASELINE` state is viewer-neutral/cacheable; staged timeline and CTA reveal advance locally; 10-second state polling removed in favor of session-boundary, visibility and five-minute safety synchronization. |
+| 2026-08-30 | Pre-test scale — attendee private chat | VERIFIED | Server persists each real attendee comment once for authoritative admin/notification use; attendee-facing history is restored from bounded browser `localStorage`, eliminating repeated PostgreSQL reads for own live comments. |
+| 2026-08-30 | Pre-test automated verification | VERIFIED | Feature head before this ledger-only update passed **121/121 tests, lint, Node 24 Next.js production build, and Cloudflare OpenNext production bundle** in GitHub Actions run `33325488318`. |
+| 2026-08-30 | OCI automatic media transcode adapter | PLANNED | Architecture is fixed as one-time source/profile transcode → persistent HLS output → object storage/CDN reuse, but the actual OCI Media Flow job adapter/orchestration is not yet implemented in MkLMS. |
 
 > **Progress update rule:** every meaningful design/code/testing batch must update this ledger in the same branch/PR before being considered complete.
