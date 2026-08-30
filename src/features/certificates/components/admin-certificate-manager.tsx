@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RefreshCw, RotateCcw, ShieldX } from "lucide-react";
+import { MessageCircle, RefreshCw, RotateCcw, ShieldX } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -36,7 +36,7 @@ export function AdminCertificateManager({
 
   async function runAction(
     certificateId: string,
-    action: "revoke" | "restore" | "redeliver",
+    action: "revoke" | "restore" | "redeliver" | "message",
   ) {
     setBusyId(certificateId);
     setMessage(null);
@@ -53,7 +53,9 @@ export function AdminCertificateManager({
       setMessage(
         action === "redeliver"
           ? "Certificate PDF/email delivery was triggered."
-          : `Certificate ${action === "revoke" ? "revoked" : "restored"}.`,
+          : action === "message"
+            ? "Certificate notice sent through internal messages."
+            : `Certificate ${action === "revoke" ? "revoked" : "restored"}.`,
       );
       router.refresh();
     } catch (error) {
@@ -126,6 +128,15 @@ export function AdminCertificateManager({
                     >
                       <RefreshCw className="mr-1.5 size-4" />
                       Generate / resend
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busyId === certificate.id}
+                      onClick={() => void runAction(certificate.id, "message")}
+                    >
+                      <MessageCircle className="mr-1.5 size-4" />
+                      Send in Messages
                     </Button>
                     <Button
                       size="sm"
