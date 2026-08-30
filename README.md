@@ -69,3 +69,4 @@ npm run db:migrate
 ## Architecture source of truth
 
 Read `agentmklms.md` before changing product boundaries, authentication, media delivery, live-class behavior, tenancy/provider abstractions, or infrastructure decisions.
+
