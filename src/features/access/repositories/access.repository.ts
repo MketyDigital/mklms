@@ -27,6 +27,13 @@ export interface CreateSessionInput {
   expiresAt: Date;
 }
 
+export interface ActiveSessionRecord {
+  studentId: string;
+  displayName: string;
+  email?: string | null;
+  expiresAt: Date;
+}
+
 export interface AccessRepository {
   findPreauthorization(
     identity: ClaimIdentityInput,
@@ -49,5 +56,9 @@ export interface AccessRepository {
   ): Promise<ActiveCredentialRecord | null>;
   activateEnrollment(studentId: string, courseId: string): Promise<void>;
   createSession(studentId: string, input: CreateSessionInput): Promise<void>;
+  findActiveSessionByTokenHash(
+    tokenHash: string,
+    now: Date,
+  ): Promise<ActiveSessionRecord | null>;
   revokeSession(tokenHash: string): Promise<void>;
 }
