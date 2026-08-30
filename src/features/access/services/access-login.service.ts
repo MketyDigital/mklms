@@ -1,12 +1,12 @@
 import {
   getAccessCodeLookupHash,
   verifyAccessCode,
-} from "../domain/access-code";
+} from "../domain/access-code.ts";
 import {
   createSessionToken,
   hashSessionToken,
-} from "../domain/session";
-import type { AccessRepository } from "../repositories/access.repository";
+} from "../domain/session.ts";
+import type { AccessRepository } from "../repositories/access.repository.ts";
 
 export interface AccessLoginServiceOptions {
   sessionTtlSeconds: number;
