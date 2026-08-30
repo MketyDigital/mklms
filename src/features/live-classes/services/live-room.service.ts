@@ -15,6 +15,10 @@ export interface LiveAttendeeMessageRecord {
 }
 
 export interface LiveRoomRepository {
+  findViewerByTokenHash(
+    batchId: string,
+    viewerTokenHash: string,
+  ): Promise<{ id: string; displayName?: string | null } | null>;
   upsertViewerHeartbeat(input: {
     batchId: string;
     sessionId?: string | null;
@@ -56,14 +60,29 @@ export class LiveRoomService {
     displayViewerCount: number;
   }> {
     const now = input.now ?? new Date();
-    const viewer = await this.repository.upsertViewerHeartbeat({
-      batchId: input.batchId,
-      sessionId: input.sessionId ?? null,
-      viewerTokenHash: input.viewerTokenHash,
-      displayName: input.displayName ?? null,
-    });
-
     const needsMeasuredPresence = input.viewerDisplayMode !== "CONFIGURED_BASELINE";
+
+    let viewer: { id: string };
+    if (needsMeasuredPresence) {
+      viewer = await this.repository.upsertViewerHeartbeat({
+        batchId: input.batchId,
+        sessionId: input.sessionId ?? null,
+        viewerTokenHash: input.viewerTokenHash,
+        displayName: input.displayName ?? null,
+      });
+    } else {
+      const existingViewer = await this.repository.findViewerByTokenHash(
+        input.batchId,
+        input.viewerTokenHash,
+      );
+      viewer = existingViewer ?? await this.repository.upsertViewerHeartbeat({
+        batchId: input.batchId,
+        sessionId: input.sessionId ?? null,
+        viewerTokenHash: input.viewerTokenHash,
+        displayName: input.displayName ?? null,
+      });
+    }
+
     const activeViewers = needsMeasuredPresence
       ? await this.repository.countActiveViewers({
           batchId: input.batchId,
