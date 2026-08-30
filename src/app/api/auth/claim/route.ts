@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { verifyClaimCode } from "@/features/access/domain/claim-code";
+import { decideClaimVerification } from "@/features/access/domain/claim-strategy";
 import { getAccessRuntime } from "@/features/access/server/runtime";
 
 const claimSchema = z
@@ -43,28 +44,27 @@ export async function POST(request: Request) {
 
   const strategy =
     preauthorization.claimStrategy || settings.claimVerificationStrategy;
-
-  let verified = strategy === "preauth-only";
-
-  if (strategy === "claim-code") {
-    verified = Boolean(
+  const claimCodeValid = Boolean(
+    strategy === "claim-code" &&
       parsed.data.claimCode &&
-        preauthorization.claimCodeHash &&
-        verifyClaimCode(parsed.data.claimCode, preauthorization.claimCodeHash),
-    );
+      preauthorization.claimCodeHash &&
+      verifyClaimCode(parsed.data.claimCode, preauthorization.claimCodeHash),
+  );
+  const decision = decideClaimVerification({
+    strategy,
+    claimCodeValid,
+    manualApproved: Boolean(preauthorization.manualApprovedAt),
+  });
 
-    if (!verified) {
-      return NextResponse.json(
-        { ok: false, message: NEUTRAL_CLAIM_FAILURE },
-        { status: 401 },
-      );
-    }
+  if (decision.status === "REJECTED") {
+    return NextResponse.json(
+      { ok: false, message: NEUTRAL_CLAIM_FAILURE },
+      { status: 401 },
+    );
   }
 
-  if (strategy === "manual-approval") {
-    if (preauthorization.manualApprovedAt) {
-      verified = true;
-    } else {
+  if (decision.status === "PENDING") {
+    if (strategy === "manual-approval") {
       await repository.markPreauthorizationClaimRequested(preauthorization.id);
       return NextResponse.json(
         {
@@ -77,9 +77,7 @@ export async function POST(request: Request) {
         { status: 409 },
       );
     }
-  }
 
-  if (!verified) {
     return NextResponse.json(
       {
         ok: false,
