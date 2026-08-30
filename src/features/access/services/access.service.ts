@@ -2,9 +2,9 @@ import {
   generateAccessCode,
   getAccessCodeLookupHash,
   hashAccessCode,
-} from "../domain/access-code";
-import type { AccessRepository } from "../repositories/access.repository";
-import type { ClaimIdentityInput } from "../types";
+} from "../domain/access-code.ts";
+import type { AccessRepository } from "../repositories/access.repository.ts";
+import type { ClaimIdentityInput } from "../types.ts";
 
 export interface AccessServiceOptions {
   accessCodePrefix: string;
