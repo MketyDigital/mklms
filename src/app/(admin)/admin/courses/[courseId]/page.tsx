@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AdminCourseBuilder } from "@/features/courses/components/admin/admin-course-builder";
 import { PostgresLearningRepository } from "@/features/courses/repositories/postgres-learning.repository";
+import { PostgresAdminMediaRepository } from "@/features/media/repositories/postgres-admin-media.repository";
 import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
 
 export const dynamic = "force-dynamic";
@@ -17,8 +18,9 @@ export default async function AdminCourseBuilderPage({
   params: Promise<{ courseId: string }>;
 }) {
   const { courseId } = await params;
-  const [course, settings] = await Promise.all([
+  const [course, mediaAssets, settings] = await Promise.all([
     new PostgresLearningRepository().getCourseStructure(courseId),
+    new PostgresAdminMediaRepository().listAssets(),
     new PostgresSettingsRepository().getPlatformSettings(),
   ]);
 
@@ -52,7 +54,16 @@ export default async function AdminCourseBuilderPage({
           </p>
         </div>
 
-        <AdminCourseBuilder course={course} />
+        <AdminCourseBuilder
+          course={course}
+          mediaAssets={mediaAssets.map((asset) => ({
+            id: asset.id,
+            title: asset.title,
+            sourceType: asset.sourceType,
+            durationSeconds: asset.durationSeconds ?? null,
+            status: asset.status,
+          }))}
+        />
       </div>
     </AppLayout>
   );
