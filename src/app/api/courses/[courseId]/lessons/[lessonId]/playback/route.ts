@@ -1,0 +1,62 @@
+import { NextResponse } from "next/server";
+
+import { getCurrentStudentSession } from "@/features/access/server/current-student";
+import { PostgresMediaPlaybackRepository } from "@/features/media/repositories/postgres-media-playback.repository";
+import { MediaPlaybackService } from "@/features/media/services/media-playback.service";
+import { getConfiguredMediaProvider } from "@/providers/signed-delivery-media-provider";
+
+export async function POST(
+  _request: Request,
+  context: {
+    params: Promise<{ courseId: string; lessonId: string }>;
+  },
+) {
+  const session = await getCurrentStudentSession();
+  if (!session) {
+    return NextResponse.json({ ok: false, message: "Unauthorized." }, { status: 401 });
+  }
+
+  const { courseId, lessonId } = await context.params;
+
+  try {
+    const service = new MediaPlaybackService(
+      new PostgresMediaPlaybackRepository(),
+      getConfiguredMediaProvider(),
+      { ttlSeconds: 300 },
+    );
+
+    const result = await service.authorizeLessonPlayback(
+      session.studentId,
+      courseId,
+      lessonId,
+      { sessionExpiresAt: session.expiresAt },
+    );
+
+    if (!result.ok) {
+      const status =
+        result.reason === "COURSE_NOT_AVAILABLE" ||
+        result.reason === "LESSON_NOT_AVAILABLE" ||
+        result.reason === "MEDIA_NOT_AVAILABLE"
+          ? 404
+          : result.reason === "LESSON_LOCKED"
+            ? 409
+            : 403;
+
+      return NextResponse.json(result, { status });
+    }
+
+    return NextResponse.json(result, {
+      headers: {
+        "Cache-Control": "private, no-store",
+      },
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Protected playback is unavailable.";
+
+    return NextResponse.json(
+      { ok: false, reason: "PLAYBACK_CONFIGURATION_ERROR", message },
+      { status: 503 },
+    );
+  }
+}
