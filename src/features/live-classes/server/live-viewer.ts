@@ -1,9 +1,9 @@
 import { cookies } from "next/headers";
 
 import {
-  generateViewerToken,
-  hashViewerToken,
-  isValidViewerToken,
+  generateLiveViewerToken,
+  hashLiveViewerToken,
+  isValidLiveViewerToken,
 } from "../domain/viewer-token";
 
 export const LIVE_VIEWER_COOKIE = "mklms_live_viewer";
@@ -17,7 +17,9 @@ export interface LiveViewerIdentity {
 export async function getOrCreateLiveViewerIdentity(): Promise<LiveViewerIdentity> {
   const cookieStore = await cookies();
   const existing = cookieStore.get(LIVE_VIEWER_COOKIE)?.value;
-  const token = existing && isValidViewerToken(existing) ? existing : generateViewerToken();
+  const token = existing && isValidLiveViewerToken(existing)
+    ? existing
+    : generateLiveViewerToken();
 
   if (token !== existing) {
     cookieStore.set(LIVE_VIEWER_COOKIE, token, {
@@ -31,7 +33,7 @@ export async function getOrCreateLiveViewerIdentity(): Promise<LiveViewerIdentit
 
   return {
     token,
-    tokenHash: hashViewerToken(token),
+    tokenHash: hashLiveViewerToken(token),
     isNew: token !== existing,
   };
 }
@@ -39,6 +41,6 @@ export async function getOrCreateLiveViewerIdentity(): Promise<LiveViewerIdentit
 export async function getLiveViewerIdentity(): Promise<LiveViewerIdentity | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(LIVE_VIEWER_COOKIE)?.value;
-  if (!token || !isValidViewerToken(token)) return null;
-  return { token, tokenHash: hashViewerToken(token), isNew: false };
+  if (!token || !isValidLiveViewerToken(token)) return null;
+  return { token, tokenHash: hashLiveViewerToken(token), isNew: false };
 }
