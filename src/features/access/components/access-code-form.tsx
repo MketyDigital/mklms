@@ -19,23 +19,23 @@ export function AccessCodeForm() {
     setMessage(null);
 
     try {
-      const response = await fetch("/api/auth/login", {
+      const response = await fetch("/api/access/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         body: JSON.stringify({ accessCode }),
       });
-      const result = await response.json();
+      const result = await response.json().catch(() => null) as { ok?: boolean; message?: string } | null;
 
-      if (!response.ok || !result.ok) {
-        setMessage(result.message ?? "We could not sign you in with that access code.");
+      if (!response.ok || !result?.ok) {
+        setMessage(result?.message ?? "We could not sign you in with that access code.");
         return;
       }
 
       router.replace("/dashboard");
       router.refresh();
     } catch {
-      setMessage("The portal could not be reached. Please try again.");
+      setMessage("The portal could not be reached. Please check your connection and try again.");
     } finally {
       setSubmitting(false);
     }
