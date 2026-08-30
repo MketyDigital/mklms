@@ -45,6 +45,13 @@ export interface VideoProgressRepository {
     lastPositionSeconds: number,
     lessonCompleted: boolean,
   ): Promise<void>;
+  recordCreditedWatch?(
+    grantId: string,
+    studentId: string,
+    courseId: string,
+    lessonId: string,
+    creditedSeconds: number,
+  ): Promise<void>;
   markEnrollmentCompleted(studentId: string, courseId: string): Promise<void>;
 }
 
@@ -187,6 +194,13 @@ export class VideoProgressService {
       creditedPercent,
       creditedPositionSeconds,
       lessonCompleted,
+    );
+    await this.repository.recordCreditedWatch?.(
+      input.grantId,
+      input.studentId,
+      input.courseId,
+      input.lessonId,
+      creditedPositionSeconds,
     );
 
     if (lessonCompleted) {
