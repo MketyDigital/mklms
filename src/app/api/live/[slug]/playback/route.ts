@@ -35,14 +35,21 @@ export async function POST(
     }
     return NextResponse.json({
       ...result,
-      authorization: {
-        ...result.authorization,
-        expiresAt: result.authorization.expiresAt?.toISOString() ?? null,
-      },
+      authorization: result.authorization
+        ? {
+            ...result.authorization,
+            expiresAt: result.authorization.expiresAt?.toISOString() ?? null,
+          }
+        : null,
     });
   } catch (error) {
     return NextResponse.json(
-      { ok: false, state: "LIVE", reason: "MEDIA_UNAVAILABLE", message: error instanceof Error ? error.message : "Live playback is unavailable." },
+      {
+        ok: false,
+        state: "LIVE",
+        reason: "MEDIA_UNAVAILABLE",
+        message: error instanceof Error ? error.message : "Live playback is unavailable.",
+      },
       { status: 503 },
     );
   }
