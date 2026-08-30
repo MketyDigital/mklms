@@ -13,7 +13,7 @@ class InMemoryAdminRepository {
   async createPreauthorization(input) {
     const row = { id: `pre-${this.preauthorizations.length + 1}`, ...input, status: 'PREAUTHORIZED' };
     this.preauthorizations.push(row);
-    return row;
+    return { record: row, created: true };
   }
 
   async replaceAccessCredential(studentId, credential) {
@@ -40,6 +40,7 @@ test('admin can preauthorize a paid student without a payment-provider dependenc
   assert.equal(result.email, 'paid@example.com');
   assert.equal(result.phone, '2348030000000');
   assert.equal(result.status, 'PREAUTHORIZED');
+  assert.equal(result.created, true);
 });
 
 test('admin reset issues a new access code while persisting only secure credential material', async () => {
