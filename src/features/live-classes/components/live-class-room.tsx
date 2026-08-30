@@ -7,6 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  appendOwnLiveComment,
+  ownLiveCommentStorageKey,
+  parseOwnLiveComments,
+  type OwnLiveComment,
+} from "../domain/live-client-cache";
+import {
   resolveBroadcastPosition,
   shouldCorrectBroadcastPosition,
 } from "../domain/broadcast-position";
@@ -20,11 +26,9 @@ interface LiveRoomState {
   liveOffsetSeconds: number | null;
   nextStartsAt: string | null;
   displayViewerCount: number;
-  activeViewers: number;
   session: { id: string; title: string; position: number; startsAt: string; durationSeconds: number } | null;
   chat: {
     staged: Array<{ id: string; offsetSeconds: number; displayName: string; message: string }>;
-    own: Array<{ id: string; displayName?: string | null; message: string; createdAt: string }>;
   };
   cta: { text: string; url: string } | null;
   ended: { message: string; redirectUrl: string | null } | null;
@@ -66,9 +70,19 @@ export function LiveClassRoom({ slug, organizationName }: { slug: string; organi
   const [displayName, setDisplayName] = useState("");
   const [comment, setComment] = useState("");
   const [sending, setSending] = useState(false);
+  const [ownComments, setOwnComments] = useState<OwnLiveComment[]>([]);
+
+  const storageKey = useMemo(() => ownLiveCommentStorageKey(slug), [slug]);
+
+  useEffect(() => {
+    setOwnComments(parseOwnLiveComments(window.localStorage.getItem(storageKey)));
+  }, [storageKey]);
 
   const fetchState = useCallback(async () => {
-    const response = await fetch(`/api/live/${encodeURIComponent(slug)}/state`, { cache: "no-store", credentials: "same-origin" });
+    const response = await fetch(`/api/live/${encodeURIComponent(slug)}/state`, {
+      cache: "default",
+      credentials: "same-origin",
+    });
     const payload = (await response.json()) as LiveRoomState | { ok: false; message?: string };
     if (!response.ok || !payload.ok) throw new Error("message" in payload ? payload.message ?? "This live class is unavailable." : "This live class is unavailable.");
     roomStateRef.current = payload;
@@ -176,9 +190,9 @@ export function LiveClassRoom({ slug, organizationName }: { slug: string; organi
     if (!roomState) return [];
     return [
       ...roomState.chat.staged.map((item) => ({ id: `staged-${item.id}`, name: item.displayName, message: item.message, mine: false })),
-      ...roomState.chat.own.map((item) => ({ id: `own-${item.id}`, name: item.displayName || displayName || "You", message: item.message, mine: true })),
+      ...ownComments.map((item) => ({ id: `own-${item.id}`, name: item.displayName || displayName || "You", message: item.message, mine: true })),
     ];
-  }, [displayName, roomState]);
+  }, [displayName, ownComments, roomState]);
 
   async function sendComment() {
     const text = comment.trim();
@@ -189,10 +203,14 @@ export function LiveClassRoom({ slug, organizationName }: { slug: string; organi
         method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
         body: JSON.stringify({ displayName: displayName.trim() || undefined, message: text }),
       });
-      const payload = (await response.json()) as { ok?: boolean; message?: string };
-      if (!response.ok || !payload.ok) throw new Error(payload.message ?? "Comment could not be sent.");
+      const payload = (await response.json()) as { ok?: boolean; message?: OwnLiveComment | string };
+      if (!response.ok || !payload.ok || !payload.message || typeof payload.message === "string") {
+        throw new Error(typeof payload.message === "string" ? payload.message : "Comment could not be sent.");
+      }
+      const next = appendOwnLiveComment(ownComments, payload.message);
+      setOwnComments(next);
+      window.localStorage.setItem(storageKey, JSON.stringify(next));
       setComment("");
-      await fetchState();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Comment could not be sent.");
     } finally { setSending(false); }
