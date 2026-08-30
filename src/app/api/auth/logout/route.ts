@@ -2,10 +2,8 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
 import { hashSessionToken } from "@/features/access/domain/session";
-import {
-  getAccessRuntime,
-  STUDENT_SESSION_COOKIE,
-} from "@/features/access/server/runtime";
+import { getAccessRuntime } from "@/features/access/server/runtime";
+import { STUDENT_SESSION_COOKIE } from "@/features/access/server/session-cookie";
 
 export async function POST() {
   const cookieStore = await cookies();
