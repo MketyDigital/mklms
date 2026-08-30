@@ -42,6 +42,22 @@ export async function PATCH(
     return NextResponse.json({ ok: true, job });
   }
 
+  if (parsed.data.state === "TRANSCODING" && !current.costAcceptedAt) {
+    return NextResponse.json(
+      { ok: false, message: "Accept the Media Flow estimate before starting a paid transcode." },
+      { status: 409 },
+    );
+  }
+  if (
+    parsed.data.state === "READY" &&
+    !(parsed.data.r2MasterManifest?.trim() || current.r2MasterManifest?.trim())
+  ) {
+    return NextResponse.json(
+      { ok: false, message: "R2 master manifest is required before media can be marked READY." },
+      { status: 409 },
+    );
+  }
+
   let state: MediaIngestState;
   try {
     state = nextMediaIngestState(current.state, parsed.data.state);
