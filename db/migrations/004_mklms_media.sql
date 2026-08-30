@@ -39,24 +39,4 @@ BEGIN
   END IF;
 END $$;
 
-CREATE TABLE IF NOT EXISTS media_playback_grants (
-  id TEXT PRIMARY KEY,
-  student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-  course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
-  lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
-  media_asset_id TEXT NOT NULL REFERENCES media_assets(id) ON DELETE CASCADE,
-  started_at TIMESTAMPTZ NOT NULL,
-  expires_at TIMESTAMPTZ NOT NULL,
-  revoked_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT media_playback_grants_time_check CHECK (expires_at > started_at)
-);
-
-CREATE INDEX IF NOT EXISTS media_playback_grants_student_lesson_idx
-  ON media_playback_grants (student_id, lesson_id, expires_at DESC);
-
-CREATE INDEX IF NOT EXISTS media_playback_grants_active_idx
-  ON media_playback_grants (id, expires_at)
-  WHERE revoked_at IS NULL;
-
 COMMIT;
