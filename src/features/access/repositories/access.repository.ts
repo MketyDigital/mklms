@@ -16,6 +16,17 @@ export interface StudentRecord extends CreateStudentInput {
   id: string;
 }
 
+export interface ActiveCredentialRecord {
+  studentId: string;
+  status: "ACTIVE";
+  hash: AccessCodeHash;
+}
+
+export interface CreateSessionInput {
+  tokenHash: string;
+  expiresAt: Date;
+}
+
 export interface AccessRepository {
   findPreauthorization(
     identity: ClaimIdentityInput,
@@ -27,7 +38,16 @@ export interface AccessRepository {
   ): Promise<void>;
   replaceAccessCredential(
     studentId: string,
-    credential: { hash: AccessCodeHash; prefix: string },
+    credential: {
+      hash: AccessCodeHash;
+      lookupHash: string;
+      prefix: string;
+    },
   ): Promise<void>;
+  findActiveCredentialByLookupHash(
+    lookupHash: string,
+  ): Promise<ActiveCredentialRecord | null>;
   activateEnrollment(studentId: string, courseId: string): Promise<void>;
+  createSession(studentId: string, input: CreateSessionInput): Promise<void>;
+  revokeSession(tokenHash: string): Promise<void>;
 }
