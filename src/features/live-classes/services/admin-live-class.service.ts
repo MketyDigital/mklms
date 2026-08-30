@@ -1,4 +1,4 @@
-import { normalizeSafeExternalUrl } from "@/lib/security/external-url.ts";
+import { normalizeSafeExternalUrl } from "../../../lib/security/external-url.ts";
 import type { ViewerDisplayMode } from "../domain/live-session.ts";
 import {
   parseLiveChatCsv,
