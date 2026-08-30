@@ -75,10 +75,7 @@ export class AccessAdminService {
     }
 
     const result = await this.repository.createPreauthorization(normalized);
-    return {
-      ...result.record,
-      created: result.created,
-    };
+    return { ...result.record, created: result.created };
   }
 
   async bulkPreauthorize(input: BulkPreauthorizeInput) {
@@ -114,7 +111,9 @@ export class AccessAdminService {
           courseId: row.courseId ?? input.courseId,
           claimStrategy: input.claimStrategy,
           claimCode,
-          source: input.source ?? (input.mode === "csv" ? "csv-import" : "bulk-paste"),
+          source:
+            input.source ??
+            (input.mode === "csv" ? "csv-import" : "bulk-paste"),
         });
 
         if (!result.created) {
@@ -146,6 +145,10 @@ export class AccessAdminService {
       created,
       errors,
     };
+  }
+
+  async approveManualClaim(preauthorizationId: string): Promise<void> {
+    await this.repository.approveManualClaim(preauthorizationId);
   }
 
   async resetStudentAccessCode(studentId: string) {
