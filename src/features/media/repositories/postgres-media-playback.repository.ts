@@ -3,7 +3,10 @@ import type { Pool } from "pg";
 import { getPostgresPool } from "@/lib/postgres";
 import { PostgresLearningRepository } from "@/features/courses/repositories/postgres-learning.repository";
 import type { MediaAsset } from "@/providers/media-provider";
-import type { MediaPlaybackRepository } from "../services/media-playback.service";
+import type {
+  CreatePlaybackGrantInput,
+  MediaPlaybackRepository,
+} from "../services/media-playback.service";
 
 export class PostgresMediaPlaybackRepository
   extends PostgresLearningRepository
@@ -49,5 +52,24 @@ export class PostgresMediaPlaybackRepository
       providerAssetId: row.provider_asset_id,
       status: row.processing_status === "READY" ? "READY" : row.processing_status,
     };
+  }
+
+  async createPlaybackGrant(input: CreatePlaybackGrantInput): Promise<void> {
+    await this.mediaPool.query(
+      `INSERT INTO media_playback_grants (
+         id, student_id, course_id, lesson_id, media_asset_id,
+         started_at, expires_at, created_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+      [
+        input.id,
+        input.studentId,
+        input.courseId,
+        input.lessonId,
+        input.mediaAssetId,
+        input.startedAt,
+        input.expiresAt,
+      ],
+    );
   }
 }
