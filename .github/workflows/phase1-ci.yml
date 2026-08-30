@@ -1,9 +1,13 @@
-name: MkLMS Phase 1 CI
+name: MkLMS CI
 
 on:
   pull_request:
     branches:
       - architecture/mklms-reusable-platform
+      - feature/mklms-phase-1-foundation-access
+  push:
+    branches:
+      - feature/mklms-phase-2-learning-progress
   workflow_dispatch:
 
 jobs:
@@ -25,7 +29,7 @@ jobs:
       - name: Upload regenerated lockfile
         uses: actions/upload-artifact@v4
         with:
-          name: phase1-package-lock
+          name: package-lock
           path: package-lock.json
           retention-days: 3
 
