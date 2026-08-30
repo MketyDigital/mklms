@@ -1,0 +1,52 @@
+name: Run MkLMS DB migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type MIGRATE to apply pending migrations to the configured database"
+        required: true
+        type: string
+
+jobs:
+  migrate:
+    if: ${{ github.event.inputs.confirm == 'MIGRATE' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: database-migrations
+    env:
+      DATABASE_URL: ${{ secrets.MKLMS_DATABASE_URL }}
+      DATABASE_SSL: ${{ secrets.MKLMS_DATABASE_SSL }}
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Verify migration database secret
+        shell: bash
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "Missing GitHub secret MKLMS_DATABASE_URL"
+            exit 1
+          fi
+          if [ -z "$DATABASE_SSL" ]; then
+            echo "DATABASE_SSL not set; defaulting to require"
+            echo "DATABASE_SSL=require" >> "$GITHUB_ENV"
+          fi
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Show pending migration status
+        continue-on-error: true
+        run: npm run db:status
+
+      - name: Apply pending migrations once
+        run: npm run db:migrate
+
+      - name: Verify database is current
+        run: npm run db:status
