@@ -6,11 +6,20 @@ import type {
 import {
   resolveLiveBatchState,
   type LiveBatchDefinition,
+  type LiveSessionDefinition,
 } from "../domain/live-session.ts";
 
 export interface LivePlaybackRepository {
   getMediaAsset(id: string): Promise<MediaAsset | null>;
 }
+
+export type LivePlaybackSession = LiveSessionDefinition & {
+  mediaAssetId?: string | null;
+};
+
+export type LivePlaybackBatch = Omit<LiveBatchDefinition, "sessions"> & {
+  sessions: LivePlaybackSession[];
+};
 
 export type LivePlaybackResult =
   | {
@@ -45,11 +54,7 @@ export class LivePlaybackService {
   }
 
   async authorize(input: {
-    batch: LiveBatchDefinition & {
-      sessions: Array<
-        LiveBatchDefinition["sessions"][number] & { mediaAssetId?: string | null }
-      >;
-    };
+    batch: LivePlaybackBatch;
     viewerId: string;
     now?: Date;
   }): Promise<LivePlaybackResult> {
