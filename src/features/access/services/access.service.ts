@@ -1,4 +1,8 @@
-import { generateAccessCode, hashAccessCode } from "../domain/access-code";
+import {
+  generateAccessCode,
+  getAccessCodeLookupHash,
+  hashAccessCode,
+} from "../domain/access-code";
 import type { AccessRepository } from "../repositories/access.repository";
 import type { ClaimIdentityInput } from "../types";
 
@@ -22,10 +26,7 @@ export class AccessService {
   private readonly repository: AccessRepository;
   private readonly options: AccessServiceOptions;
 
-  constructor(
-    repository: AccessRepository,
-    options: AccessServiceOptions,
-  ) {
+  constructor(repository: AccessRepository, options: AccessServiceOptions) {
     this.repository = repository;
     this.options = options;
   }
@@ -56,6 +57,7 @@ export class AccessService {
 
     await this.repository.replaceAccessCredential(student.id, {
       hash,
+      lookupHash: getAccessCodeLookupHash(accessCode),
       prefix: this.options.accessCodePrefix,
     });
 
