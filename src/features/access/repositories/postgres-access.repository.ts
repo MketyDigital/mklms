@@ -38,9 +38,12 @@ export class PostgresAccessRepository implements AccessRepository {
       status: PreauthorizationRecord["status"];
       claim_strategy: NonNullable<PreauthorizationRecord["claimStrategy"]>;
       claim_code_hash: string | null;
+      claim_requested_at: Date | null;
+      manual_approved_at: Date | null;
     }>(
       `SELECT id, email, phone, name_hint, course_id, status,
-              claim_strategy, claim_code_hash
+              claim_strategy, claim_code_hash, claim_requested_at,
+              manual_approved_at
        FROM preauthorizations
        WHERE status = 'PREAUTHORIZED'
          AND (
@@ -64,7 +67,25 @@ export class PostgresAccessRepository implements AccessRepository {
       status: row.status,
       claimStrategy: row.claim_strategy,
       claimCodeHash: row.claim_code_hash,
+      claimRequestedAt: row.claim_requested_at
+        ? new Date(row.claim_requested_at)
+        : null,
+      manualApprovedAt: row.manual_approved_at
+        ? new Date(row.manual_approved_at)
+        : null,
     };
+  }
+
+  async markPreauthorizationClaimRequested(
+    preauthorizationId: string,
+  ): Promise<void> {
+    await this.pool.query(
+      `UPDATE preauthorizations
+       SET claim_requested_at = COALESCE(claim_requested_at, NOW()),
+           updated_at = NOW()
+       WHERE id = $1 AND status = 'PREAUTHORIZED'`,
+      [preauthorizationId],
+    );
   }
 
   async createStudent(input: CreateStudentInput): Promise<StudentRecord> {
