@@ -8,6 +8,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { PostgresCertificateRepository } from "@/features/certificates/repositories/postgres-certificate.repository";
+import { CertificateVerificationService } from "@/features/certificates/services/certificate-verification.service";
 import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
 
 export const dynamic = "force-dynamic";
@@ -18,16 +19,15 @@ export default async function VerifyCertificatePage({
   params: Promise<{ certificateId: string }>;
 }) {
   const { certificateId } = await params;
-  const [certificate, settings] = await Promise.all([
-    new PostgresCertificateRepository().findPublicVerification(
-      decodeURIComponent(certificateId),
-    ),
+  const [verification, settings] = await Promise.all([
+    new CertificateVerificationService(
+      new PostgresCertificateRepository(),
+    ).verify(decodeURIComponent(certificateId)),
     new PostgresSettingsRepository().getPlatformSettings(),
   ]);
 
-  const valid = Boolean(
-    certificate && certificate.status === "ISSUED" && !certificate.revokedAt,
-  );
+  const found = verification.state !== "NOT_FOUND";
+  const valid = verification.state === "VERIFIED";
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-muted/20 px-4 py-10">
@@ -40,7 +40,7 @@ export default async function VerifyCertificatePage({
           <CardDescription>Certificate verification</CardDescription>
         </CardHeader>
         <CardContent>
-          {!certificate ? (
+          {!found ? (
             <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-5 text-center">
               <ShieldX className="mx-auto size-8 text-destructive" />
               <p className="mt-3 font-medium">Certificate not found</p>
@@ -81,26 +81,26 @@ export default async function VerifyCertificatePage({
                   <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     Student
                   </dt>
-                  <dd className="mt-1 font-medium">{certificate.certificateNameSnapshot}</dd>
+                  <dd className="mt-1 font-medium">{verification.holderName}</dd>
                 </div>
                 <div>
                   <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     Course
                   </dt>
-                  <dd className="mt-1 font-medium">{certificate.courseTitle}</dd>
+                  <dd className="mt-1 font-medium">{verification.courseTitle}</dd>
                 </div>
                 <div>
                   <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     Completed
                   </dt>
-                  <dd className="mt-1">{certificate.completionDate}</dd>
+                  <dd className="mt-1">{verification.completionDate}</dd>
                 </div>
                 <div>
                   <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     Certificate ID
                   </dt>
                   <dd className="mt-1 break-all font-mono text-sm">
-                    {certificate.certificateId}
+                    {verification.certificateId}
                   </dd>
                 </div>
               </dl>
