@@ -11,7 +11,7 @@ const mockQuestions: Question[] = [
 
 export const mockQuestionService: QuestionService = {
   async getAll() { return mockQuestions; },
-  async answer(id, _text) {
+  async answer(id) {
     const q = mockQuestions.find((q) => q.id === id);
     if (!q) throw new Error("Not found");
     q.answered = true;
