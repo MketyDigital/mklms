@@ -5,50 +5,53 @@ import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
 import { PostgresAdminLiveClassRepository } from "@/features/live-classes/repositories/postgres-admin-live-class.repository";
 import { AdminLiveClassService } from "@/features/live-classes/services/admin-live-class.service";
 
+const optionalShortText = z.string().trim().max(500).optional().nullable();
+const optionalUrl = z.string().trim().max(2048).optional().nullable();
+
 const createBatchSchema = z.object({
   action: z.literal("createBatch"),
-  title: z.string(),
-  slug: z.string().optional().nullable(),
-  description: z.string().optional().nullable(),
-  expectedViewerBaseline: z.number().int().min(0).optional(),
+  title: z.string().trim().min(1).max(200),
+  slug: z.string().trim().max(200).optional().nullable(),
+  description: z.string().trim().max(5000).optional().nullable(),
+  expectedViewerBaseline: z.number().int().min(0).max(10_000_000).optional(),
   viewerDisplayMode: z.enum(["CONFIGURED_BASELINE", "ACTIVE_ONLY", "BASELINE_PLUS_ACTIVE"]).optional(),
-  endedMessage: z.string().optional().nullable(),
-  endedRedirectUrl: z.string().optional().nullable(),
-  notificationDestination: z.string().optional().nullable(),
+  endedMessage: z.string().trim().max(5000).optional().nullable(),
+  endedRedirectUrl: optionalUrl,
+  notificationDestination: optionalShortText,
 });
 
 const createSessionSchema = z.object({
   action: z.literal("createSession"),
-  batchId: z.string().min(1),
-  title: z.string(),
+  batchId: z.string().min(1).max(200),
+  title: z.string().trim().min(1).max(200),
   position: z.number().int().min(1).max(3),
   startsAt: z.string().datetime(),
-  durationSeconds: z.number().int().positive(),
-  mediaAssetId: z.string().optional().nullable(),
+  durationSeconds: z.number().int().positive().max(12 * 60 * 60),
+  mediaAssetId: z.string().trim().max(200).optional().nullable(),
   status: z.enum(["DRAFT", "PUBLISHED"]).optional(),
-  ctaText: z.string().optional().nullable(),
-  ctaUrl: z.string().optional().nullable(),
-  ctaRevealOffsetSeconds: z.number().int().min(0).optional().nullable(),
-  endedMessage: z.string().optional().nullable(),
-  endedRedirectUrl: z.string().optional().nullable(),
+  ctaText: optionalShortText,
+  ctaUrl: optionalUrl,
+  ctaRevealOffsetSeconds: z.number().int().min(0).max(12 * 60 * 60).optional().nullable(),
+  endedMessage: z.string().trim().max(5000).optional().nullable(),
+  endedRedirectUrl: optionalUrl,
 });
 
 const timelineSchema = z.object({
   action: z.literal("importTimeline"),
-  sessionId: z.string().min(1),
+  sessionId: z.string().min(1).max(200),
   format: z.enum(["csv", "text"]),
-  content: z.string(),
+  content: z.string().max(2_000_000),
 });
 
 const batchStatusSchema = z.object({
   action: z.literal("setBatchStatus"),
-  batchId: z.string().min(1),
+  batchId: z.string().min(1).max(200),
   status: z.enum(["DRAFT", "ACTIVE", "ARCHIVED"]),
 });
 
 const sessionStatusSchema = z.object({
   action: z.literal("setSessionStatus"),
-  sessionId: z.string().min(1),
+  sessionId: z.string().min(1).max(200),
   status: z.enum(["DRAFT", "PUBLISHED"]),
 });
 
