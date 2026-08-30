@@ -63,13 +63,13 @@ export async function ensureCourseCertificate(
   let storage;
   try {
     storage = getConfiguredStorageProvider();
-  } catch (error) {
+  } catch {
     return {
       issued: true,
       created: issued.created,
       certificateId: issued.certificate.certificateId,
       deliveryStatus: "PENDING_STORAGE",
-      error: error instanceof Error ? error.message : "Storage is not configured.",
+      error: "Certificate delivery is not available yet.",
     };
   }
 
@@ -89,13 +89,13 @@ export async function ensureCourseCertificate(
       deliveryStatus: "DELIVERED",
       emailStatus: result.emailStatus,
     };
-  } catch (error) {
+  } catch {
     return {
       issued: true,
       created: issued.created,
       certificateId: issued.certificate.certificateId,
       deliveryStatus: "DELIVERY_FAILED",
-      error: error instanceof Error ? error.message : "Certificate delivery failed.",
+      error: "Certificate delivery could not be completed.",
     };
   }
 }
