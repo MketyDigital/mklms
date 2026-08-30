@@ -1,15 +1,17 @@
 import {
-  Home,
+  Award,
+  BarChart3,
   BookOpen,
-  MessageCircle,
-  User,
-  Users,
   FolderOpen,
   HelpCircle,
+  Home,
   Inbox,
-  Settings,
+  KeyRound,
   LayoutDashboard,
-  Receipt,
+  MessageCircle,
+  Settings,
+  User,
+  Users,
 } from "lucide-react";
 import { ROUTES } from "@/config/routes";
 
@@ -23,15 +25,16 @@ export interface NavItem {
 export const memberNav: NavItem[] = [
   { label: "Dashboard", href: ROUTES.dashboard, icon: Home },
   { label: "Courses", href: ROUTES.courses, icon: BookOpen },
+  { label: "Progress", href: ROUTES.progress, icon: BarChart3 },
+  { label: "Certificates", href: ROUTES.certificates, icon: Award },
   { label: "Messages", href: ROUTES.messages, icon: MessageCircle },
-  { label: "Subscriptions", href: ROUTES.subscriptions, icon: Receipt },
   { label: "Profile", href: ROUTES.profile, icon: User },
 ];
 
 export const adminNav: NavItem[] = [
   { label: "Admin Home", href: ROUTES.admin, icon: LayoutDashboard },
-  { label: "Members", href: ROUTES.adminMembers, icon: Users },
-  { label: "Subscriptions", href: ROUTES.adminSubscriptions, icon: Receipt },
+  { label: "Access & Enrollments", href: ROUTES.adminAccess, icon: KeyRound },
+  { label: "Students", href: ROUTES.adminMembers, icon: Users },
   { label: "Manage Courses", href: ROUTES.adminCourses, icon: FolderOpen },
   { label: "Questions", href: ROUTES.adminQuestions, icon: HelpCircle },
   { label: "All Messages", href: ROUTES.adminMessages, icon: Inbox },
