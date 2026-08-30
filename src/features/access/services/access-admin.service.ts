@@ -2,18 +2,18 @@ import {
   generateAccessCode,
   getAccessCodeLookupHash,
   hashAccessCode,
-} from "../domain/access-code";
-import { hashClaimCode } from "../domain/claim-code";
+} from "../domain/access-code.ts";
+import { hashClaimCode } from "../domain/claim-code.ts";
 import {
   parsePreauthorizationCsv,
   parsePreauthorizationPaste,
-} from "../domain/import-preauthorizations";
+} from "../domain/import-preauthorizations.ts";
 import type {
   AdminAccessRepository,
   CreatePreauthorizationInput,
   StudentAccessStatus,
-} from "../repositories/admin-access.repository";
-import type { ClaimVerificationStrategy } from "../domain/claim-verification";
+} from "../repositories/admin-access.repository.ts";
+import type { ClaimVerificationStrategy } from "../domain/claim-verification.ts";
 
 export interface AccessAdminServiceOptions {
   accessCodePrefix: string;
