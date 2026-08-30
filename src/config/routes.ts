@@ -5,6 +5,7 @@ export const ROUTES = {
   onboarding: "/onboarding",
   verifyCertificate: (certificateId: string) =>
     `/verify/${encodeURIComponent(certificateId)}` as const,
+  liveClass: (slug: string) => `/live/${encodeURIComponent(slug)}` as const,
 
   // Student
   dashboard: "/dashboard",
@@ -30,6 +31,7 @@ export const ROUTES = {
   adminMedia: "/admin/media",
   adminCertificates: "/admin/certificates",
   adminCertificateTemplates: "/admin/certificate-templates",
+  adminLiveClasses: "/admin/live-classes",
   adminQuestions: "/admin/questions",
   adminMessages: "/admin/messages",
   adminSettings: "/admin/settings",
