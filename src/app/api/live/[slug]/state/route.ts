@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 
 import { LIVE_STATE_CACHE_CONTROL } from "@/features/live-classes/domain/live-client-cache";
 import { resolveLiveBatchState, resolveViewerDisplayCount } from "@/features/live-classes/domain/live-session";
-import { isLiveCtaVisible } from "@/features/live-classes/domain/live-timeline";
 import { PostgresLiveClassRepository } from "@/features/live-classes/repositories/postgres-live-class.repository";
 import { getOrCreateLiveViewerIdentity } from "@/features/live-classes/server/live-viewer";
 import { LiveRoomService } from "@/features/live-classes/services/live-room.service";
@@ -32,12 +31,6 @@ export async function GET(
     ? await repository.listTimelineMessages(session.id)
     : [];
 
-  const visibleStaged = session
-    ? stagedMessages
-        .filter((item) => item.offsetSeconds <= (state.liveOffsetSeconds ?? 0))
-        .slice(-20)
-    : [];
-
   let activeViewers = 0;
   let displayViewerCount = resolveViewerDisplayCount({
     mode: "CONFIGURED_BASELINE",
@@ -59,13 +52,6 @@ export async function GET(
     activeViewers = heartbeat.activeViewers;
     displayViewerCount = heartbeat.displayViewerCount;
   }
-
-  const ctaVisible = session && state.state === "LIVE"
-    ? isLiveCtaVisible({
-        liveOffsetSeconds: state.liveOffsetSeconds ?? 0,
-        revealOffsetSeconds: session.ctaRevealOffsetSeconds,
-      })
-    : false;
 
   return NextResponse.json(
     {
@@ -92,9 +78,13 @@ export async function GET(
             durationSeconds: session.durationSeconds,
           }
         : null,
-      chat: { staged: visibleStaged },
-      cta: ctaVisible && session?.ctaText && session.ctaUrl
-        ? { text: session.ctaText, url: session.ctaUrl }
+      chat: { staged: stagedMessages },
+      cta: session?.ctaText && session.ctaUrl
+        ? {
+            text: session.ctaText,
+            url: session.ctaUrl,
+            revealOffsetSeconds: session.ctaRevealOffsetSeconds ?? null,
+          }
         : null,
       ended: state.state === "ENDED"
         ? {
