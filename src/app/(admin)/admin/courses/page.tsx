@@ -1,32 +1,37 @@
 import { AppLayout } from "@/components/layout/app-layout";
-import { courseService } from "@/features/courses";
-import { CreateCourseDialog } from "@/features/courses/components/admin/create-course-dialog";
-import { AdminCourseList } from "@/features/courses/components/admin/admin-course-list";
+import { AdminCourseManager } from "@/features/courses/components/admin/admin-course-manager";
+import { PostgresAdminLearningRepository } from "@/features/courses/repositories/postgres-admin-learning.repository";
+import { AdminLearningService } from "@/features/courses/services/admin-learning.service";
+import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
 
-const CURRENT_USER = {
-  name: "Foyzul Karim",
-  email: "foyzul@example.com",
-  avatar: undefined,
-};
+export const dynamic = "force-dynamic";
 
 export default async function AdminCoursesPage() {
-  const courses = await courseService.getAll();
+  const [courses, settings] = await Promise.all([
+    new AdminLearningService(new PostgresAdminLearningRepository()).listCourses(),
+    new PostgresSettingsRepository().getPlatformSettings(),
+  ]);
 
   return (
-    <AppLayout user={CURRENT_USER} isAdmin={true} unreadMessages={5}>
-      <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Manage Courses
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {courses.length} courses
-            </p>
-          </div>
-          <CreateCourseDialog />
+    <AppLayout
+      user={{
+        name: settings.supportName ?? settings.organizationName,
+        email: settings.supportEmail ?? "",
+        avatar: undefined,
+      }}
+      isAdmin={true}
+      unreadMessages={0}
+    >
+      <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Courses
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Create reusable courses, then organize them into modules and lessons.
+          </p>
         </div>
-        <AdminCourseList courses={courses} />
+        <AdminCourseManager initialCourses={courses} />
       </div>
     </AppLayout>
   );

@@ -1,10 +1,10 @@
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(
     public status: number,
-    message: string
+    message: string,
+    public payload?: unknown,
   ) {
     super(message);
     this.name = "ApiError";
@@ -13,11 +13,12 @@ class ApiError extends Error {
 
 async function request<T>(
   endpoint: string,
-  options?: RequestInit
+  options?: RequestInit,
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
 
   const res = await fetch(url, {
+    credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
       ...options?.headers,
@@ -25,34 +26,25 @@ async function request<T>(
     ...options,
   });
 
+  const payload = await res.json().catch(() => null);
   if (!res.ok) {
-    throw new ApiError(res.status, `API error: ${res.status} ${res.statusText}`);
+    const message =
+      payload && typeof payload === "object" && "message" in payload
+        ? String(payload.message)
+        : `API error: ${res.status} ${res.statusText}`;
+    throw new ApiError(res.status, message, payload);
   }
 
-  return res.json();
+  return payload as T;
 }
 
 export const apiClient = {
   get: <T>(endpoint: string) => request<T>(endpoint),
-
   post: <T>(endpoint: string, body: unknown) =>
-    request<T>(endpoint, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-
+    request<T>(endpoint, { method: "POST", body: JSON.stringify(body) }),
   put: <T>(endpoint: string, body: unknown) =>
-    request<T>(endpoint, {
-      method: "PUT",
-      body: JSON.stringify(body),
-    }),
-
+    request<T>(endpoint, { method: "PUT", body: JSON.stringify(body) }),
   patch: <T>(endpoint: string, body: unknown) =>
-    request<T>(endpoint, {
-      method: "PATCH",
-      body: JSON.stringify(body),
-    }),
-
-  delete: <T>(endpoint: string) =>
-    request<T>(endpoint, { method: "DELETE" }),
+    request<T>(endpoint, { method: "PATCH", body: JSON.stringify(body) }),
+  delete: <T>(endpoint: string) => request<T>(endpoint, { method: "DELETE" }),
 };

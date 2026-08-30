@@ -1,10 +1,8 @@
 import type { CourseService } from "./course.service";
 import type {
-  Course,
   CourseWithProgress,
   VideoWithProgress,
   Video,
-  VideoDetail,
   QAItem,
   Resource,
 } from "../types";

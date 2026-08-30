@@ -1,6 +1,6 @@
-import type { SiteSettings } from "../types";
+import type { PlatformSettings } from "../types";
 
 export interface SettingsService {
-  getSettings(): Promise<SiteSettings>;
-  updateSettings(data: Partial<SiteSettings>): Promise<SiteSettings>;
+  getSettings(): Promise<PlatformSettings>;
+  updateSettings(data: Partial<PlatformSettings>): Promise<PlatformSettings>;
 }
