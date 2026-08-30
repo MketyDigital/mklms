@@ -23,6 +23,7 @@ export const ROUTES = {
   adminAccess: "/admin/access",
   adminMembers: "/admin/members",
   adminCourses: "/admin/courses",
+  adminCourseDetail: (courseId: string) => `/admin/courses/${courseId}` as const,
   adminCourseVideos: (courseId: string) =>
     `/admin/courses/${courseId}/videos` as const,
   adminQuestions: "/admin/questions",
