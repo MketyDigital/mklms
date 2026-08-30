@@ -97,7 +97,10 @@ export function LiveClassRoom({ slug, organizationName }: { slug: string; organi
   const storageKey = useMemo(() => ownLiveCommentStorageKey(slug), [slug]);
 
   useEffect(() => {
-    setOwnComments(parseOwnLiveComments(window.localStorage.getItem(storageKey)));
+    const timer = window.setTimeout(() => {
+      setOwnComments(parseOwnLiveComments(window.localStorage.getItem(storageKey)));
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [storageKey]);
 
   const fetchState = useCallback(async () => {
@@ -148,15 +151,17 @@ export function LiveClassRoom({ slug, organizationName }: { slug: string; organi
 
   useEffect(() => {
     let active = true;
-    void fetchState()
-      .catch((caught) => {
-        if (active) {
-          setError(caught instanceof Error ? caught.message : "This live class is unavailable.");
-        }
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+    const initialFetch = window.setTimeout(() => {
+      void fetchState()
+        .catch((caught) => {
+          if (active) {
+            setError(caught instanceof Error ? caught.message : "This live class is unavailable.");
+          }
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    }, 0);
 
     const clock = window.setInterval(() => setNowMs(Date.now()), 1_000);
     const safetyRefresh = window.setInterval(() => {
@@ -171,6 +176,7 @@ export function LiveClassRoom({ slug, organizationName }: { slug: string; organi
 
     return () => {
       active = false;
+      window.clearTimeout(initialFetch);
       window.clearInterval(clock);
       window.clearInterval(safetyRefresh);
       document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -231,7 +237,7 @@ export function LiveClassRoom({ slug, organizationName }: { slug: string; organi
     return resolveBroadcastPosition({
       liveOffsetSeconds: roomState.liveOffsetSeconds,
       serverNow: new Date(roomState.serverNow),
-      clientNow: new Date(nowMs || Date.now()),
+      clientNow: new Date(nowMs || new Date(roomState.serverNow).getTime()),
       durationSeconds: roomState.session.durationSeconds,
     });
   }, [nowMs, roomState]);
