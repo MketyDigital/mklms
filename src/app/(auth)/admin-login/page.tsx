@@ -10,6 +10,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminLoginPage() {
   const settings = await new PostgresSettingsRepository().getPlatformSettings();
 
@@ -24,7 +26,6 @@ export default async function AdminLoginPage() {
             {settings.organizationName} administration
           </p>
         </div>
-
         <Card className="mt-8">
           <CardHeader>
             <CardTitle>Admin access</CardTitle>
@@ -32,9 +33,7 @@ export default async function AdminLoginPage() {
               Use the deployment&apos;s configured administrator credential. Enterprise identity providers can replace this built-in method.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <AdminLoginForm />
-          </CardContent>
+          <CardContent><AdminLoginForm /></CardContent>
         </Card>
       </div>
     </div>
