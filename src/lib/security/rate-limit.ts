@@ -18,7 +18,7 @@ export class FixedWindowRateLimiter {
   constructor(options: { limit: number; windowMs: number; maxEntries?: number }) {
     this.limit = Math.max(1, Math.floor(options.limit));
     this.windowMs = Math.max(1_000, Math.floor(options.windowMs));
-    this.maxEntries = Math.max(100, Math.floor(options.maxEntries ?? 10_000));
+    this.maxEntries = Math.max(1, Math.floor(options.maxEntries ?? 10_000));
   }
 
   get size(): number {
