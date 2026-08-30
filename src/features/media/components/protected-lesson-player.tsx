@@ -76,7 +76,6 @@ export function ProtectedLessonPlayer({
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
 
     requestPlayback()
       .catch((caught) => {
