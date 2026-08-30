@@ -1,4 +1,5 @@
 import type { CourseStructure } from "../domain/model";
+import { getPublishedCourseStructure } from "../domain/publication";
 import {
   calculateCourseProgress,
   canAccessLesson,
@@ -57,10 +58,11 @@ export class StudentLearningService {
     const result: StudentCourseSummary[] = [];
 
     for (const courseId of courseIds) {
-      const [course, enrollment] = await Promise.all([
+      const [rawCourse, enrollment] = await Promise.all([
         this.repository.getCourseStructure(courseId),
         this.repository.getEnrollment(studentId, courseId),
       ]);
+      const course = rawCourse ? getPublishedCourseStructure(rawCourse) : null;
 
       if (
         !course ||
@@ -73,10 +75,13 @@ export class StudentLearningService {
       const completed = new Set(
         await this.repository.getCompletedLessonIds(studentId, courseId),
       );
-      const totalLessons = course.modules.reduce(
-        (total, module) => total + module.lessons.length,
-        0,
+      const visibleLessonIds = new Set(
+        course.modules.flatMap((module) => module.lessons.map((lesson) => lesson.id)),
       );
+      const completedLessons = Array.from(completed).filter((lessonId) =>
+        visibleLessonIds.has(lessonId),
+      ).length;
+      const totalLessons = visibleLessonIds.size;
 
       result.push({
         id: course.id,
@@ -86,7 +91,7 @@ export class StudentLearningService {
         status: course.status,
         enrollmentStatus: enrollment.status,
         totalLessons,
-        completedLessons: completed.size,
+        completedLessons,
         progressPercent: calculateCourseProgress(course, completed),
       });
     }
@@ -98,10 +103,11 @@ export class StudentLearningService {
     studentId: string,
     courseId: string,
   ): Promise<StudentCourseView | null> {
-    const [course, enrollment] = await Promise.all([
+    const [rawCourse, enrollment] = await Promise.all([
       this.repository.getCourseStructure(courseId),
       this.repository.getEnrollment(studentId, courseId),
     ]);
+    const course = rawCourse ? getPublishedCourseStructure(rawCourse) : null;
 
     if (
       !course ||
