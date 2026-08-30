@@ -38,9 +38,9 @@ export function getIntegrationStatus(env: EnvLike = process.env): IntegrationSta
     {
       id: "smtp",
       label: "SMTP email",
-      configured: all(env, ["SMTP_HOST", "SMTP_FROM"]),
-      requiredVariables: ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"],
-      description: "Optional certificate and transactional email delivery. User/password may be omitted only when the SMTP provider permits it.",
+      configured: (env.MKLMS_EMAIL_PROVIDER ?? "none") !== "none" && all(env, ["MKLMS_SMTP_HOST", "MKLMS_EMAIL_FROM"]),
+      requiredVariables: ["MKLMS_EMAIL_PROVIDER", "MKLMS_SMTP_HOST", "MKLMS_SMTP_PORT", "MKLMS_SMTP_SECURE", "MKLMS_SMTP_USER", "MKLMS_SMTP_PASSWORD", "MKLMS_EMAIL_FROM"],
+      description: "Optional certificate and transactional email delivery. Set MKLMS_EMAIL_PROVIDER to smtp and configure the SMTP variables.",
     },
     {
       id: "storage",
