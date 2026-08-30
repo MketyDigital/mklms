@@ -7,11 +7,18 @@ class FakeLiveRepository {
   constructor() {
     this.active = 0;
     this.activeCountCalls = 0;
+    this.heartbeatCalls = 0;
+    this.existingViewer = null;
     this.own = [];
     this.all = [];
   }
 
+  async findViewerByTokenHash() {
+    return this.existingViewer;
+  }
+
   async upsertViewerHeartbeat() {
+    this.heartbeatCalls += 1;
     return { id: 'viewer-1' };
   }
 
@@ -29,9 +36,10 @@ class FakeLiveRepository {
   }
 }
 
-test('heartbeat uses configured baseline without issuing an active-viewer count query', async () => {
+test('baseline mode reuses an existing viewer without repeated presence writes or active counts', async () => {
   const repository = new FakeLiveRepository();
   repository.active = 37;
+  repository.existingViewer = { id: 'viewer-existing' };
   const service = new LiveRoomService(repository);
 
   const result = await service.heartbeat({
@@ -42,9 +50,28 @@ test('heartbeat uses configured baseline without issuing an active-viewer count 
     expectedViewerBaseline: 500,
   });
 
+  assert.equal(repository.heartbeatCalls, 0);
   assert.equal(repository.activeCountCalls, 0);
+  assert.equal(result.viewerId, 'viewer-existing');
   assert.equal(result.activeViewers, 0);
   assert.equal(result.displayViewerCount, 500);
+});
+
+test('baseline mode creates the viewer once when it does not exist', async () => {
+  const repository = new FakeLiveRepository();
+  const service = new LiveRoomService(repository);
+
+  const result = await service.heartbeat({
+    batchId: 'batch-1',
+    sessionId: 'session-1',
+    viewerTokenHash: 'hash-1',
+    viewerDisplayMode: 'CONFIGURED_BASELINE',
+    expectedViewerBaseline: 500,
+  });
+
+  assert.equal(repository.heartbeatCalls, 1);
+  assert.equal(repository.activeCountCalls, 0);
+  assert.equal(result.viewerId, 'viewer-1');
 });
 
 test('heartbeat counts active viewers when display mode needs measured presence', async () => {
@@ -60,6 +87,7 @@ test('heartbeat counts active viewers when display mode needs measured presence'
     expectedViewerBaseline: 500,
   });
 
+  assert.equal(repository.heartbeatCalls, 1);
   assert.equal(repository.activeCountCalls, 1);
   assert.equal(result.activeViewers, 37);
   assert.equal(result.displayViewerCount, 37);
