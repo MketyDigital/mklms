@@ -129,3 +129,21 @@ test('draft lessons are not completable and do not block published lessons', asy
     { ok: true, progressPercent: 100, courseCompleted: true, nextLessonId: null },
   );
 });
+
+test('video-progress lesson cannot be manually completed', async () => {
+  const course = {
+    ...structure,
+    modules: [{
+      ...structure.modules[0],
+      lessons: [{ ...structure.modules[0].lessons[0], completionMode: 'VIDEO_PROGRESS' }],
+    }],
+  };
+  const repo = new InMemoryLearningRepository({ course });
+  const service = new LearningProgressService(repo);
+
+  assert.deepEqual(
+    await service.completeLesson('student-1', 'course-1', 'lesson-1'),
+    { ok: false, reason: 'COMPLETION_NOT_ALLOWED' },
+  );
+  assert.equal(repo.completed.size, 0);
+});
