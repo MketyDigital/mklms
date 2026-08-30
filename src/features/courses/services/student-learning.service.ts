@@ -1,4 +1,9 @@
-import type { CourseStructure } from "../domain/model";
+import type {
+  CourseModuleRecord,
+  CourseRecord,
+  CourseStructure,
+  LessonRecord,
+} from "../domain/model";
 import { getPublishedCourseStructure } from "../domain/publication.ts";
 import {
   calculateCourseProgress,
@@ -31,19 +36,19 @@ export interface StudentCourseSummary {
   progressPercent: number;
 }
 
-export type StudentCourseView = CourseStructure & {
+export type StudentLessonView = LessonRecord & {
+  completed: boolean;
+  locked: boolean;
+};
+
+export type StudentModuleView = CourseModuleRecord & {
+  lessons: StudentLessonView[];
+};
+
+export type StudentCourseView = CourseRecord & {
   enrollmentStatus: string;
   progressPercent: number;
-  modules: Array<
-    CourseStructure["modules"][number] & {
-      lessons: Array<
-        CourseStructure["modules"][number]["lessons"][number] & {
-          completed: boolean;
-          locked: boolean;
-        }
-      >;
-    }
-  >;
+  modules: StudentModuleView[];
 };
 
 export class StudentLearningService {
@@ -76,7 +81,9 @@ export class StudentLearningService {
         await this.repository.getCompletedLessonIds(studentId, courseId),
       );
       const visibleLessonIds = new Set(
-        course.modules.flatMap((module) => module.lessons.map((lesson) => lesson.id)),
+        course.modules.flatMap((courseModule) =>
+          courseModule.lessons.map((lesson) => lesson.id),
+        ),
       );
       const completedLessons = Array.from(completed).filter((lessonId) =>
         visibleLessonIds.has(lessonId),
@@ -125,9 +132,9 @@ export class StudentLearningService {
       ...course,
       enrollmentStatus: enrollment.status,
       progressPercent: calculateCourseProgress(course, completed),
-      modules: course.modules.map((module) => ({
-        ...module,
-        lessons: module.lessons.map((lesson) => ({
+      modules: course.modules.map((courseModule) => ({
+        ...courseModule,
+        lessons: courseModule.lessons.map((lesson) => ({
           ...lesson,
           completed: completed.has(lesson.id),
           locked: !canAccessLesson(course, lesson.id, completed, enrollment),
