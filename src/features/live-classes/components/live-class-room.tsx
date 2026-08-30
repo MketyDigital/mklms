@@ -61,7 +61,7 @@ export function LiveClassRoom({ slug, organizationName }: { slug: string; organi
   const [playback, setPlayback] = useState<PlaybackState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [nowMs, setNowMs] = useState(Date.now());
+  const [nowMs, setNowMs] = useState(0);
   const [muted, setMuted] = useState(true);
   const [displayName, setDisplayName] = useState("");
   const [comment, setComment] = useState("");
@@ -73,6 +73,7 @@ export function LiveClassRoom({ slug, organizationName }: { slug: string; organi
     if (!response.ok || !payload.ok) throw new Error("message" in payload ? payload.message ?? "This live class is unavailable." : "This live class is unavailable.");
     roomStateRef.current = payload;
     setRoomState(payload);
+    setNowMs(new Date(payload.serverNow).getTime());
     setError(null);
     return payload;
   }, [slug]);
@@ -101,16 +102,18 @@ export function LiveClassRoom({ slug, organizationName }: { slug: string; organi
     return () => { active = false; window.clearTimeout(start); window.clearInterval(poll); window.clearInterval(clock); };
   }, [fetchState]);
 
+  const roomSessionId = roomState?.session?.id ?? null;
+
   useEffect(() => {
-    if (roomState?.state !== "LIVE" || !roomState.session) {
+    if (roomState?.state !== "LIVE" || !roomSessionId) {
       playbackRef.current = null;
       setPlayback(null);
       return;
     }
-    if (playbackRef.current?.sessionId === roomState.session.id) return;
+    if (playbackRef.current?.sessionId === roomSessionId) return;
     const timer = window.setTimeout(() => { void requestPlayback().catch((caught) => setError(caught instanceof Error ? caught.message : "Live playback unavailable.")); }, 0);
     return () => window.clearTimeout(timer);
-  }, [requestPlayback, roomState?.session, roomState?.state]);
+  }, [requestPlayback, roomSessionId, roomState?.state]);
 
   useEffect(() => {
     if (!playback?.authorization.expiresAt) return;
@@ -167,10 +170,11 @@ export function LiveClassRoom({ slug, organizationName }: { slug: string; organi
   }, [expectedPosition, playback]);
 
   useEffect(() => {
-    if (roomState?.state !== "ENDED" || !roomState.ended?.redirectUrl) return;
-    const timer = window.setTimeout(() => { window.location.assign(roomState.ended!.redirectUrl!); }, 2500);
+    const redirectUrl = roomState?.ended?.redirectUrl;
+    if (roomState?.state !== "ENDED" || !redirectUrl) return;
+    const timer = window.setTimeout(() => { window.location.assign(redirectUrl); }, 2500);
     return () => window.clearTimeout(timer);
-  }, [roomState?.ended, roomState?.state]);
+  }, [roomState?.ended?.redirectUrl, roomState?.state]);
 
   const combinedChat = useMemo(() => {
     if (!roomState) return [];
