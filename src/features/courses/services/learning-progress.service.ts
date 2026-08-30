@@ -1,10 +1,10 @@
-import type { CourseStructure } from "../domain/model";
-import { getPublishedCourseStructure } from "../domain/publication";
+import type { CourseStructure } from "../domain/model.ts";
+import { getPublishedCourseStructure } from "../domain/publication.ts";
 import {
   calculateCourseProgress,
   canAccessLesson,
   getNextLessonId,
-} from "../domain/progress";
+} from "../domain/progress.ts";
 
 export interface LearningEnrollmentRecord {
   studentId: string;
