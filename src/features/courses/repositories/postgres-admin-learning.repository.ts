@@ -7,6 +7,7 @@ import type {
   CourseRecord,
   CourseStatus,
   LessonRecord,
+  LessonStatus,
 } from "../domain/model";
 import type { AdminLearningRepository } from "../services/admin-learning.service";
 
@@ -170,6 +171,13 @@ export class PostgresAdminLearningRepository implements AdminLearningRepository 
     await this.pool.query(
       `UPDATE courses SET status = $2, updated_at = NOW() WHERE id = $1`,
       [courseId, status],
+    );
+  }
+
+  async setLessonStatus(lessonId: string, status: LessonStatus): Promise<void> {
+    await this.pool.query(
+      `UPDATE lessons SET status = $2, updated_at = NOW() WHERE id = $1`,
+      [lessonId, status],
     );
   }
 }
