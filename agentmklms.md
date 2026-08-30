@@ -63,6 +63,11 @@
 45. **Never commit secrets/private customer data.** No credentials, signing keys, SMTP passwords, object-store secrets, webhook secrets, or private media.
 46. **Update this file whenever a major decision or implementation status changes.**
 47. **Every meaningful implementation batch updates the Progress Ledger.** Use PLANNED, IN PROGRESS, IMPLEMENTED, VERIFIED, or DEFERRED accurately.
+48. **Production edge protection is mandatory.** Put the deployed application behind Cloudflare or an equivalent WAF/DDoS/rate-limiting edge. The in-process limiter is defense-in-depth and must not be treated as a globally distributed abuse-control system.
+49. **External admin-configured navigation URLs are HTTP(S)-only.** Reject `javascript:`, `data:`, `file:`, malformed and protocol-relative destinations before storage/use.
+50. **Bound untrusted payloads.** Login credentials, live comments, live-class configuration and staged-chat imports must remain schema-limited so attackers cannot create uncontrolled memory/database/notification work.
+51. **For high-audience webinars, prefer `CONFIGURED_BASELINE`.** Once a viewer identity exists, this mode reuses it without recurring presence writes or active-viewer count queries. `ACTIVE_ONLY` and `BASELINE_PLUS_ACTIVE` intentionally cost more because they measure presence.
+52. **Do not serve video bytes from PostgreSQL or the Next.js app.** Production HLS/static media belongs on object storage + CDN. Use versioned immutable segment keys, CDN caching, and short-lived edge authorization without destroying the shared cache key.
 
 ---
 
@@ -215,9 +220,9 @@ After session/batch
 
 At minimum store `expectedViewerBaseline` (or equivalent) in admin-controlled live-session/batch configuration. Keep the domain extensible for:
 
-- `CONFIGURED_BASELINE` — display the admin-set expected/baseline audience.
-- `ACTIVE_ONLY` — display measured currently-active viewers when presence tracking is enabled.
-- `BASELINE_PLUS_ACTIVE` — combine configured baseline with actual presence when desired.
+- `CONFIGURED_BASELINE` — display the admin-set expected/baseline audience. This is the preferred high-scale/low-write mode; an existing viewer identity is reused without recurring heartbeat writes or active-count queries.
+- `ACTIVE_ONLY` — display measured currently-active viewers when presence tracking is enabled. This intentionally updates presence and queries active viewers.
+- `BASELINE_PLUS_ACTIVE` — combine configured baseline with actual presence when desired. This intentionally carries the same presence cost as active measurement.
 
 Do not hardcode counts or use uncontrolled per-refresh randomness. If a simulated display adjustment is later supported, it must be deterministic/configurable and stable for the session.
 
@@ -263,17 +268,40 @@ The optional Telegram notification adapter reads:
 
 A live batch may override the default notification destination through admin configuration. Secrets remain server-only and must never be committed.
 
+### Production hardening / scale contract
+
+Implemented application controls:
+
+- Signed/hash-backed admin and student sessions with HttpOnly cookies and production Secure flags.
+- Server-side authorization on protected admin/member/API operations.
+- Parameterized PostgreSQL queries on the inspected repository paths.
+- No reusable permanent private media origin URLs in student/live HTML.
+- HTTP(S)-only validation for live CTA and ended redirect destinations.
+- Bounded Zod input sizes for authentication, live comments, live-class configuration and timeline imports.
+- Bounded application rate limiting on admin login, student access-code login and live attendee comments.
+- Security response headers including HSTS in production, nosniff, frame restrictions, referrer policy, permissions policy and a base CSP.
+- High-scale baseline live mode avoids recurring active-viewer counts and avoids recurring viewer heartbeat writes once identity exists.
+
+Required production infrastructure controls:
+
+- Cloudflare/equivalent DDoS protection, WAF managed rules, bot controls where available, and edge rate-limiting rules for login/claim/message/API endpoints.
+- TLS-only production traffic; strong randomly generated server secrets stored only in deployment secret management.
+- PostgreSQL connection pooling, backups/PITR, monitoring, slow-query visibility and sensible connection/query limits.
+- Object storage + CDN for all large media; never proxy large video streams through the application server.
+- HLS media should use immutable/versioned segment paths, long cache lifetime for segments and short-lived authorization at the edge. Token validation should not produce a unique CDN cache object per viewer.
+- Monitoring/alerting for auth failures, 429s, elevated 5xx, DB saturation, storage failures and notification failures.
+
 ---
 
 # 6. Repository Strategy
 
-- `main` — eventual consolidated product branch.
+- `main` — consolidated product branch after approved cumulative Phase 4 merge.
 - `mkwebinar` — legacy behavior reference only.
 - `architecture/mklms-reusable-platform` — approved architecture/spec branch.
 - `feature/mklms-phase-1-foundation-access` — verified Phase 1.
 - `feature/mklms-phase-2-learning-progress` — verified Phase 2.
 - `feature/mklms-phase-3-certificates-media` — verified Phase 3.
-- `feature/mklms-phase-4-live-classes` — verified Phase 4 simulated-live classes/webinar.
+- `feature/mklms-phase-4-live-classes` — verified Phase 4 simulated-live classes/webinar plus production hardening before consolidation.
 - Implementation plan: `docs/superpowers/plans/2026-08-30-mklms-implementation-plan.md`.
 - Design spec: `docs/superpowers/specs/2026-08-30-mklms-reusable-learning-platform-design.md`.
 
@@ -300,6 +328,9 @@ A live batch may override the default notification destination through admin con
 | 2026-08-30 | Phase 4 — staged/private chat | VERIFIED | CSV/timestamped/Zoom-style staged-chat import, live-offset timeline delivery, attendee-visible staged chat plus own real comments only, durable PostgreSQL attendee inbox, and admin all-attendee view implemented. |
 | 2026-08-30 | Phase 4 — notifications / CTA / expiry | VERIFIED | Attendee message persistence precedes optional NotificationProvider dispatch; Telegram adapter and per-batch destination supported; per-session CTA timing plus session/batch ended message and redirect implemented. |
 | 2026-08-30 | Phase 4 — admin operations | VERIFIED | Admin Live Classes UI/API creates reusable batches, enforces 1–3 sessions, selects Media Library assets, configures schedule/viewer mode/CTA/expiry/notification routing, imports staged chat, publishes sessions, activates batches, copies public links, and displays real attendee inbox. |
-| 2026-08-30 | Phase 4 automated verification | VERIFIED | `feature/mklms-phase-4-live-classes` implementation head `41fe61399fc3dbc77dbe59aa71719430bc53623e` passed **112/112 tests, lint, and Next.js production build** in GitHub Actions run `33321397091`. |
+| 2026-08-30 | Phase 4 automated verification | VERIFIED | Initial complete Phase 4 implementation head `41fe61399fc3dbc77dbe59aa71719430bc53623e` passed **112/112 tests, lint, and Next.js production build** in GitHub Actions run `33321397091`. |
+| 2026-08-30 | Production hardening — abuse/XSS/input limits | VERIFIED | Added HTTP(S)-only external URL validation, bounded request payloads, bounded per-process rate limits for admin/student login and live comments, and security response headers. Security/rate-limit regressions are covered by automated tests. |
+| 2026-08-30 | Production hardening — high-viewer database cost | VERIFIED | `CONFIGURED_BASELINE` now reuses existing viewer identity without recurring presence writes or active-viewer count queries; measured-presence modes retain their intentional heartbeat/count behavior. |
+| 2026-08-30 | Hardened automated verification | VERIFIED | Hardened implementation head `1916fdc78ceafaad20b4512286fd42bc0d3fe9bb` passed **114/114 tests, lint, and Next.js production build** in GitHub Actions run `33322834903`. |
 
 > **Progress update rule:** every meaningful design/code/testing batch must update this ledger in the same branch/PR before being considered complete.
