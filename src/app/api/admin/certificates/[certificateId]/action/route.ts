@@ -92,7 +92,7 @@ export async function POST(
       repository,
     });
     const result = await delivery.deliver(issued, template);
-    return NextResponse.json({ ok: true, ...result });
+    return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(
       {
