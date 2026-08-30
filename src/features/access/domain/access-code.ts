@@ -1,8 +1,17 @@
-import { randomBytes as cryptoRandomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  randomBytes as cryptoRandomBytes,
+  scryptSync,
+  timingSafeEqual,
+} from "node:crypto";
 
 import type { AccessCodeHash } from "../types";
 
 const ACCESS_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+function normalizeAccessCode(code: string): string {
+  return code.trim().toUpperCase();
+}
 
 export function generateAccessCode(options?: {
   prefix?: string;
@@ -20,9 +29,14 @@ export function generateAccessCode(options?: {
   return `${prefix}-${token}`;
 }
 
+export function getAccessCodeLookupHash(code: string): string {
+  return createHash("sha256").update(normalizeAccessCode(code)).digest("hex");
+}
+
 export function hashAccessCode(code: string): AccessCodeHash {
+  const normalized = normalizeAccessCode(code);
   const salt = cryptoRandomBytes(16).toString("hex");
-  const hash = scryptSync(code, salt, 32).toString("hex");
+  const hash = scryptSync(normalized, salt, 32).toString("hex");
 
   return {
     algorithm: "scrypt",
@@ -35,7 +49,7 @@ export function verifyAccessCode(code: string, stored: AccessCodeHash): boolean 
   if (stored.algorithm !== "scrypt") return false;
 
   const expected = Buffer.from(stored.hash, "hex");
-  const actual = scryptSync(code, stored.salt, expected.length);
+  const actual = scryptSync(normalizeAccessCode(code), stored.salt, expected.length);
 
   if (actual.length !== expected.length) return false;
   return timingSafeEqual(actual, expected);
