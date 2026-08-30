@@ -27,15 +27,15 @@ export async function POST(
           ? 409
           : 403;
 
+    const message =
+      result.reason === "LESSON_LOCKED"
+        ? "Complete the previous lesson before continuing."
+        : result.reason === "COMPLETION_NOT_ALLOWED"
+          ? "This lesson is completed automatically by its configured learning activity."
+          : "This lesson is not currently available for your enrollment.";
+
     return NextResponse.json(
-      {
-        ok: false,
-        reason: result.reason,
-        message:
-          result.reason === "LESSON_LOCKED"
-            ? "Complete the previous lesson before continuing."
-            : "This lesson is not currently available for your enrollment.",
-      },
+      { ok: false, reason: result.reason, message },
       { status },
     );
   }
