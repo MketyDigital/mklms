@@ -1,11 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { hashAccessCode } from '../src/features/access/domain/access-code.ts';
+import {
+  getAccessCodeLookupHash,
+  hashAccessCode,
+} from '../src/features/access/domain/access-code.ts';
 import { AccessLoginService } from '../src/features/access/services/access-login.service.ts';
 
 class InMemoryLoginRepository {
   constructor(code) {
+    this.code = code;
     this.credential = {
       studentId: 'student-1',
       status: 'ACTIVE',
@@ -14,7 +18,8 @@ class InMemoryLoginRepository {
     this.sessions = [];
   }
 
-  async findActiveCredentialByCode() {
+  async findActiveCredentialByLookupHash(lookupHash) {
+    if (lookupHash !== getAccessCodeLookupHash(this.code)) return null;
     return this.credential;
   }
 
@@ -40,7 +45,6 @@ test('valid access code creates a hashed server session and returns plaintext to
 
 test('invalid access code returns a neutral error and creates no session', async () => {
   const repo = new InMemoryLoginRepository('ACCESS-ABC123');
-  repo.findActiveCredentialByCode = async () => null;
   const service = new AccessLoginService(repo, { sessionTtlSeconds: 3600 });
 
   const result = await service.login('WRONG-CODE');
