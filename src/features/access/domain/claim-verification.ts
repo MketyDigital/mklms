@@ -42,3 +42,12 @@ export function requiresExternalDelivery(
 ): boolean {
   return isOtpStrategy(strategy);
 }
+
+export function requiresExternalVerification(
+  strategy: ClaimVerificationStrategy,
+): boolean {
+  return strategy === "otp-email" ||
+    strategy === "otp-sms" ||
+    strategy === "manual-approval" ||
+    strategy === "custom";
+}
