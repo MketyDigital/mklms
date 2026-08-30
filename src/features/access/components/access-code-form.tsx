@@ -19,9 +19,10 @@ export function AccessCodeForm() {
     setMessage(null);
 
     try {
-      const response = await fetch("/api/access/login", {
+      const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({ accessCode }),
       });
       const result = await response.json();
@@ -31,7 +32,7 @@ export function AccessCodeForm() {
         return;
       }
 
-      router.push("/dashboard");
+      router.replace("/dashboard");
       router.refresh();
     } catch {
       setMessage("The portal could not be reached. Please try again.");
@@ -50,12 +51,12 @@ export function AccessCodeForm() {
           autoComplete="off"
           autoCapitalize="characters"
           value={accessCode}
-          onChange={(event) => setAccessCode(event.target.value)}
+          onChange={(event) => setAccessCode(event.target.value.toUpperCase())}
           placeholder="Enter your student access code"
           required
         />
         <p className="text-xs text-muted-foreground">
-          Use the private access code issued when you first claimed your paid course access.
+          Use the private access code issued when you first claimed your approved course access.
         </p>
       </div>
 
