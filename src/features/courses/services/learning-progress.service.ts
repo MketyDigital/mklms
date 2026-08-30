@@ -1,8 +1,9 @@
+import type { CourseStructure } from "../domain/model";
+import { getPublishedCourseStructure } from "../domain/publication";
 import {
   calculateCourseProgress,
   canAccessLesson,
   getNextLessonId,
-  type CourseLike,
 } from "../domain/progress";
 
 export interface LearningEnrollmentRecord {
@@ -12,7 +13,7 @@ export interface LearningEnrollmentRecord {
 }
 
 export interface LearningProgressRepository {
-  getCourseStructure(courseId: string): Promise<CourseLike | null>;
+  getCourseStructure(courseId: string): Promise<CourseStructure | null>;
   getEnrollment(
     studentId: string,
     courseId: string,
@@ -53,10 +54,11 @@ export class LearningProgressService {
     courseId: string,
     lessonId: string,
   ): Promise<CompleteLessonResult> {
-    const [course, enrollment] = await Promise.all([
+    const [rawCourse, enrollment] = await Promise.all([
       this.repository.getCourseStructure(courseId),
       this.repository.getEnrollment(studentId, courseId),
     ]);
+    const course = rawCourse ? getPublishedCourseStructure(rawCourse) : null;
 
     if (!course) return { ok: false, reason: "COURSE_NOT_FOUND" };
     if (!enrollment || !["ACTIVE", "COMPLETED"].includes(enrollment.status)) {
