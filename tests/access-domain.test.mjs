@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   generateAccessCode,
+  getAccessCodeLookupHash,
   hashAccessCode,
   verifyAccessCode,
 } from '../src/features/access/domain/access-code.ts';
@@ -12,8 +13,7 @@ import {
 } from '../src/features/access/domain/preauthorization.ts';
 import {
   CLAIM_VERIFICATION_STRATEGIES,
-  isOtpStrategy,
-  requiresExternalDelivery,
+  requiresExternalVerification,
 } from '../src/features/access/domain/claim-verification.ts';
 
 test('normalizeIdentity trims and lowercases emails', () => {
@@ -53,6 +53,15 @@ test('generateAccessCode uses the configured prefix and produces unique codes', 
   assert.notEqual(first, second);
 });
 
+test('access-code lookup hash is deterministic but not plaintext', () => {
+  const first = getAccessCodeLookupHash(' ACCESS-ABC123 ');
+  const second = getAccessCodeLookupHash('access-abc123');
+
+  assert.equal(first, second);
+  assert.notEqual(first, 'ACCESS-ABC123');
+  assert.match(first, /^[a-f0-9]{64}$/);
+});
+
 test('hashAccessCode and verifyAccessCode validate the right credential only', () => {
   const code = 'STUDENT-ABCD1234';
   const stored = hashAccessCode(code);
@@ -62,7 +71,7 @@ test('hashAccessCode and verifyAccessCode validate the right credential only', (
   assert.notEqual(stored.hash, code);
 });
 
-test('claim verification supports free and paid delivery options', () => {
+test('claim verification supports no-cost/manual options as well as OTP', () => {
   assert.deepEqual(CLAIM_VERIFICATION_STRATEGIES, [
     'preauth-only',
     'otp-email',
@@ -72,12 +81,8 @@ test('claim verification supports free and paid delivery options', () => {
     'custom',
   ]);
 
-  assert.equal(isOtpStrategy('otp-email'), true);
-  assert.equal(isOtpStrategy('otp-sms'), true);
-  assert.equal(isOtpStrategy('preauth-only'), false);
-  assert.equal(requiresExternalDelivery('preauth-only'), false);
-  assert.equal(requiresExternalDelivery('claim-code'), false);
-  assert.equal(requiresExternalDelivery('manual-approval'), false);
-  assert.equal(requiresExternalDelivery('otp-email'), true);
-  assert.equal(requiresExternalDelivery('otp-sms'), true);
+  assert.equal(requiresExternalVerification('preauth-only'), false);
+  assert.equal(requiresExternalVerification('claim-code'), false);
+  assert.equal(requiresExternalVerification('manual-approval'), true);
+  assert.equal(requiresExternalVerification('otp-email'), true);
 });
