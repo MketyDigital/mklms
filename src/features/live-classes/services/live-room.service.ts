@@ -62,11 +62,15 @@ export class LiveRoomService {
       viewerTokenHash: input.viewerTokenHash,
       displayName: input.displayName ?? null,
     });
-    const activeViewers = await this.repository.countActiveViewers({
-      batchId: input.batchId,
-      sessionId: input.sessionId ?? null,
-      activeSince: new Date(now.getTime() - this.activeWindowMs),
-    });
+
+    const needsMeasuredPresence = input.viewerDisplayMode !== "CONFIGURED_BASELINE";
+    const activeViewers = needsMeasuredPresence
+      ? await this.repository.countActiveViewers({
+          batchId: input.batchId,
+          sessionId: input.sessionId ?? null,
+          activeSince: new Date(now.getTime() - this.activeWindowMs),
+        })
+      : 0;
 
     return {
       viewerId: viewer.id,
