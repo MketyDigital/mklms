@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { getAccessRuntime } from "@/features/access/server/runtime";
 import {
-  getAccessRuntime,
-  studentSessionCookieOptions,
+  getStudentSessionCookieOptions,
   STUDENT_SESSION_COOKIE,
-} from "@/features/access/server/runtime";
+} from "@/features/access/server/session-cookie";
 
 const loginSchema = z.object({
   accessCode: z.string().trim().min(1).max(128),
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
   response.cookies.set(
     STUDENT_SESSION_COOKIE,
     result.sessionToken,
-    studentSessionCookieOptions(result.expiresAt),
+    getStudentSessionCookieOptions(result.expiresAt),
   );
 
   return response;
