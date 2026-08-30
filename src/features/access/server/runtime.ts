@@ -1,14 +1,9 @@
 import "server-only";
 
-import { cookies } from "next/headers";
-
-import { hashSessionToken } from "../domain/session";
 import { PostgresAccessRepository } from "../repositories/postgres-access.repository";
 import { AccessLoginService } from "../services/access-login.service";
 import { AccessService } from "../services/access.service";
 import { getPostgresPool } from "@/lib/postgres";
-
-export const STUDENT_SESSION_COOKIE = "mklms_student_session";
 
 export interface RuntimeAccessSettings {
   accessCodePrefix: string;
@@ -56,24 +51,4 @@ export async function getAccessRuntime() {
       sessionTtlSeconds: settings.sessionTtlSeconds,
     }),
   };
-}
-
-export function studentSessionCookieOptions(expiresAt: Date) {
-  return {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax" as const,
-    path: "/",
-    expires: expiresAt,
-  };
-}
-
-export async function getCurrentStudentSession() {
-  const cookieStore = await cookies();
-  const sessionToken = cookieStore.get(STUDENT_SESSION_COOKIE)?.value;
-  if (!sessionToken) return null;
-
-  const { repository } = await getAccessRuntime();
-  const tokenHash = hashSessionToken(sessionToken).hash;
-  return repository.findActiveSessionByTokenHash(tokenHash, new Date());
 }
