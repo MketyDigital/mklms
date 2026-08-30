@@ -6,6 +6,7 @@
 > **Product:** MkLMS — reusable white-label LMS + scheduled simulated-live class platform.
 > **Architecture branch:** `architecture/mklms-reusable-platform`.
 > **Verified Phase 1 branch:** `feature/mklms-phase-1-foundation-access`.
+> **Verified Phase 2 branch:** `feature/mklms-phase-2-learning-progress`.
 > **Legacy webinar reference:** `mkwebinar` branch — reference behavior only; do not merge as-is.
 > **Legacy Mkety production repo:** `MketyDigital/Mkety` — READ/REFERENCE ONLY. Never edit it for MkLMS work.
 
@@ -199,6 +200,7 @@ Provider SDK calls must not leak throughout feature UI/domain code.
 - `mkwebinar` — legacy behavior reference only.
 - `architecture/mklms-reusable-platform` — approved architecture/spec branch.
 - `feature/mklms-phase-1-foundation-access` — verified Phase 1 implementation branch.
+- `feature/mklms-phase-2-learning-progress` — verified Phase 2 learning/progress branch.
 - Implementation plan: `docs/superpowers/plans/2026-08-30-mklms-implementation-plan.md`.
 - Design spec: `docs/superpowers/specs/2026-08-30-mklms-reusable-learning-platform-design.md`.
 
@@ -221,8 +223,15 @@ Provider SDK calls must not leak throughout feature UI/domain code.
 | 2026-08-30 | Admin authentication/access management | VERIFIED | Built-in signed admin session, protected admin layout, bulk preauthorization, claim approval, access-code reset, suspend/revoke/restore implemented. |
 | 2026-08-30 | PostgreSQL foundation | VERIFIED | Provider-neutral PostgreSQL schema/repositories for settings, students, preauthorizations, credentials, enrollments, and sessions compile in production build. |
 | 2026-08-30 | Phase 1 automated verification | VERIFIED | Latest CI: tests, lint, production build all successful. |
-| 2026-08-30 | Phase 2 courses/progress | IN PROGRESS | Audit complete: legacy model is flat Course→Video/youtubeUrl and contains customer-specific mock assumptions. Next implementation replaces it with Course→Module→Lesson and sequential progress domain. |
-| 2026-08-30 | Phase 3 certificates/media | PLANNED | Not started. |
+| 2026-08-30 | Phase 2 course domain | VERIFIED | Replaced reachable flat Course→Video behavior with Course→Module→Lesson, ordered modules/lessons, published/draft filtering, and generic media asset references. |
+| 2026-08-30 | Phase 2 sequential progress | VERIFIED | Sequential unlocking, progress calculation, 100% enrollment completion, unrestricted completed-course revisit, and draft-content exclusion are covered by domain/service tests. |
+| 2026-08-30 | Phase 2 completion security | VERIFIED | Manual completion is limited to MANUAL lessons; VIDEO_PROGRESS lessons reject manual completion and await trusted media-progress completion in Phase 3. |
+| 2026-08-30 | Phase 2 PostgreSQL learning | VERIFIED | Added reusable course/module/lesson/lesson-progress schema plus PostgreSQL learning/admin repositories and re-runnable migration behavior. |
+| 2026-08-30 | Phase 2 student UX | VERIFIED | Authenticated Dashboard, My Courses, course detail, lesson, and Progress views now use enrollment/progress data; fake member/demo course assumptions removed from primary student flow. |
+| 2026-08-30 | Phase 2 admin UX | VERIFIED | Real course creation, module/lesson creation, generic media asset assignment, course publishing, and independent lesson publish/unpublish controls implemented. |
+| 2026-08-30 | Phase 2 legacy route retirement | VERIFIED | Legacy student/admin video routes redirect into the new learning model so hardcoded YouTube/Foyzul demo content is no longer reachable through those routes. |
+| 2026-08-30 | Phase 2 automated verification | VERIFIED | `feature/mklms-phase-2-learning-progress` passed 48/48 tests, lint, and production build in GitHub Actions run `33315644140`. |
+| 2026-08-30 | Phase 3 certificates/media | PLANNED | Certificate identity fields already exist on students and will be snapshotted for idempotent issuance; protected media/provider adapters not started yet. |
 | 2026-08-30 | Phase 4 live classes | PLANNED | Not started. |
 
 > **Progress update rule:** every meaningful design/code/testing batch must update this ledger in the same branch/PR before being considered complete.
