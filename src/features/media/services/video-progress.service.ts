@@ -43,6 +43,7 @@ export interface VideoProgressRepository {
     lessonId: string,
     progressPercent: number,
     lastPositionSeconds: number,
+    lessonCompleted: boolean,
   ): Promise<void>;
   markEnrollmentCompleted(studentId: string, courseId: string): Promise<void>;
 }
@@ -176,6 +177,8 @@ export class VideoProgressService {
         Math.floor(elapsedSeconds),
       ),
     );
+    const lessonCompleted =
+      creditedPercent >= lesson.completionThresholdPercent;
 
     await this.repository.saveLessonProgress(
       input.studentId,
@@ -183,10 +186,9 @@ export class VideoProgressService {
       input.lessonId,
       creditedPercent,
       creditedPositionSeconds,
+      lessonCompleted,
     );
 
-    const lessonCompleted =
-      creditedPercent >= lesson.completionThresholdPercent;
     if (lessonCompleted) {
       completed.add(input.lessonId);
     }
