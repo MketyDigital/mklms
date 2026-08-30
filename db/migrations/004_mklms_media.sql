@@ -34,7 +34,8 @@ BEGIN
       ADD CONSTRAINT lessons_media_asset_fk
       FOREIGN KEY (media_asset_id)
       REFERENCES media_assets(id)
-      ON DELETE SET NULL;
+      ON DELETE SET NULL
+      NOT VALID;
   END IF;
 END $$;
 
