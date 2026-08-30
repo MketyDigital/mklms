@@ -6,6 +6,8 @@ on:
       - architecture/mklms-reusable-platform
       - feature/mklms-phase-1-foundation-access
       - feature/mklms-phase-2-learning-progress
+      - feature/mklms-phase-3-certificates-media
+      - feature/mklms-phase-4-live-classes
   workflow_dispatch:
 
 jobs:
