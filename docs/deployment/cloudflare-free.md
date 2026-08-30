@@ -1,112 +1,133 @@
 # MkLMS Cloudflare Free Production Setup
 
-MkLMS is prepared to run on Cloudflare Workers Free using OpenNext. Cloudflare is the intended production edge/runtime; Vercel is a compatibility/test deployment only.
+Cloudflare Workers/OpenNext is the primary production runtime for MkLMS. Vercel is a compatibility/test target and OCI/Node remains portable for later or separate customer installations.
+
+The existing OpenNext deployment is intentionally retained for the current launch because it is already verified by CI. Cloudflare's newer Next.js guidance may evolve, but runtime migration should be treated as a separate tested project rather than changing the production adapter immediately before a live class.
 
 ## Runtime
 
-- Node.js development/CI/Vercel/OCI target: Node 24.x.
-- Cloudflare production runtime: `workerd` with Node compatibility enabled.
+- Development/CI/Vercel/OCI Node target: Node 24.x.
+- Cloudflare production runtime: `workerd` with `nodejs_compat`.
 - Local/OpenNext build: `npm run cf:build`
 - Local preview: `npm run preview`
 - One-command CLI deployment: `npm run deploy`
 
 ## Cloudflare dashboard build/deploy settings
 
-When Cloudflare gives you separate **Build command** and **Deploy command** fields, use:
+When Cloudflare provides separate **Build command** and **Deploy command** fields, use exactly:
 
 ```text
 Build command: npm run cf:build
 Deploy command: npx opennextjs-cloudflare deploy
 ```
 
-You may also use `npx wrangler deploy` as the deploy command after `npm run cf:build`, because Wrangler detects OpenNext. The important requirement is that the Build command must create `.open-next` first.
+The Build command must create `.open-next` before the deploy command executes.
 
-**Do not use `npm run build` as the Cloudflare build command.** `npm run build` creates the normal Next.js `.next` output for Vercel/Node. If you then call an OpenNext/Workers deploy, deployment fails with:
+**Do not use `npm run build` as the Cloudflare build command.** That creates the normal Next.js `.next` output for Node/Vercel, not the OpenNext Worker bundle.
 
-```text
-Could not find compiled Open Next config, did you run the build command?
-```
-
-That error means the Next build succeeded but the OpenNext bundle was never created.
-
-If the platform provides only one combined deployment command, use:
+If only one combined deployment command is available, use:
 
 ```text
 npm run deploy
 ```
 
-because the repository's deploy script performs the OpenNext build before deployment.
+The repository CI contract verifies Node 24 tests, lint, the ordinary Next.js build and the OpenNext build.
 
-Prefer npm for Cloudflare to match CI (`npm install --no-audit --no-fund`). Bun can install the project, but npm is the verified dependency/build path.
+## Required Cloudflare secrets / variables
 
-## Required secrets / variables
-
-Store secrets in Cloudflare Workers settings, never in git. At minimum configure:
+Store secrets in Worker settings, never in git. Minimum runtime configuration:
 
 - `DATABASE_URL`
-- `DATABASE_SSL=require` when your provider requires TLS
+- `DATABASE_SSL=require` when required by the PostgreSQL provider
 - `DATABASE_POOL_MAX=5` initially
 - `MKLMS_ADMIN_ACCESS_KEY`
 - `MKLMS_ADMIN_SESSION_SECRET`
 
-Optional provider settings are shown inside **Admin → Settings & Integrations** and documented in `.env.example`:
+Optional integrations:
 
 - Telegram: `MKLMS_TELEGRAM_BOT_TOKEN`, `MKLMS_TELEGRAM_CHAT_ID`
-- R2/S3 storage: `MKLMS_STORAGE_*`
-- protected media: `MKLMS_MEDIA_DELIVERY_BASE_URL`, `MKLMS_MEDIA_SIGNING_SECRET`
+- R2/S3-compatible storage: `MKLMS_STORAGE_*`
+- protected media authorization: `MKLMS_MEDIA_DELIVERY_BASE_URL`, `MKLMS_MEDIA_SIGNING_SECRET`
 - SMTP: `MKLMS_EMAIL_PROVIDER=smtp`, `MKLMS_SMTP_*`, `MKLMS_EMAIL_FROM`
+- OCI media automation: `MKLMS_OCI_MEDIA_AUTOMATION_ENABLED=false` by default plus the OCI/R2 variables documented in the media-ingest runbook.
 
-## Database migrations
+## Database migrations — release before deployment
 
-Do not place migrations in the ordinary Cloudflare/Vercel build command. Builds can run concurrently, be retried, and run for preview environments.
+Migrations modify PostgreSQL, not Cloudflare. Never put them in the Cloudflare Build or Deploy command.
 
-Run migrations explicitly once against a new database:
+From a trusted Node 24 shell with the production direct PostgreSQL connection:
 
 ```bash
 export DATABASE_URL='postgresql://...'
 export DATABASE_SSL=require
+npm install
+npm run db:status
 npm run db:migrate
+npm run db:status
 ```
 
-The migration runner applies `db/migrations/001...008` in order. The migrations are designed to be safe to re-run where possible, but schema changes should still be treated as a release operation rather than a page-build side effect.
+Then deploy/redeploy the Worker.
 
-After deployment, **Admin → Settings & Integrations** reports whether PostgreSQL is reachable and whether core MkLMS tables are present.
+The `_mklms_migrations` table stores migration filenames, SHA-256 checksums and application timestamps. An already-applied migration must never be edited; create the next numbered SQL file instead. See `docs/deployment/database-migrations.md`.
 
-## PostgreSQL: test now, self-host later
+If Cloudflare Hyperdrive is later enabled, it remains runtime connection management. Use a trusted direct PostgreSQL connection for migrations unless a deliberately controlled migration mechanism is introduced.
 
-MkLMS uses PostgreSQL as a database engine, not Supabase-specific APIs. `DATABASE_URL` may therefore point to Supabase PostgreSQL for testing and later to self-hosted PostgreSQL.
+## Free-plan capacity boundaries
 
-Cloudflare Hyperdrive is optional and available on Workers Free. When enabled, point Hyperdrive at the same PostgreSQL database and use its connection path for application database traffic. The domain/repository model does not change.
+Cloudflare Workers Free currently has finite daily Worker requests/CPU. Therefore **video HLS manifests/segments must not be proxied through the MkLMS application Worker**. Large media belongs on R2/CDN or another media origin. MkLMS should issue/control playback authorization without turning every segment into an application request.
+
+R2 Standard includes a monthly free allowance before storage/operation charges. Egress from R2 to the Internet is free. Treat provider pricing as external and changing; Admin → Hosting & Usage shows MkLMS usage signals/estimates, not a fabricated Cloudflare invoice.
+
+## Recommended media topology
+
+```text
+Admin source video
+      ↓
+private OCI Object Storage
+      ↓
+OCI Media Flow — ONE transcode per source/profile
+      ↓
+verify completed HLS output
+      ↓
+copy immutable HLS folder to Cloudflare R2
+      ↓
+R2 / Cloudflare CDN playback
+      ↓
+MkLMS course OR live-class media asset
+```
+
+The Cloudflare Worker does not upload/proxy gigabyte video bodies and does not perform transcoding.
 
 ## High-audience webinar state cache
 
-For `CONFIGURED_BASELINE` live classes, `/api/live/*/state` is a shared response: it contains no viewer identity and no attendee-private messages. The response sends a short CDN cache policy and browsers advance deterministic LIVE/chat/CTA timing locally.
+For `CONFIGURED_BASELINE` live classes, `/api/live/*/state` is viewer-neutral: no viewer identity and no attendee-private comments. The response is eligible for a short edge cache while browsers advance deterministic LIVE/chat/CTA timing locally.
 
-Create one Cloudflare **Cache Rule** on the Free plan:
+Create one Cloudflare Cache Rule:
 
-- Match: URI Path starts with `/api/live/` AND URI Path ends with `/state`
-- Cache eligibility: Eligible for cache / Cache Everything
+- Match: URI Path starts with `/api/live/` AND ends with `/state`
+- Cache eligibility: Eligible / Cache Everything
 - Respect origin/CDN cache-control headers
-- Do not include cookies in a custom cache key
+- Do not make cookies part of a custom cache key
 
-Do **not** cache login, claim, playback-authorization, admin, student-session or message POST endpoints.
+Never cache login, claim, playback authorization, admin/session or message mutation endpoints.
 
-Measured viewer modes (`ACTIVE_ONLY`, `BASELINE_PLUS_ACTIVE`) remain uncached because they intentionally update/read presence. Use `CONFIGURED_BASELINE` for high-audience broadcasts.
+Use `CONFIGURED_BASELINE` for high-audience broadcasts. `ACTIVE_ONLY` and `BASELINE_PLUS_ACTIVE` intentionally perform presence work and remain uncached.
 
 ## Private attendee comments
 
-A submitted attendee comment is persisted once in PostgreSQL so the admin inbox remains authoritative and optional Telegram notification still works. The attendee-facing copy is then stored in that browser's `localStorage` (maximum 50 recent comments). Shared live state does not repeatedly retrieve that attendee's private comment history.
+A submitted attendee comment is written once to PostgreSQL for the authoritative admin inbox and optional notification. The viewer-facing copy is held in bounded browser local storage. Shared live state does not continually reload private comment history.
+
+## Multiple installations
+
+Cloudflare and OCI can host separate MkLMS installations at the same time. For independent customers, give each installation its own database, environment/secrets, domain and storage configuration.
+
+Two runtimes may intentionally share one database, but then they are one logical installation and must remain on compatible code/schema versions.
 
 ## Telegram quick setup
 
-1. Open Telegram and message `@BotFather`.
-2. Create a bot with `/newbot` and copy its token to `MKLMS_TELEGRAM_BOT_TOKEN`.
-3. Add the bot to the group/channel where you want live-attendee alerts. Give it permission to post when required.
-4. Obtain that destination's numeric chat/channel ID and save it as `MKLMS_TELEGRAM_CHAT_ID`.
-5. A specific live batch may set its own **Notification destination**, overriding the default ID.
+1. Create a bot with Telegram `@BotFather` and copy the token to `MKLMS_TELEGRAM_BOT_TOKEN`.
+2. Add the bot to the destination group/channel and grant posting permission when required.
+3. Save the numeric destination ID as `MKLMS_TELEGRAM_CHAT_ID`.
+4. A live batch may override the default destination.
 
-Telegram is optional. Live attendee comments are written to the MkLMS admin inbox first; Telegram failure never deletes the saved comment.
-
-## Video
-
-Do not stream video bytes through the Worker. Course/webinar media should be HLS/static media on object storage + CDN. A production transcode pipeline should process each uploaded source once, write immutable HLS renditions/segments to durable storage (R2 is the preferred delivery store), mark the media asset READY, and reuse those stored outputs for every future viewer. Re-transcode only when the source or encoding profile changes.
+Telegram is optional. Message persistence happens before notification delivery.
