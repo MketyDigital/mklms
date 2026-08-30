@@ -39,7 +39,11 @@ export default async function AdminAccessPage() {
             ...student,
             createdAt: student.createdAt.toISOString(),
           }))}
-          initialPreauthorizations={preauthorizations}
+          initialPreauthorizations={preauthorizations.map((item) => ({
+            ...item,
+            claimRequestedAt: item.claimRequestedAt?.toISOString() ?? null,
+            manualApprovedAt: item.manualApprovedAt?.toISOString() ?? null,
+          }))}
           defaultClaimStrategy={settings.claimVerificationStrategy}
         />
       </div>
