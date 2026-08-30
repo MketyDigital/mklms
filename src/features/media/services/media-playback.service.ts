@@ -33,6 +33,10 @@ export interface MediaPlaybackOptions {
   ttlSeconds?: number;
 }
 
+export interface MediaPlaybackViewerContext {
+  sessionExpiresAt?: Date | null;
+}
+
 export type MediaPlaybackResult =
   | { ok: true; authorization: PlaybackAuthorization }
   | {
@@ -42,7 +46,8 @@ export type MediaPlaybackResult =
         | "ENROLLMENT_INACTIVE"
         | "LESSON_NOT_AVAILABLE"
         | "LESSON_LOCKED"
-        | "MEDIA_NOT_AVAILABLE";
+        | "MEDIA_NOT_AVAILABLE"
+        | "SESSION_EXPIRED";
     };
 
 export class MediaPlaybackService {
@@ -66,6 +71,7 @@ export class MediaPlaybackService {
     studentId: string,
     courseId: string,
     lessonId: string,
+    viewerContext: MediaPlaybackViewerContext = {},
   ): Promise<MediaPlaybackResult> {
     const [course, enrollment] = await Promise.all([
       this.repository.getCourseStructure(courseId),
@@ -125,13 +131,30 @@ export class MediaPlaybackService {
     }
 
     const now = this.now();
+    let effectiveTtlSeconds = this.ttlSeconds;
+
+    if (viewerContext.sessionExpiresAt) {
+      const remainingSessionSeconds = Math.floor(
+        (viewerContext.sessionExpiresAt.getTime() - now.getTime()) / 1000,
+      );
+
+      if (remainingSessionSeconds <= 0) {
+        return { ok: false, reason: "SESSION_EXPIRED" };
+      }
+
+      effectiveTtlSeconds = Math.min(
+        effectiveTtlSeconds,
+        remainingSessionSeconds,
+      );
+    }
+
     const authorization = await this.provider.createPlaybackAuthorization(asset, {
       studentId,
       viewerId: studentId,
       courseId,
       lessonId,
       now,
-      ttlSeconds: this.ttlSeconds,
+      ttlSeconds: effectiveTtlSeconds,
     });
 
     return {
