@@ -54,6 +54,8 @@ CREATE TABLE IF NOT EXISTS preauthorizations (
   course_id TEXT,
   claim_strategy TEXT NOT NULL DEFAULT 'preauth-only',
   claim_code_hash TEXT,
+  claim_requested_at TIMESTAMPTZ,
+  manual_approved_at TIMESTAMPTZ,
   status TEXT NOT NULL DEFAULT 'PREAUTHORIZED',
   claimed_by_student_id TEXT REFERENCES students(id) ON DELETE SET NULL,
   source TEXT NOT NULL DEFAULT 'manual',
@@ -74,6 +76,14 @@ CREATE INDEX IF NOT EXISTS preauthorizations_phone_idx
 
 CREATE INDEX IF NOT EXISTS preauthorizations_status_idx
   ON preauthorizations (status);
+
+CREATE UNIQUE INDEX IF NOT EXISTS preauthorizations_active_email_course_unique
+  ON preauthorizations (LOWER(email), COALESCE(course_id, ''))
+  WHERE email IS NOT NULL AND status IN ('PREAUTHORIZED', 'CLAIMED');
+
+CREATE UNIQUE INDEX IF NOT EXISTS preauthorizations_active_phone_course_unique
+  ON preauthorizations (phone, COALESCE(course_id, ''))
+  WHERE phone IS NOT NULL AND status IN ('PREAUTHORIZED', 'CLAIMED');
 
 CREATE TABLE IF NOT EXISTS student_access_credentials (
   id TEXT PRIMARY KEY,
