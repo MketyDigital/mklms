@@ -56,6 +56,14 @@ export class PostgresMediaIngestRepository {
     return result.rows.map((row) => mapRow(row));
   }
 
+  async getJob(id: string): Promise<MediaIngestJob | null> {
+    const result = await this.pool.query(
+      `SELECT * FROM media_ingest_jobs WHERE id = $1 LIMIT 1`,
+      [id],
+    );
+    return result.rows[0] ? mapRow(result.rows[0]) : null;
+  }
+
   async createEstimate(input: {
     title: string;
     durationMinutes: number;
