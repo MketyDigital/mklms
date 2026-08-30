@@ -27,7 +27,8 @@ export type LivePlaybackResult =
       state: "LIVE";
       sessionId: string;
       startAtSeconds: number;
-      authorization: PlaybackAuthorization;
+      testMode: boolean;
+      authorization: PlaybackAuthorization | null;
     }
   | {
       ok: false;
@@ -74,13 +75,15 @@ export class LivePlaybackService {
     const liveSession = input.batch.sessions.find(
       (session) => session.id === state.session?.id,
     );
+
     if (!liveSession?.mediaAssetId) {
       return {
-        ok: false,
+        ok: true,
         state: "LIVE",
-        reason: "MEDIA_UNAVAILABLE",
         sessionId: state.session.id,
         startAtSeconds: state.liveOffsetSeconds ?? 0,
+        testMode: true,
+        authorization: null,
       };
     }
 
@@ -109,6 +112,7 @@ export class LivePlaybackService {
       state: "LIVE",
       sessionId: state.session.id,
       startAtSeconds: state.liveOffsetSeconds ?? 0,
+      testMode: false,
       authorization,
     };
   }

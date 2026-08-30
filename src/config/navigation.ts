@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   MessageCircle,
   Radio,
+  ServerCog,
   Settings,
   User,
   Users,
@@ -43,5 +44,6 @@ export const adminNav: NavItem[] = [
   { label: "Certificates", href: ROUTES.adminCertificates, icon: Award },
   { label: "Certificate Templates", href: ROUTES.adminCertificateTemplates, icon: FileBadge2 },
   { label: "All Messages", href: ROUTES.adminMessages, icon: Inbox },
+  { label: "Hosting & Usage", href: ROUTES.adminHosting, icon: ServerCog },
   { label: "Settings", href: ROUTES.adminSettings, icon: Settings },
 ];

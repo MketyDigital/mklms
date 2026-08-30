@@ -40,25 +40,13 @@ export interface AdminLiveSessionRecord {
 
 export interface AdminLiveClassRepository {
   createBatch(input: Omit<AdminLiveBatchRecord, "id">): Promise<AdminLiveBatchRecord>;
-  createSession(
-    batchId: string,
-    input: Omit<AdminLiveSessionRecord, "id" | "batchId">,
-  ): Promise<AdminLiveSessionRecord>;
-  replaceTimelineMessages(
-    sessionId: string,
-    items: ImportedLiveChatItem[],
-  ): Promise<unknown>;
+  createSession(batchId: string, input: Omit<AdminLiveSessionRecord, "id" | "batchId">): Promise<AdminLiveSessionRecord>;
+  replaceTimelineMessages(sessionId: string, items: ImportedLiveChatItem[]): Promise<unknown>;
   setBatchStatus(batchId: string, status: LiveBatchAdminStatus): Promise<void>;
 }
 
 function slugify(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "live-class";
+  return value.trim().toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "live-class";
 }
 
 function optionalText(value?: string | null): string | null {
@@ -84,12 +72,8 @@ export class AdminLiveClassService {
   }): Promise<AdminLiveBatchRecord> {
     const title = input.title.trim();
     if (!title) throw new Error("Live class title is required.");
-
     const expectedViewerBaseline = Math.floor(input.expectedViewerBaseline ?? 0);
-    if (!Number.isFinite(expectedViewerBaseline) || expectedViewerBaseline < 0) {
-      throw new Error("Viewer baseline cannot be negative.");
-    }
-
+    if (!Number.isFinite(expectedViewerBaseline) || expectedViewerBaseline < 0) throw new Error("Viewer baseline cannot be negative.");
     return this.repository.createBatch({
       title,
       slug: slugify(input.slug || title),
@@ -103,42 +87,27 @@ export class AdminLiveClassService {
     });
   }
 
-  async createSession(
-    batchId: string,
-    input: {
-      title: string;
-      position: number;
-      startsAt: Date;
-      durationSeconds: number;
-      mediaAssetId?: string | null;
-      status?: "DRAFT" | "PUBLISHED";
-      ctaText?: string | null;
-      ctaUrl?: string | null;
-      ctaRevealOffsetSeconds?: number | null;
-      endedMessage?: string | null;
-      endedRedirectUrl?: string | null;
-    },
-  ): Promise<AdminLiveSessionRecord> {
+  async createSession(batchId: string, input: {
+    title: string;
+    position: number;
+    startsAt: Date;
+    durationSeconds: number;
+    mediaAssetId?: string | null;
+    status?: "DRAFT" | "PUBLISHED";
+    ctaText?: string | null;
+    ctaUrl?: string | null;
+    ctaRevealOffsetSeconds?: number | null;
+    endedMessage?: string | null;
+    endedRedirectUrl?: string | null;
+  }): Promise<AdminLiveSessionRecord> {
     const title = input.title.trim();
     if (!title) throw new Error("Live session title is required.");
-    if (!Number.isInteger(input.position) || input.position < 1 || input.position > 3) {
-      throw new Error("Live session position must be between 1 and 3.");
-    }
-    if (!(input.startsAt instanceof Date) || Number.isNaN(input.startsAt.getTime())) {
-      throw new Error("Live session start time is invalid.");
-    }
+    if (!Number.isInteger(input.position) || input.position < 1 || input.position > 3) throw new Error("Live session position must be between 1 and 3.");
+    if (!(input.startsAt instanceof Date) || Number.isNaN(input.startsAt.getTime())) throw new Error("Live session start time is invalid.");
     const durationSeconds = Math.floor(input.durationSeconds);
-    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
-      throw new Error("Live session duration must be positive.");
-    }
+    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) throw new Error("Live session duration must be positive.");
     const ctaRevealOffsetSeconds = input.ctaRevealOffsetSeconds ?? null;
-    if (
-      ctaRevealOffsetSeconds !== null &&
-      (!Number.isFinite(ctaRevealOffsetSeconds) || ctaRevealOffsetSeconds < 0)
-    ) {
-      throw new Error("CTA reveal offset cannot be negative.");
-    }
-
+    if (ctaRevealOffsetSeconds !== null && (!Number.isFinite(ctaRevealOffsetSeconds) || ctaRevealOffsetSeconds < 0)) throw new Error("CTA reveal offset cannot be negative.");
     return this.repository.createSession(batchId, {
       title,
       position: input.position,
@@ -148,33 +117,39 @@ export class AdminLiveClassService {
       status: input.status ?? "DRAFT",
       ctaText: optionalText(input.ctaText),
       ctaUrl: normalizeSafeExternalUrl(input.ctaUrl),
-      ctaRevealOffsetSeconds:
-        ctaRevealOffsetSeconds === null ? null : Math.floor(ctaRevealOffsetSeconds),
+      ctaRevealOffsetSeconds: ctaRevealOffsetSeconds === null ? null : Math.floor(ctaRevealOffsetSeconds),
       endedMessage: optionalText(input.endedMessage),
       endedRedirectUrl: normalizeSafeExternalUrl(input.endedRedirectUrl),
     });
   }
 
-  async importTimeline(
-    sessionId: string,
-    input: { format: "csv" | "text"; content: string },
-  ): Promise<{
-    imported: number;
-    errors: LiveChatImportError[];
-  }> {
-    const parsed =
-      input.format === "csv"
-        ? parseLiveChatCsv(input.content)
-        : parseTimestampedLiveChat(input.content);
+  async createQuickTest(input: { title?: string; expectedViewerBaseline?: number; now?: Date } = {}) {
+    const now = input.now ?? new Date();
+    const suffix = now.toISOString().replace(/\D/g, "").slice(0, 14);
+    const batch = await this.createBatch({
+      title: input.title?.trim() || "Live Room Test",
+      slug: `live-room-test-${suffix}`,
+      description: "Temporary no-media test room for verifying the live experience.",
+      expectedViewerBaseline: input.expectedViewerBaseline ?? 100,
+      viewerDisplayMode: "CONFIGURED_BASELINE",
+      endedMessage: "This live-room test has ended.",
+    });
+    const session = await this.createSession(batch.id, {
+      title: "Test Session",
+      position: 1,
+      startsAt: new Date(now.getTime() - 5_000),
+      durationSeconds: 15 * 60,
+      mediaAssetId: null,
+      status: "PUBLISHED",
+    });
+    await this.setBatchStatus(batch.id, "ACTIVE");
+    return { batch: { ...batch, status: "ACTIVE" as const }, session };
+  }
 
-    if (parsed.items.length > 0) {
-      await this.repository.replaceTimelineMessages(sessionId, parsed.items);
-    }
-
-    return {
-      imported: parsed.items.length,
-      errors: parsed.errors,
-    };
+  async importTimeline(sessionId: string, input: { format: "csv" | "text"; content: string }): Promise<{ imported: number; errors: LiveChatImportError[] }> {
+    const parsed = input.format === "csv" ? parseLiveChatCsv(input.content) : parseTimestampedLiveChat(input.content);
+    if (parsed.items.length > 0) await this.repository.replaceTimelineMessages(sessionId, parsed.items);
+    return { imported: parsed.items.length, errors: parsed.errors };
   }
 
   setBatchStatus(batchId: string, status: LiveBatchAdminStatus): Promise<void> {

@@ -3,9 +3,16 @@ import { NextResponse } from "next/server";
 import { PostgresLiveClassRepository } from "@/features/live-classes/repositories/postgres-live-class.repository";
 import { getOrCreateLiveViewerIdentity } from "@/features/live-classes/server/live-viewer";
 import { LivePlaybackService } from "@/features/live-classes/services/live-playback.service";
+import type { MediaProvider } from "@/providers/media-provider";
 import { getConfiguredMediaProvider } from "@/providers/signed-delivery-media-provider";
 
 export const dynamic = "force-dynamic";
+
+const lazyConfiguredMediaProvider: MediaProvider = {
+  async createPlaybackAuthorization(asset, context) {
+    return getConfiguredMediaProvider().createPlaybackAuthorization(asset, context);
+  },
+};
 
 export async function POST(
   _request: Request,
@@ -28,21 +35,28 @@ export async function POST(
     }));
 
   try {
-    const service = new LivePlaybackService(repository, getConfiguredMediaProvider());
+    const service = new LivePlaybackService(repository, lazyConfiguredMediaProvider);
     const result = await service.authorize({ batch, viewerId: viewer.id });
     if (!result.ok) {
       return NextResponse.json(result, { status: result.reason === "NOT_LIVE" ? 409 : 503 });
     }
     return NextResponse.json({
       ...result,
-      authorization: {
-        ...result.authorization,
-        expiresAt: result.authorization.expiresAt?.toISOString() ?? null,
-      },
+      authorization: result.authorization
+        ? {
+            ...result.authorization,
+            expiresAt: result.authorization.expiresAt?.toISOString() ?? null,
+          }
+        : null,
     });
   } catch (error) {
     return NextResponse.json(
-      { ok: false, state: "LIVE", reason: "MEDIA_UNAVAILABLE", message: error instanceof Error ? error.message : "Live playback is unavailable." },
+      {
+        ok: false,
+        state: "LIVE",
+        reason: "MEDIA_UNAVAILABLE",
+        message: error instanceof Error ? error.message : "Live playback is unavailable.",
+      },
       { status: 503 },
     );
   }

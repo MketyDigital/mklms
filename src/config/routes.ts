@@ -18,6 +18,7 @@ export const ROUTES = {
   adminCertificates: "/admin/certificates",
   adminCertificateTemplates: "/admin/certificate-templates",
   adminMessages: "/admin/messages",
+  adminHosting: "/admin/hosting",
   adminSettings: "/admin/settings",
 } as const;
 
