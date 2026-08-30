@@ -31,7 +31,14 @@ export default async function AdminHostingPage() {
             Transparent usage signals, media-processing estimates and optional managed-hosting payment details.
           </p>
         </div>
-        <ManagedHostingPanel initialSettings={hostingSettings} usage={usage} />
+        <ManagedHostingPanel
+          initialSettings={hostingSettings}
+          usage={{
+            courseWatchMinutesMeasured: usage.courseWatchMinutesMeasured,
+            liveAudienceMinutesEstimated: usage.liveAudienceMinutesEstimated,
+            ociMediaFlowEstimatedCostUsd: usage.ociMediaFlowEstimatedCostUsd,
+          }}
+        />
       </div>
     </AppLayout>
   );
