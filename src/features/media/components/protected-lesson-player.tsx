@@ -76,19 +76,21 @@ export function ProtectedLessonPlayer({
 
   useEffect(() => {
     let active = true;
-
-    requestPlayback()
-      .catch((caught) => {
-        if (active) {
-          setError(caught instanceof Error ? caught.message : "Protected playback is unavailable.");
-        }
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+    const timer = window.setTimeout(() => {
+      void requestPlayback()
+        .catch((caught) => {
+          if (active) {
+            setError(caught instanceof Error ? caught.message : "Protected playback is unavailable.");
+          }
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    }, 0);
 
     return () => {
       active = false;
+      window.clearTimeout(timer);
     };
   }, [requestPlayback]);
 
