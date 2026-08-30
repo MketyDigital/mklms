@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getCurrentStudentSession } from "@/features/access/server/current-student";
+import { ensureCourseCertificate } from "@/features/certificates/server/ensure-course-certificate";
 import { PostgresLearningRepository } from "@/features/courses/repositories/postgres-learning.repository";
 import { LearningProgressService } from "@/features/courses/services/learning-progress.service";
 
@@ -40,5 +41,9 @@ export async function POST(
     );
   }
 
-  return NextResponse.json(result);
+  const certificate = result.courseCompleted
+    ? await ensureCourseCertificate(session.studentId, courseId)
+    : null;
+
+  return NextResponse.json({ ...result, certificate });
 }
