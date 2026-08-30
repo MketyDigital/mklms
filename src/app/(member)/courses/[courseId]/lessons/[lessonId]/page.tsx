@@ -15,6 +15,7 @@ import { getCurrentStudentSession } from "@/features/access/server/current-stude
 import { CompleteLessonButton } from "@/features/courses/components/complete-lesson-button";
 import { PostgresLearningRepository } from "@/features/courses/repositories/postgres-learning.repository";
 import { StudentLearningService } from "@/features/courses/services/student-learning.service";
+import { ProtectedLessonPlayer } from "@/features/media/components/protected-lesson-player";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,7 @@ export default async function LessonPage({
   if (!course) notFound();
 
   const lesson = course.modules
-    .flatMap((module) => module.lessons)
+    .flatMap((courseModule) => courseModule.lessons)
     .find((item) => item.id === lessonId);
 
   if (!lesson) notFound();
@@ -85,15 +86,22 @@ export default async function LessonPage({
               <CardHeader>
                 <CardTitle className="text-base">Lesson media</CardTitle>
                 <CardDescription>
-                  Protected playback will be issued here by the configured media provider.
+                  Media is authorized only after your student session and lesson access are verified.
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex min-h-72 items-center justify-center rounded-lg border bg-muted/20 px-6 text-center text-sm text-muted-foreground">
-                  {lesson.mediaAssetId
-                    ? "This lesson has a media asset assigned. Direct storage or origin URLs are intentionally not exposed."
-                    : "No media asset has been assigned to this lesson yet."}
-                </div>
+                {lesson.mediaAssetId ? (
+                  <ProtectedLessonPlayer
+                    courseId={courseId}
+                    lessonId={lessonId}
+                    completionMode={lesson.completionMode}
+                    completed={lesson.completed}
+                  />
+                ) : (
+                  <div className="flex min-h-72 items-center justify-center rounded-lg border bg-muted/20 px-6 text-center text-sm text-muted-foreground">
+                    No media asset has been assigned to this lesson yet.
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -115,7 +123,7 @@ export default async function LessonPage({
                   <p className="text-sm text-muted-foreground">
                     {lesson.completed
                       ? "Lesson completed."
-                      : "This lesson records completion automatically from its configured learning activity. The protected video player will report progress without exposing a manual completion shortcut."}
+                      : "This lesson completes automatically when the protected player verifies enough watch progress."}
                   </p>
                 )}
               </CardContent>
