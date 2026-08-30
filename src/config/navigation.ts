@@ -5,7 +5,6 @@ import {
   FileBadge2,
   Film,
   FolderOpen,
-  HelpCircle,
   Home,
   Inbox,
   KeyRound,
@@ -41,7 +40,6 @@ export const adminNav: NavItem[] = [
   { label: "Media Library", href: ROUTES.adminMedia, icon: Film },
   { label: "Certificates", href: ROUTES.adminCertificates, icon: Award },
   { label: "Certificate Templates", href: ROUTES.adminCertificateTemplates, icon: FileBadge2 },
-  { label: "Questions", href: ROUTES.adminQuestions, icon: HelpCircle },
   { label: "All Messages", href: ROUTES.adminMessages, icon: Inbox },
   { label: "Settings", href: ROUTES.adminSettings, icon: Settings },
 ];
