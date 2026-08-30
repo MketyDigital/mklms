@@ -5,11 +5,13 @@ import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
 import { PdfLibCertificateRenderer } from "@/features/certificates/providers/pdf-lib-certificate-renderer";
 import { PostgresCertificateRepository } from "@/features/certificates/repositories/postgres-certificate.repository";
 import { CertificateDeliveryService } from "@/features/certificates/services/certificate-delivery.service";
+import { PostgresMessageRepository } from "@/features/messages/repositories/postgres-message.repository";
+import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
 import { getConfiguredEmailProvider } from "@/providers/smtp-email-provider";
 import { getConfiguredStorageProvider } from "@/providers/s3-compatible-storage-provider";
 
 const actionSchema = z.object({
-  action: z.enum(["revoke", "restore", "redeliver"]),
+  action: z.enum(["revoke", "restore", "redeliver", "message"]),
 });
 
 export async function POST(
@@ -40,6 +42,26 @@ export async function POST(
   if (parsed.data.action === "restore") {
     await repository.restoreCertificate(certificate.id);
     return NextResponse.json({ ok: true, status: "ISSUED" });
+  }
+
+  if (parsed.data.action === "message") {
+    if (certificate.status !== "ISSUED") {
+      return NextResponse.json(
+        { ok: false, message: "A revoked certificate cannot be sent as valid." },
+        { status: 409 },
+      );
+    }
+
+    const settings = await new PostgresSettingsRepository().getPlatformSettings();
+    const senderName = settings.supportName ?? settings.organizationName;
+    await new PostgresMessageRepository().sendAdminMessage(
+      certificate.studentId,
+      senderName,
+      `Your certificate for ${certificate.courseTitle} is available. Certificate ID: ${certificate.certificateId}. You can open the Certificates section in your learning portal to download it and use the public verification page when needed.`,
+      { type: "CERTIFICATE", id: certificate.id },
+    );
+
+    return NextResponse.json({ ok: true, message: "Certificate message sent." });
   }
 
   const issued = await repository.findByStudentCourse(
