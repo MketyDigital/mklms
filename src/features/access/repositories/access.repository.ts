@@ -38,6 +38,7 @@ export interface AccessRepository {
   findPreauthorization(
     identity: ClaimIdentityInput,
   ): Promise<PreauthorizationRecord | null>;
+  markPreauthorizationClaimRequested(preauthorizationId: string): Promise<void>;
   createStudent(input: CreateStudentInput): Promise<StudentRecord>;
   markPreauthorizationClaimed(
     preauthorizationId: string,
