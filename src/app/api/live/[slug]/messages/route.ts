@@ -5,23 +5,37 @@ import { resolveLiveBatchState } from "@/features/live-classes/domain/live-sessi
 import { PostgresLiveClassRepository } from "@/features/live-classes/repositories/postgres-live-class.repository";
 import { getOrCreateLiveViewerIdentity } from "@/features/live-classes/server/live-viewer";
 import { LiveAttendeeMessageService } from "@/features/live-classes/services/live-attendee-message.service";
+import {
+  FixedWindowRateLimiter,
+  getRequestClientKey,
+  rateLimitHeaders,
+} from "@/lib/security/rate-limit";
 import { getConfiguredNotificationProvider } from "@/providers/telegram-notification-provider";
 
 const payloadSchema = z.object({
   displayName: z.string().trim().min(1).max(100).optional(),
   message: z.string().trim().min(1).max(4000),
 });
+const limiter = new FixedWindowRateLimiter({ limit: 8, windowMs: 60_000 });
 
 export async function POST(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ) {
+  const { slug } = await context.params;
+  const limit = limiter.consume(getRequestClientKey(request, `live-message:${slug}`));
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { ok: false, message: "You are sending comments too quickly. Try again shortly." },
+      { status: 429, headers: rateLimitHeaders(limit) },
+    );
+  }
+
   const parsed = payloadSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ ok: false, message: "Enter a valid comment." }, { status: 400 });
   }
 
-  const { slug } = await context.params;
   const repository = new PostgresLiveClassRepository();
   const batch = await repository.findPublicBatchBySlug(slug);
   if (!batch) {
