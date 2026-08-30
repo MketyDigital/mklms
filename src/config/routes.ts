@@ -8,6 +8,9 @@ export const ROUTES = {
   dashboard: "/dashboard",
   courses: "/courses",
   courseDetail: (courseId: string) => `/courses/${courseId}` as const,
+  courseLesson: (courseId: string, lessonId: string) =>
+    `/courses/${courseId}/lessons/${lessonId}` as const,
+  // Legacy compatibility while the old video admin UI is migrated.
   courseVideo: (courseId: string, videoId: string) =>
     `/courses/${courseId}/videos/${videoId}` as const,
   progress: "/progress",
