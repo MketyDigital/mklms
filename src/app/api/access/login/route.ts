@@ -7,12 +7,26 @@ import {
   getStudentSessionCookieOptions,
   STUDENT_SESSION_COOKIE,
 } from "@/features/access/server/session-cookie";
+import {
+  FixedWindowRateLimiter,
+  getRequestClientKey,
+  rateLimitHeaders,
+} from "@/lib/security/rate-limit";
 
 const loginSchema = z.object({
   accessCode: z.string().min(1).max(128),
 });
+const limiter = new FixedWindowRateLimiter({ limit: 10, windowMs: 10 * 60_000 });
 
 export async function POST(request: Request) {
+  const limit = limiter.consume(getRequestClientKey(request, "student-login"));
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { ok: false, message: "Too many sign-in attempts. Try again later." },
+      { status: 429, headers: rateLimitHeaders(limit) },
+    );
+  }
+
   const parsed = loginSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json(
