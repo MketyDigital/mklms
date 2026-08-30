@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getCurrentStudentSession } from "@/features/access/server/current-student";
+import { ensureCourseCertificate } from "@/features/certificates/server/ensure-course-certificate";
 import { PostgresVideoProgressRepository } from "@/features/media/repositories/postgres-video-progress.repository";
 import { VideoProgressService } from "@/features/media/services/video-progress.service";
 
@@ -51,9 +52,16 @@ export async function POST(
     return NextResponse.json(result, { status });
   }
 
-  return NextResponse.json(result, {
-    headers: {
-      "Cache-Control": "private, no-store",
+  const certificate = result.courseCompleted
+    ? await ensureCourseCertificate(session.studentId, courseId)
+    : null;
+
+  return NextResponse.json(
+    { ...result, certificate },
+    {
+      headers: {
+        "Cache-Control": "private, no-store",
+      },
     },
-  });
+  );
 }
