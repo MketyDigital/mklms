@@ -7,14 +7,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { calculateManagedHostingFee, type ManagedHostingSettings } from "../domain/managed-hosting";
-import type { ManagedHostingUsageSummary } from "../repositories/postgres-managed-hosting.repository";
+
+export interface ManagedHostingUsageClientSummary {
+  courseWatchMinutesMeasured: number;
+  liveAudienceMinutesEstimated: number;
+  ociMediaFlowEstimatedCostUsd: number;
+}
 
 export function ManagedHostingPanel({
   initialSettings,
   usage,
 }: {
   initialSettings: ManagedHostingSettings;
-  usage: ManagedHostingUsageSummary;
+  usage: ManagedHostingUsageClientSummary;
 }) {
   const [settings, setSettings] = useState(initialSettings);
   const [message, setMessage] = useState<string | null>(null);
