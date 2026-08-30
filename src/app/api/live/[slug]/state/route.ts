@@ -4,6 +4,8 @@ import { LIVE_STATE_CACHE_CONTROL } from "@/features/live-classes/domain/live-cl
 import { resolveLiveBatchState, resolveViewerDisplayCount } from "@/features/live-classes/domain/live-session";
 import { isLiveCtaVisible } from "@/features/live-classes/domain/live-timeline";
 import { PostgresLiveClassRepository } from "@/features/live-classes/repositories/postgres-live-class.repository";
+import { getOrCreateLiveViewerIdentity } from "@/features/live-classes/server/live-viewer";
+import { LiveRoomService } from "@/features/live-classes/services/live-room.service";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +38,28 @@ export async function GET(
         .slice(-20)
     : [];
 
+  let activeViewers = 0;
+  let displayViewerCount = resolveViewerDisplayCount({
+    mode: "CONFIGURED_BASELINE",
+    baseline: batch.expectedViewerBaseline,
+    activeViewers: 0,
+  });
+
+  const usesSharedCachedState = batch.viewerDisplayMode === "CONFIGURED_BASELINE";
+  if (!usesSharedCachedState) {
+    const viewerIdentity = await getOrCreateLiveViewerIdentity();
+    const heartbeat = await new LiveRoomService(repository).heartbeat({
+      batchId: batch.id,
+      sessionId: state.session?.id ?? null,
+      viewerTokenHash: viewerIdentity.tokenHash,
+      viewerDisplayMode: batch.viewerDisplayMode,
+      expectedViewerBaseline: batch.expectedViewerBaseline,
+      now,
+    });
+    activeViewers = heartbeat.activeViewers;
+    displayViewerCount = heartbeat.displayViewerCount;
+  }
+
   const ctaVisible = session && state.state === "LIVE"
     ? isLiveCtaVisible({
         liveOffsetSeconds: state.liveOffsetSeconds ?? 0,
@@ -57,13 +81,8 @@ export async function GET(
       isLive: state.isLive,
       liveOffsetSeconds: state.liveOffsetSeconds,
       nextStartsAt: state.countdownTo?.toISOString() ?? null,
-      displayViewerCount: resolveViewerDisplayCount({
-        mode: batch.viewerDisplayMode === "CONFIGURED_BASELINE"
-          ? "CONFIGURED_BASELINE"
-          : "CONFIGURED_BASELINE",
-        baseline: batch.expectedViewerBaseline,
-        activeViewers: 0,
-      }),
+      displayViewerCount,
+      activeViewers,
       session: session
         ? {
             id: session.id,
@@ -85,10 +104,14 @@ export async function GET(
         : null,
     },
     {
-      headers: {
-        "Cache-Control": LIVE_STATE_CACHE_CONTROL,
-        "CDN-Cache-Control": LIVE_STATE_CACHE_CONTROL,
-      },
+      headers: usesSharedCachedState
+        ? {
+            "Cache-Control": LIVE_STATE_CACHE_CONTROL,
+            "CDN-Cache-Control": LIVE_STATE_CACHE_CONTROL,
+          }
+        : {
+            "Cache-Control": "private, no-store",
+          },
     },
   );
 }
