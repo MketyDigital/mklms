@@ -12,6 +12,34 @@ import type {
 } from "./admin-access.repository";
 import type { AccessCodeHash, PreauthorizationRecord } from "../types";
 
+type PreauthorizationRow = {
+  id: string;
+  email: string | null;
+  phone: string | null;
+  name_hint: string | null;
+  course_id: string | null;
+  status: PreauthorizationRecord["status"];
+  claim_strategy: NonNullable<PreauthorizationRecord["claimStrategy"]>;
+  claim_code_hash: string | null;
+  claim_requested_at: Date | null;
+  manual_approved_at: Date | null;
+};
+
+function mapPreauthorization(row: PreauthorizationRow): PreauthorizationRecord {
+  return {
+    id: row.id,
+    email: row.email,
+    phone: row.phone,
+    nameHint: row.name_hint,
+    courseId: row.course_id,
+    status: row.status,
+    claimStrategy: row.claim_strategy,
+    claimCodeHash: row.claim_code_hash,
+    claimRequestedAt: row.claim_requested_at ? new Date(row.claim_requested_at) : null,
+    manualApprovedAt: row.manual_approved_at ? new Date(row.manual_approved_at) : null,
+  };
+}
+
 export class PostgresAdminAccessRepository implements AdminAccessRepository {
   private readonly pool: Pool;
 
@@ -26,18 +54,10 @@ export class PostgresAdminAccessRepository implements AdminAccessRepository {
     const phone = input.phone ? normalizeIdentity(input.phone, "phone") : null;
     const courseId = input.courseId ?? null;
 
-    const existing = await this.pool.query<{
-      id: string;
-      email: string | null;
-      phone: string | null;
-      name_hint: string | null;
-      course_id: string | null;
-      status: PreauthorizationRecord["status"];
-      claim_strategy: NonNullable<PreauthorizationRecord["claimStrategy"]>;
-      claim_code_hash: string | null;
-    }>(
+    const existing = await this.pool.query<PreauthorizationRow>(
       `SELECT id, email, phone, name_hint, course_id, status,
-              claim_strategy, claim_code_hash
+              claim_strategy, claim_code_hash, claim_requested_at,
+              manual_approved_at
        FROM preauthorizations
        WHERE status IN ('PREAUTHORIZED', 'CLAIMED')
          AND COALESCE(course_id, '') = COALESCE($3, '')
@@ -51,41 +71,19 @@ export class PostgresAdminAccessRepository implements AdminAccessRepository {
     );
 
     if (existing.rows[0]) {
-      const row = existing.rows[0];
-      return {
-        created: false,
-        record: {
-          id: row.id,
-          email: row.email,
-          phone: row.phone,
-          nameHint: row.name_hint,
-          courseId: row.course_id,
-          status: row.status,
-          claimStrategy: row.claim_strategy,
-          claimCodeHash: row.claim_code_hash,
-        },
-      };
+      return { created: false, record: mapPreauthorization(existing.rows[0]) };
     }
 
-    const id = randomUUID();
-    const result = await this.pool.query<{
-      id: string;
-      email: string | null;
-      phone: string | null;
-      name_hint: string | null;
-      course_id: string | null;
-      status: PreauthorizationRecord["status"];
-      claim_strategy: NonNullable<PreauthorizationRecord["claimStrategy"]>;
-      claim_code_hash: string | null;
-    }>(
+    const result = await this.pool.query<PreauthorizationRow>(
       `INSERT INTO preauthorizations (
          id, email, phone, name_hint, course_id, claim_strategy,
          claim_code_hash, source, external_reference
        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        RETURNING id, email, phone, name_hint, course_id, status,
-                 claim_strategy, claim_code_hash`,
+                 claim_strategy, claim_code_hash, claim_requested_at,
+                 manual_approved_at`,
       [
-        id,
+        randomUUID(),
         email,
         phone,
         input.nameHint ?? null,
@@ -97,51 +95,37 @@ export class PostgresAdminAccessRepository implements AdminAccessRepository {
       ],
     );
 
-    const row = result.rows[0];
-    return {
-      created: true,
-      record: {
-        id: row.id,
-        email: row.email,
-        phone: row.phone,
-        nameHint: row.name_hint,
-        courseId: row.course_id,
-        status: row.status,
-        claimStrategy: row.claim_strategy,
-        claimCodeHash: row.claim_code_hash,
-      },
-    };
+    return { created: true, record: mapPreauthorization(result.rows[0]) };
   }
 
   async listPreauthorizations(limit = 100): Promise<PreauthorizationRecord[]> {
-    const result = await this.pool.query<{
-      id: string;
-      email: string | null;
-      phone: string | null;
-      name_hint: string | null;
-      course_id: string | null;
-      status: PreauthorizationRecord["status"];
-      claim_strategy: NonNullable<PreauthorizationRecord["claimStrategy"]>;
-      claim_code_hash: string | null;
-    }>(
+    const result = await this.pool.query<PreauthorizationRow>(
       `SELECT id, email, phone, name_hint, course_id, status,
-              claim_strategy, claim_code_hash
+              claim_strategy, claim_code_hash, claim_requested_at,
+              manual_approved_at
        FROM preauthorizations
        ORDER BY created_at DESC
        LIMIT $1`,
       [limit],
     );
 
-    return result.rows.map((row) => ({
-      id: row.id,
-      email: row.email,
-      phone: row.phone,
-      nameHint: row.name_hint,
-      courseId: row.course_id,
-      status: row.status,
-      claimStrategy: row.claim_strategy,
-      claimCodeHash: row.claim_code_hash,
-    }));
+    return result.rows.map(mapPreauthorization);
+  }
+
+  async approveManualClaim(preauthorizationId: string): Promise<void> {
+    const result = await this.pool.query(
+      `UPDATE preauthorizations
+       SET manual_approved_at = NOW(), updated_at = NOW()
+       WHERE id = $1
+         AND status = 'PREAUTHORIZED'
+         AND claim_strategy = 'manual-approval'
+         AND claim_requested_at IS NOT NULL`,
+      [preauthorizationId],
+    );
+
+    if (result.rowCount !== 1) {
+      throw new Error("This manual claim request is not available for approval.");
+    }
   }
 
   async listStudents(limit = 100): Promise<AdminStudentSummary[]> {
