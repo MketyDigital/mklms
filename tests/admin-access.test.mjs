@@ -15,10 +15,10 @@ class InMemoryAdminAccessRepository {
       item.courseId === input.courseId &&
       ((input.email && item.email === input.email) || (input.phone && item.phone === input.phone))
     );
-    if (duplicate) return duplicate;
+    if (duplicate) return { record: duplicate, created: false };
     const record = { id: String(this.preauthorizations.length + 1), status: 'PREAUTHORIZED', ...input };
     this.preauthorizations.push(record);
-    return record;
+    return { record, created: true };
   }
 
   async listPreauthorizations() { return this.preauthorizations; }
@@ -45,9 +45,34 @@ test('bulkAuthorize normalizes and creates valid paid-student preauthorizations'
   });
 
   assert.equal(result.created, 2);
+  assert.equal(result.skippedDuplicates, 0);
   assert.equal(result.errors.length, 0);
   assert.equal(repo.preauthorizations[0].email, 'student@example.com');
   assert.equal(repo.preauthorizations[1].phone, '2348031234567');
+});
+
+test('bulkAuthorize reports already-authorized identities as skipped duplicates', async () => {
+  const repo = new InMemoryAdminAccessRepository();
+  const service = new AdminAccessService(repo, { accessCodePrefix: 'LEARN' });
+
+  await service.bulkAuthorize({
+    mode: 'paste',
+    input: 'student@example.com',
+    courseId: 'course-1',
+    claimStrategy: 'preauth-only',
+    source: 'first-import',
+  });
+  const result = await service.bulkAuthorize({
+    mode: 'paste',
+    input: 'STUDENT@example.com',
+    courseId: 'course-1',
+    claimStrategy: 'preauth-only',
+    source: 'repeat-import',
+  });
+
+  assert.equal(result.created, 0);
+  assert.equal(result.skippedDuplicates, 1);
+  assert.equal(repo.preauthorizations.length, 1);
 });
 
 test('resetAccessCode returns a new code once and stores only hashed credential material', async () => {
