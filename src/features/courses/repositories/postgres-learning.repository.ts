@@ -89,9 +89,9 @@ export class PostgresLearningRepository
     const modules = new Map<string, CourseStructure["modules"][number]>();
 
     for (const row of moduleResult.rows) {
-      let module = modules.get(row.module_id);
-      if (!module) {
-        module = {
+      let courseModule = modules.get(row.module_id);
+      if (!courseModule) {
+        courseModule = {
           id: row.module_id,
           courseId,
           title: row.module_title,
@@ -99,11 +99,11 @@ export class PostgresLearningRepository
           position: row.module_position,
           lessons: [],
         };
-        modules.set(row.module_id, module);
+        modules.set(row.module_id, courseModule);
       }
 
       if (row.lesson_id && row.lesson_title && row.lesson_position !== null) {
-        module.lessons.push({
+        courseModule.lessons.push({
           id: row.lesson_id,
           moduleId: row.module_id,
           title: row.lesson_title,
