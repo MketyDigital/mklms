@@ -4,23 +4,24 @@ export const ROUTES = {
   login: "/login",
   onboarding: "/onboarding",
 
-  // Member
+  // Student
   dashboard: "/dashboard",
   courses: "/courses",
   courseDetail: (courseId: string) => `/courses/${courseId}` as const,
   courseVideo: (courseId: string, videoId: string) =>
     `/courses/${courseId}/videos/${videoId}` as const,
+  progress: "/progress",
+  certificates: "/certificates",
   messages: "/messages",
   profile: "/profile",
-  subscriptions: "/subscriptions",
 
   // Admin
   admin: "/admin",
+  adminAccess: "/admin/access",
   adminMembers: "/admin/members",
   adminCourses: "/admin/courses",
   adminCourseVideos: (courseId: string) =>
     `/admin/courses/${courseId}/videos` as const,
-  adminSubscriptions: "/admin/subscriptions",
   adminQuestions: "/admin/questions",
   adminMessages: "/admin/messages",
   adminSettings: "/admin/settings",
