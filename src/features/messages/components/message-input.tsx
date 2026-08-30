@@ -2,22 +2,39 @@
 
 import { useState } from "react";
 import { Send } from "lucide-react";
+import { useRouter } from "next/navigation";
+
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
 export function MessageInput() {
+  const router = useRouter();
   const [newMessage, setNewMessage] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  function handleSend() {
-    if (!newMessage.trim()) return;
-    // TODO: call messageService.sendMessage(newMessage)
-    setNewMessage("");
+  async function handleSend() {
+    const text = newMessage.trim();
+    if (!text || busy) return;
+
+    setBusy(true);
+    try {
+      const response = await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!response.ok) return;
+      setNewMessage("");
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      void handleSend();
     }
   }
 
@@ -34,8 +51,8 @@ export function MessageInput() {
         />
         <Button
           size="icon"
-          onClick={handleSend}
-          disabled={!newMessage.trim()}
+          onClick={() => void handleSend()}
+          disabled={!newMessage.trim() || busy}
           className="shrink-0"
         >
           <Send className="size-4" />
