@@ -36,8 +36,11 @@ export class PostgresAccessRepository implements AccessRepository {
       name_hint: string | null;
       course_id: string | null;
       status: PreauthorizationRecord["status"];
+      claim_strategy: NonNullable<PreauthorizationRecord["claimStrategy"]>;
+      claim_code_hash: string | null;
     }>(
-      `SELECT id, email, phone, name_hint, course_id, status
+      `SELECT id, email, phone, name_hint, course_id, status,
+              claim_strategy, claim_code_hash
        FROM preauthorizations
        WHERE status = 'PREAUTHORIZED'
          AND (
@@ -59,6 +62,8 @@ export class PostgresAccessRepository implements AccessRepository {
       nameHint: row.name_hint,
       courseId: row.course_id,
       status: row.status,
+      claimStrategy: row.claim_strategy,
+      claimCodeHash: row.claim_code_hash,
     };
   }
 
