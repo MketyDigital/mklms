@@ -5,6 +5,7 @@ import { getPostgresPool } from "@/lib/postgres";
 import type {
   AccessRepository,
   ActiveCredentialRecord,
+  ActiveSessionRecord,
   CreateSessionInput,
   CreateStudentInput,
   StudentRecord,
@@ -209,6 +210,43 @@ export class PostgresAccessRepository implements AccessRepository {
        VALUES ($1, $2, $3, $4)`,
       [randomUUID(), studentId, input.tokenHash, input.expiresAt],
     );
+  }
+
+  async findActiveSessionByTokenHash(
+    tokenHash: string,
+    now: Date,
+  ): Promise<ActiveSessionRecord | null> {
+    const result = await this.pool.query<{
+      student_id: string;
+      display_name: string;
+      email: string | null;
+      expires_at: Date;
+    }>(
+      `SELECT s.student_id, st.display_name, st.email, s.expires_at
+       FROM student_sessions s
+       JOIN students st ON st.id = s.student_id
+       WHERE s.token_hash = $1
+         AND s.revoked_at IS NULL
+         AND s.expires_at > $2
+         AND st.status = 'ACTIVE'
+       LIMIT 1`,
+      [tokenHash, now],
+    );
+
+    const row = result.rows[0];
+    if (!row) return null;
+
+    await this.pool.query(
+      `UPDATE student_sessions SET last_seen_at = NOW() WHERE token_hash = $1`,
+      [tokenHash],
+    );
+
+    return {
+      studentId: row.student_id,
+      displayName: row.display_name,
+      email: row.email,
+      expiresAt: new Date(row.expires_at),
+    };
   }
 
   async revokeSession(tokenHash: string): Promise<void> {
