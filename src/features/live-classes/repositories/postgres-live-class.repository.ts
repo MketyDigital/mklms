@@ -14,16 +14,6 @@ import type {
   LiveRoomRepository,
 } from "../services/live-room.service";
 
-export interface LiveBatchRuntimeRecord extends LiveBatchDefinition {
-  title: string;
-  description?: string | null;
-  expectedViewerBaseline: number;
-  viewerDisplayMode: ViewerDisplayMode;
-  endedMessage?: string | null;
-  endedRedirectUrl?: string | null;
-  notificationDestination?: string | null;
-}
-
 export interface LiveSessionRuntimeRecord extends LiveSessionDefinition {
   mediaAssetId?: string | null;
   ctaText?: string | null;
@@ -31,6 +21,18 @@ export interface LiveSessionRuntimeRecord extends LiveSessionDefinition {
   ctaRevealOffsetSeconds?: number | null;
   endedMessage?: string | null;
   endedRedirectUrl?: string | null;
+}
+
+export interface LiveBatchRuntimeRecord
+  extends Omit<LiveBatchDefinition, "sessions"> {
+  title: string;
+  description?: string | null;
+  expectedViewerBaseline: number;
+  viewerDisplayMode: ViewerDisplayMode;
+  endedMessage?: string | null;
+  endedRedirectUrl?: string | null;
+  notificationDestination?: string | null;
+  sessions: LiveSessionRuntimeRecord[];
 }
 
 export class PostgresLiveClassRepository implements LiveRoomRepository {
