@@ -10,6 +10,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
+export const dynamic = "force-dynamic";
+
 export default async function OnboardingPage() {
   const settings = await new PostgresSettingsRepository().getPlatformSettings();
 
@@ -20,11 +22,8 @@ export default async function OnboardingPage() {
           <Link href="/" className="text-2xl font-semibold tracking-tight">
             {settings.productName}
           </Link>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {settings.organizationName}
-          </p>
+          <p className="mt-2 text-sm text-muted-foreground">{settings.organizationName}</p>
         </div>
-
         <Card className="mt-8">
           <CardHeader>
             <CardTitle>Claim approved course access</CardTitle>
@@ -33,17 +32,11 @@ export default async function OnboardingPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ClaimAccessForm
-              verificationStrategy={settings.claimVerificationStrategy}
-            />
+            <ClaimAccessForm verificationStrategy={settings.claimVerificationStrategy} />
           </CardContent>
         </Card>
-
         <p className="mt-6 text-center text-sm text-muted-foreground">
-          Already have an access code?{" "}
-          <Link href="/login" className="font-medium text-foreground hover:underline">
-            Return to student login
-          </Link>
+          Already have an access code?{" "}<Link href="/login" className="font-medium text-foreground hover:underline">Return to student login</Link>
         </p>
       </div>
     </div>
