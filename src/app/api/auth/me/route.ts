@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getCurrentStudentSession } from "@/features/access/server/runtime";
+import { getCurrentStudentSession } from "@/features/access/server/current-student";
 
 export async function GET() {
   const session = await getCurrentStudentSession();
