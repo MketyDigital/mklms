@@ -6,6 +6,7 @@ import { LiveRoomService } from '../src/features/live-classes/services/live-room
 class FakeLiveRepository {
   constructor() {
     this.active = 0;
+    this.activeCountCalls = 0;
     this.own = [];
     this.all = [];
   }
@@ -15,6 +16,7 @@ class FakeLiveRepository {
   }
 
   async countActiveViewers() {
+    this.activeCountCalls += 1;
     return this.active;
   }
 
@@ -27,7 +29,7 @@ class FakeLiveRepository {
   }
 }
 
-test('heartbeat returns viewer display count using admin baseline mode while keeping measured active viewers separate', async () => {
+test('heartbeat uses configured baseline without issuing an active-viewer count query', async () => {
   const repository = new FakeLiveRepository();
   repository.active = 37;
   const service = new LiveRoomService(repository);
@@ -40,8 +42,27 @@ test('heartbeat returns viewer display count using admin baseline mode while kee
     expectedViewerBaseline: 500,
   });
 
-  assert.equal(result.activeViewers, 37);
+  assert.equal(repository.activeCountCalls, 0);
+  assert.equal(result.activeViewers, 0);
   assert.equal(result.displayViewerCount, 500);
+});
+
+test('heartbeat counts active viewers when display mode needs measured presence', async () => {
+  const repository = new FakeLiveRepository();
+  repository.active = 37;
+  const service = new LiveRoomService(repository);
+
+  const result = await service.heartbeat({
+    batchId: 'batch-1',
+    sessionId: 'session-1',
+    viewerTokenHash: 'hash-1',
+    viewerDisplayMode: 'ACTIVE_ONLY',
+    expectedViewerBaseline: 500,
+  });
+
+  assert.equal(repository.activeCountCalls, 1);
+  assert.equal(result.activeViewers, 37);
+  assert.equal(result.displayViewerCount, 37);
 });
 
 test('public attendee message view contains staged timeline plus only that viewer own real messages', async () => {
