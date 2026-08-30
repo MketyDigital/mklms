@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS live_batches (
   viewer_display_mode TEXT NOT NULL DEFAULT 'CONFIGURED_BASELINE',
   ended_message TEXT,
   ended_redirect_url TEXT,
+  notification_destination TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT live_batches_viewer_baseline_check CHECK (expected_viewer_baseline >= 0),
@@ -17,6 +18,9 @@ CREATE TABLE IF NOT EXISTS live_batches (
     viewer_display_mode IN ('CONFIGURED_BASELINE','ACTIVE_ONLY','BASELINE_PLUS_ACTIVE')
   )
 );
+
+ALTER TABLE live_batches
+  ADD COLUMN IF NOT EXISTS notification_destination TEXT;
 
 CREATE TABLE IF NOT EXISTS live_sessions (
   id TEXT PRIMARY KEY,
