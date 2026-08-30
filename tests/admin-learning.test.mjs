@@ -37,6 +37,10 @@ class Repo {
     const course = this.courses.find((item) => item.id === courseId);
     if (course) course.status = status;
   }
+  async setLessonStatus(lessonId, status) {
+    const lesson = this.lessons.find((item) => item.id === lessonId);
+    if (lesson) lesson.status = status;
+  }
 }
 
 test('createCourse normalizes a reusable slug without brand assumptions', async () => {
@@ -71,4 +75,15 @@ test('course status can be published without payment/subscription state', async 
 
   await service.setCourseStatus(course.id, 'PUBLISHED');
   assert.equal(repo.courses[0].status, 'PUBLISHED');
+});
+
+test('lesson can be published independently after content is ready', async () => {
+  const repo = new Repo();
+  const service = new AdminLearningService(repo);
+  const course = await service.createCourse({ title: 'Course One' });
+  const module = await service.createModule(course.id, { title: 'Foundation' });
+  const lesson = await service.createLesson(module.id, { title: 'Lesson One' });
+
+  await service.setLessonStatus(lesson.id, 'PUBLISHED');
+  assert.equal(repo.lessons[0].status, 'PUBLISHED');
 });
