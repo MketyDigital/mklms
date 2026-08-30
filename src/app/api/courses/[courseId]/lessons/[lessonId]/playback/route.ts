@@ -50,12 +50,13 @@ export async function POST(
         "Cache-Control": "private, no-store",
       },
     });
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Protected playback is unavailable.";
-
+  } catch {
     return NextResponse.json(
-      { ok: false, reason: "PLAYBACK_CONFIGURATION_ERROR", message },
+      {
+        ok: false,
+        reason: "PLAYBACK_CONFIGURATION_ERROR",
+        message: "Protected playback is unavailable.",
+      },
       { status: 503 },
     );
   }
