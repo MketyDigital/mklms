@@ -66,7 +66,7 @@ export async function GET(
     state: state.state,
     isLive: state.isLive,
     liveOffsetSeconds: state.liveOffsetSeconds,
-    nextStartsAt: state.nextStartsAt?.toISOString() ?? null,
+    nextStartsAt: state.countdownTo?.toISOString() ?? null,
     displayViewerCount: heartbeat.displayViewerCount,
     activeViewers: heartbeat.activeViewers,
     session: session
