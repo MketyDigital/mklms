@@ -1,0 +1,32 @@
+name: MkLMS Phase 1 CI
+
+on:
+  pull_request:
+    branches:
+      - architecture/mklms-reusable-platform
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Domain tests
+        run: npm test
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        env:
+          DATABASE_URL: postgresql://user:pass@127.0.0.1:5432/mklms
+          MKLMS_ADMIN_ACCESS_KEY: ci-admin-key
+          MKLMS_ADMIN_SESSION_SECRET: ci-admin-session-secret
+        run: npm run build
