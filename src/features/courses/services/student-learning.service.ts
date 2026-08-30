@@ -3,7 +3,7 @@ import { getPublishedCourseStructure } from "../domain/publication.ts";
 import {
   calculateCourseProgress,
   canAccessLesson,
-} from "../domain/progress";
+} from "../domain/progress.ts";
 import type { LearningEnrollmentRecord } from "./learning-progress.service";
 
 export interface StudentLearningRepository {
