@@ -13,7 +13,7 @@
   },
   "observability": {
     "enabled": true
-  }
+  },
 
   // Hyperdrive is a Cloudflare binding, not a normal environment variable.
   // Keep this template commented until the two configurations are created in
