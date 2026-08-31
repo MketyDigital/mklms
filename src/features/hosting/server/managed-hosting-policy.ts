@@ -9,6 +9,18 @@ function parseNumber(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+export function isManagedHostingBillingAutomationConfigured(): boolean {
+  const serviceUrl = process.env.MKLMS_BILLING_SERVICE_URL?.trim();
+  const installationId = process.env.MKLMS_BILLING_INSTALLATION_ID?.trim();
+  const secret = process.env.MKLMS_BILLING_SHARED_SECRET?.trim();
+  if (!serviceUrl || !installationId || !secret || secret.length < 16) return false;
+  try {
+    return new URL(serviceUrl).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export function getManagedHostingPolicy(): ManagedHostingPolicy {
   let paymentUrl: string | null = null;
   try {

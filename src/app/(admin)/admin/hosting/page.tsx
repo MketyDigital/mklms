@@ -5,7 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ManagedHostingPanel } from "@/features/hosting/components/managed-hosting-panel";
 import type { ManagedHostingMonthOverride } from "@/features/hosting/domain/managed-hosting";
 import { PostgresManagedHostingRepository } from "@/features/hosting/repositories/postgres-managed-hosting.repository";
-import { getManagedHostingPolicy } from "@/features/hosting/server/managed-hosting-policy";
+import {
+  getManagedHostingPolicy,
+  isManagedHostingBillingAutomationConfigured,
+} from "@/features/hosting/server/managed-hosting-policy";
 import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +18,7 @@ export default async function AdminHostingPage() {
   const settingsRepository = new PostgresSettingsRepository();
   const platformSettings = await settingsRepository.getPlatformSettings();
   const policy = getManagedHostingPolicy();
+  const billingAutomationEnabled = isManagedHostingBillingAutomationConfigured();
 
   let usage: Awaited<ReturnType<PostgresManagedHostingRepository["getCurrentMonthUsage"]>> | null = null;
   let monthOverride: ManagedHostingMonthOverride | null = null;
@@ -58,6 +62,7 @@ export default async function AdminHostingPage() {
             policy={policy}
             monthStart={usage.monthStart}
             monthOverride={monthOverride}
+            billingAutomationEnabled={billingAutomationEnabled}
             usage={{
               courseWatchMinutesMeasured: usage.courseWatchMinutesMeasured,
               liveAudienceMinutesEstimated: usage.liveAudienceMinutesEstimated,
