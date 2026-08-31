@@ -23,7 +23,7 @@ export interface CreateModuleAdminInput {
   description?: string | null;
 }
 
-export interface UpdateModuleAdminInput extends CreateModuleAdminInput {}
+export type UpdateModuleAdminInput = CreateModuleAdminInput;
 
 export interface CreateLessonAdminInput {
   title: string;
@@ -34,7 +34,7 @@ export interface CreateLessonAdminInput {
   durationSeconds?: number | null;
 }
 
-export interface UpdateLessonAdminInput extends CreateLessonAdminInput {}
+export type UpdateLessonAdminInput = CreateLessonAdminInput;
 
 export interface AdminLearningRepository {
   listCourses(): Promise<CourseRecord[]>;
