@@ -11,7 +11,8 @@ import {
 } from "../src/features/media/domain/media-ingest.ts";
 import {
   calculateManagedHostingFee,
-  normalizeManagedHostingSettings,
+  getBillingMonthKey,
+  normalizeManagedHostingPolicy,
   summarizeUsageMetric,
 } from "../src/features/hosting/domain/managed-hosting.ts";
 
@@ -53,18 +54,22 @@ test("media ingest state machine allows one-way safe publishing flow", () => {
   assert.throws(() => nextMediaIngestState("DRAFT", "READY"));
 });
 
-test("managed hosting settings clamp fee to transparent 15-50 USD range", () => {
-  const settings = normalizeManagedHostingSettings({
+test("managed hosting policy has a hard 15 USD floor and scales to configured maximum", () => {
+  const policy = normalizeManagedHostingPolicy({
     enabled: true,
-    minimumMonthlyFeeUsd: 15,
+    minimumMonthlyFeeUsd: 3,
     maximumMonthlyFeeUsd: 50,
-    currentMonthlyFeeUsd: 80,
-    paymentNetwork: "TRC20",
-    walletAddress: "TExample",
+    paymentUrl: "https://example.com/pay",
+    notice: "Monthly managed service.",
   });
-  assert.equal(settings.currentMonthlyFeeUsd, 50);
-  assert.equal(calculateManagedHostingFee({ watchMinutes: 5000, settings }), 15);
-  assert.equal(calculateManagedHostingFee({ watchMinutes: 200000, settings }), 50);
+  assert.equal(policy.minimumMonthlyFeeUsd, 15);
+  assert.equal(calculateManagedHostingFee({ watchMinutes: 5000, policy }), 15);
+  assert.equal(calculateManagedHostingFee({ watchMinutes: 200000, policy }), 50);
+});
+
+test("billing month key rolls automatically on the first day of a new UTC month", () => {
+  assert.equal(getBillingMonthKey(new Date("2026-08-31T23:59:59Z")), "2026-08");
+  assert.equal(getBillingMonthKey(new Date("2026-09-01T00:00:00Z")), "2026-09");
 });
 
 test("usage metrics explicitly distinguish measured and estimated values", () => {
