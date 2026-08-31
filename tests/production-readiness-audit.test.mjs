@@ -74,3 +74,12 @@ test('live admin share URL uses the saved public portal URL', () => {
   const page = read('src/app/(admin)/admin/live-classes/page.tsx');
   assert.match(page, /settings\.publicBaseUrl/);
 });
+
+test('admin messages mark only the conversation the administrator actually opens as read', () => {
+  const repository = read('src/features/messages/repositories/postgres-message.repository.ts');
+  const route = read('src/app/api/admin/messages/[threadId]/route.ts');
+  const panel = read('src/features/messages/components/admin/admin-message-panel.tsx');
+  assert.match(repository, /markThreadRead/);
+  assert.match(route, /export async function PATCH/);
+  assert.match(panel, /method:\s*"PATCH"/);
+});
