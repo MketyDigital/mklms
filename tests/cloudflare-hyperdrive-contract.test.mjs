@@ -17,19 +17,17 @@ test("Cloudflare database runtime supports fresh, cached and legacy Hyperdrive b
 
 test("cached Hyperdrive is opt-in for stable public live-page settings only", () => {
   assert.match(publicLivePage, /getCachedPostgresPool/);
-  assert.match(publicLivePage, /new PostgresSettingsRepository\(getCachedPostgresPool\(\)\)/);
+  assert.match(
+    publicLivePage,
+    /new PostgresSettingsRepository\(\s*getCachedPostgresPool\(\),?\s*\)/,
+  );
 
   assert.doesNotMatch(liveState, /getCachedPostgresPool/);
   assert.match(liveState, /new PostgresLiveClassRepository\(\)/);
 });
 
-test("Wrangler stays deploy-safe before account-specific Hyperdrive IDs exist", () => {
-  const activeConfig = wrangler
-    .split("\n")
-    .filter((line) => !line.trimStart().startsWith("//"))
-    .join("\n");
-
-  assert.doesNotMatch(activeConfig, /YOUR_[A-Z0-9_]*HYPERDRIVE[A-Z0-9_]*_ID/);
-  assert.match(wrangler, /HYPERDRIVE_FRESH/);
-  assert.match(wrangler, /HYPERDRIVE_CACHED/);
+test("Wrangler remains strict JSON and deploy-safe before account Hyperdrive IDs exist", () => {
+  assert.doesNotThrow(() => JSON.parse(wrangler));
+  assert.doesNotMatch(wrangler, /<fresh-hyperdrive-config-id>|<cached-hyperdrive-config-id>/);
+  assert.doesNotMatch(wrangler, /"hyperdrive"\s*:/);
 });
