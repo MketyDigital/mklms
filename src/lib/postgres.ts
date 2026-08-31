@@ -2,7 +2,14 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { Client, Pool } from "pg";
 
 let pool: Pool | null = null;
-let workerQueryable: Pool | null = null;
+let workerFreshQueryable: Pool | null = null;
+let workerCachedQueryable: Pool | null = null;
+
+type CloudflareDatabaseMode = "fresh" | "cached";
+
+type HyperdriveBinding = {
+  connectionString?: string;
+};
 
 function sslOption() {
   return process.env.DATABASE_SSL === "disable"
@@ -12,17 +19,30 @@ function sslOption() {
       : undefined;
 }
 
-function getCloudflareDatabaseConfig(): {
+function getCloudflareDatabaseConfig(
+  mode: CloudflareDatabaseMode,
+): {
   connectionString: string;
   useHyperdrive: boolean;
 } | null {
   try {
     const context = getCloudflareContext();
     const env = context.env as unknown as {
-      HYPERDRIVE?: { connectionString?: string };
+      HYPERDRIVE_FRESH?: HyperdriveBinding;
+      HYPERDRIVE_CACHED?: HyperdriveBinding;
+      HYPERDRIVE?: HyperdriveBinding;
     };
-    if (env.HYPERDRIVE?.connectionString) {
-      return { connectionString: env.HYPERDRIVE.connectionString, useHyperdrive: true };
+
+    const freshHyperdrive =
+      env.HYPERDRIVE_FRESH?.connectionString ??
+      env.HYPERDRIVE?.connectionString;
+    const selectedHyperdrive =
+      mode === "cached"
+        ? env.HYPERDRIVE_CACHED?.connectionString ?? freshHyperdrive
+        : freshHyperdrive;
+
+    if (selectedHyperdrive) {
+      return { connectionString: selectedHyperdrive, useHyperdrive: true };
     }
     if (process.env.DATABASE_URL) {
       return { connectionString: process.env.DATABASE_URL, useHyperdrive: false };
@@ -54,13 +74,7 @@ function createWorkerQueryable(config: {
   return queryable as unknown as Pool;
 }
 
-export function getPostgresPool(): Pool {
-  const cloudflareDatabase = getCloudflareDatabaseConfig();
-  if (cloudflareDatabase) {
-    if (!workerQueryable) workerQueryable = createWorkerQueryable(cloudflareDatabase);
-    return workerQueryable;
-  }
-
+function getNodePostgresPool(): Pool {
   if (pool) return pool;
 
   const connectionString = process.env.DATABASE_URL;
@@ -75,4 +89,41 @@ export function getPostgresPool(): Pool {
   });
 
   return pool;
+}
+
+/**
+ * Default database accessor.
+ *
+ * On Cloudflare Workers this intentionally prefers the cache-disabled
+ * HYPERDRIVE_FRESH binding (or the legacy HYPERDRIVE binding) so auth,
+ * permissions, writes and read-after-write flows never depend on stale reads.
+ * Outside Workers it preserves the normal DATABASE_URL-backed pg.Pool path.
+ */
+export function getPostgresPool(): Pool {
+  const cloudflareDatabase = getCloudflareDatabaseConfig("fresh");
+  if (cloudflareDatabase) {
+    if (!workerFreshQueryable) {
+      workerFreshQueryable = createWorkerQueryable(cloudflareDatabase);
+    }
+    return workerFreshQueryable;
+  }
+
+  return getNodePostgresPool();
+}
+
+/**
+ * Explicit opt-in accessor for stable public reads that may tolerate brief
+ * staleness. If HYPERDRIVE_CACHED is not configured, this safely falls back to
+ * the fresh Worker binding (or DATABASE_URL outside Workers).
+ */
+export function getCachedPostgresPool(): Pool {
+  const cloudflareDatabase = getCloudflareDatabaseConfig("cached");
+  if (cloudflareDatabase) {
+    if (!workerCachedQueryable) {
+      workerCachedQueryable = createWorkerQueryable(cloudflareDatabase);
+    }
+    return workerCachedQueryable;
+  }
+
+  return getNodePostgresPool();
 }
