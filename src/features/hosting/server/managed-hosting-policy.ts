@@ -23,5 +23,7 @@ export function getManagedHostingPolicy(): ManagedHostingPolicy {
     maximumMonthlyFeeUsd: parseNumber(process.env.MKLMS_MANAGED_HOSTING_MAX_USD, 50),
     paymentUrl,
     notice: process.env.MKLMS_MANAGED_HOSTING_NOTICE?.slice(0, 2000) ?? null,
+    usdtNetwork: process.env.MKLMS_MANAGED_HOSTING_USDT_NETWORK?.slice(0, 40) ?? null,
+    usdtAddress: process.env.MKLMS_MANAGED_HOSTING_USDT_ADDRESS?.slice(0, 200) ?? null,
   });
 }
