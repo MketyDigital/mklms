@@ -26,8 +26,18 @@ test("cached Hyperdrive is opt-in for stable public live-page settings only", ()
   assert.match(liveState, /new PostgresLiveClassRepository\(\)/);
 });
 
-test("Wrangler remains strict JSON and deploy-safe before account Hyperdrive IDs exist", () => {
-  assert.doesNotThrow(() => JSON.parse(wrangler));
+test("Wrangler remains strict JSON and binds the configured production Hyperdrives", () => {
+  const config = JSON.parse(wrangler);
+  assert.deepEqual(config.hyperdrive, [
+    {
+      binding: "HYPERDRIVE_FRESH",
+      id: "bb7c9f70c2fe402080c22e06d0c0f305",
+    },
+    {
+      binding: "HYPERDRIVE_CACHED",
+      id: "14a4baf3773d41c88e4600967ab3b68d",
+    },
+  ]);
   assert.doesNotMatch(wrangler, /<fresh-hyperdrive-config-id>|<cached-hyperdrive-config-id>/);
-  assert.doesNotMatch(wrangler, /"hyperdrive"\s*:/);
+  assert.doesNotMatch(wrangler, /localConnectionString/);
 });
