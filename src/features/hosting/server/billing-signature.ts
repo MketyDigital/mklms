@@ -12,6 +12,22 @@ function sortObjectDeep<T>(value: T): T {
   return value;
 }
 
+export function canonicalBillingCheckoutPayload(input: {
+  installationId: string;
+  monthKey: string;
+  amountUsd: number;
+  timestamp: number;
+  nonce: string;
+}): string {
+  return [
+    input.installationId,
+    input.monthKey,
+    Number(input.amountUsd).toFixed(2),
+    String(Math.trunc(input.timestamp)),
+    input.nonce,
+  ].join("|");
+}
+
 export function canonicalBillingSettlementPayload(input: Record<string, unknown>): string {
   return JSON.stringify(sortObjectDeep(input));
 }
