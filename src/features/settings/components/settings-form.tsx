@@ -87,7 +87,7 @@ export function SettingsForm({ settings }: { settings: PlatformSettings }) {
         <CardHeader>
           <CardTitle className="text-base">Student access & certificates</CardTitle>
           <CardDescription>
-            OTP remains optional. Choose the default first-time claim method and credential formats for this deployment.
+            Choose the default first-time claim method and credential formats for this deployment.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-5 sm:grid-cols-2">
@@ -100,14 +100,12 @@ export function SettingsForm({ settings }: { settings: PlatformSettings }) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Provider adapters</CardTitle>
+          <CardTitle className="text-base">Communication integrations</CardTitle>
           <CardDescription>
-            Select the deployment&apos;s adapters. Provider secrets remain in environment/secret storage, never in this public configuration row.
+            Select optional email and notification adapters. Storage and protected-media runtime bindings are detected automatically and are shown above as integration status.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-5 sm:grid-cols-2">
-          <SelectField label="Storage" value={form.storageProvider} onChange={(value) => update("storageProvider", value as PlatformSettings["storageProvider"])} options={["r2", "s3", "oci", "supabase", "minio", "custom"]} />
-          <SelectField label="Media" value={form.mediaProvider} onChange={(value) => update("mediaProvider", value as PlatformSettings["mediaProvider"])} options={["generic-hls", "oci-media-flow", "youtube", "external-embed", "custom"]} />
           <SelectField label="Email" value={form.emailProvider} onChange={(value) => update("emailProvider", value as PlatformSettings["emailProvider"])} options={["none", "smtp", "ses", "resend", "postmark", "sendgrid", "brevo", "custom"]} />
           <SelectField label="Notifications" value={form.notificationProvider} onChange={(value) => update("notificationProvider", value as PlatformSettings["notificationProvider"])} options={["none", "telegram", "email", "webhook", "custom"]} />
         </CardContent>
