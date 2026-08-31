@@ -1,6 +1,7 @@
 import { AppLayout } from "@/components/layout/app-layout";
 import { AdminAccessPanel } from "@/features/access/components/admin/admin-access-panel";
 import { PostgresAdminAccessRepository } from "@/features/access/repositories/postgres-admin-access.repository";
+import { PostgresAdminLearningRepository } from "@/features/courses/repositories/postgres-admin-learning.repository";
 import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
 
 export const dynamic = "force-dynamic";
@@ -8,9 +9,10 @@ export const dynamic = "force-dynamic";
 export default async function AdminAccessPage() {
   const accessRepository = new PostgresAdminAccessRepository();
   const settingsRepository = new PostgresSettingsRepository();
-  const [students, preauthorizations, settings] = await Promise.all([
+  const [students, preauthorizations, courses, settings] = await Promise.all([
     accessRepository.listStudents(250),
     accessRepository.listPreauthorizations(250),
+    new PostgresAdminLearningRepository().listCourses(),
     settingsRepository.getPlatformSettings(),
   ]);
 
@@ -44,6 +46,7 @@ export default async function AdminAccessPage() {
             claimRequestedAt: item.claimRequestedAt?.toISOString() ?? null,
             manualApprovedAt: item.manualApprovedAt?.toISOString() ?? null,
           }))}
+          courses={courses.map((course) => ({ id: course.id, title: course.title }))}
           defaultClaimStrategy={settings.claimVerificationStrategy}
         />
       </div>
