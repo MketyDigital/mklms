@@ -78,7 +78,7 @@ assetId|providerAssetId|viewerId|expiresEpoch
 
 using HMAC-SHA256 and `MKLMS_MEDIA_SIGNING_SECRET`.
 
-The media Worker must reconstruct the exact payload and verify the signature with constant-time comparison semantics where practical. It must reject missing, malformed, expired, or tampered authorization.
+The media Worker must reconstruct the exact payload and verify the signature before touching R2. It must reject missing, malformed, expired, or tampered authorization.
 
 The signing secret must be identical on the MKLMS app and media-delivery Worker, but stored independently as a secret in each deployment environment.
 
@@ -99,10 +99,14 @@ The Worker must:
 - return `416 Range Not Satisfiable` for invalid ranges;
 - support `HEAD` without returning the body;
 - avoid exposing R2 S3 hostnames or credentials in headers, body, source maps, or client configuration;
-- use restrictive CORS/origin policy appropriate for the configured MKLMS site origin(s);
-- avoid public caching of authorization-bearing URLs unless a later reviewed design explicitly allows it.
+- avoid public caching of authorization-bearing URLs;
+- verify the HMAC authorization for every full, ranged, and HEAD request.
 
 Correct range handling is required for fast seeking, resume behavior, and simulated-live offset jumps.
+
+### Origin and CORS policy
+
+`MKLMS_MEDIA_ALLOWED_ORIGINS` is an optional comma-separated exact-origin allowlist used only to control CORS response headers. When an `Origin` header is present and matches the allowlist, the Worker may echo that exact origin in `Access-Control-Allow-Origin`; it must never emit `*` for protected media. Requests that omit `Origin` are still allowed when the HMAC is valid, because browser media fetches can legitimately omit it. Origin headers are therefore defense-in-depth and never replace signature verification.
 
 ## 6. Live-class compatibility
 
@@ -150,13 +154,12 @@ If HLS is enabled later, master playlists, child playlists, and segments must al
 
 ## 9. Worker project layout
 
-Prefer a focused standalone Worker directory in this repository, for example:
+Prefer a focused standalone Worker directory in this repository:
 
 ```text
 workers/media-delivery/
   src/index.ts
   wrangler.jsonc
-  package.json (only if needed)
   README.md
 ```
 
@@ -166,14 +169,14 @@ The Worker Wrangler configuration will declare:
 
 - Worker name,
 - compatibility date,
-- private R2 bucket binding, e.g. `MEDIA_BUCKET`,
+- private R2 bucket binding `MEDIA_BUCKET`,
 - no embedded secret values.
 
 `MKLMS_MEDIA_SIGNING_SECRET` is set with Cloudflare Worker secrets, not committed.
 
 ## 10. Environment/deployment reference
 
-Add one authoritative file, recommended:
+Add one authoritative file:
 
 ```text
 docs/deployment/environment-variables.md
@@ -244,8 +247,8 @@ ASSETS
 Document:
 
 ```text
-MKLMS_MEDIA_SIGNING_SECRET   # secret
-MKLMS_MEDIA_ALLOWED_ORIGINS  # optional/required policy setting decided in implementation
+MKLMS_MEDIA_SIGNING_SECRET   # secret; required
+MKLMS_MEDIA_ALLOWED_ORIGINS  # optional exact-origin CORS allowlist
 MEDIA_BUCKET                 # R2 binding, not a string secret
 ```
 
@@ -280,7 +283,7 @@ R2_SECRET_ACCESS_KEY
 - can use Supabase, managed PostgreSQL, or self-hosted PostgreSQL via standard `DATABASE_URL`;
 - may still use Cloudflare R2 + the media Worker for protected video.
 
-Self-hosted PostgreSQL must remain a supported drop-in database target as long as it is PostgreSQL-compatible and all MkLMS migrations are applied.
+Self-hosted PostgreSQL remains a supported drop-in database target as long as it is PostgreSQL-compatible and all MkLMS migrations are applied.
 
 ## 12. Security properties
 
@@ -318,6 +321,7 @@ Tests must cover at minimum:
 - invalid range → 416;
 - correct `206`, `Content-Range`, `Content-Length`, `Accept-Ranges`;
 - no R2 origin leakage;
+- CORS allowlist behavior never bypasses signature checks;
 - live playback still refuses authorization when not LIVE;
 - live DIRECT playback remains supported and refreshable;
 - paid lesson playback still requires active enrollment/access and retains session-capped authorization;
