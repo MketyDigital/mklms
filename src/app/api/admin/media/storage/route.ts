@@ -25,7 +25,13 @@ function isApplicationObject(assetId: string): boolean {
 
 function suggestedTitle(assetId: string): string {
   const file = assetId.split("/").filter(Boolean).at(-1) ?? assetId;
-  return decodeURIComponent(file)
+  let readable = file;
+  try {
+    readable = decodeURIComponent(file);
+  } catch {
+    readable = file;
+  }
+  return readable
     .replace(/\.(mp4|m3u8)$/i, "")
     .replace(/[-_]+/g, " ")
     .trim() || "Private media";
