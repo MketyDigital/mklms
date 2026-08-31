@@ -2,6 +2,7 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -12,6 +13,8 @@ import {
   type R2BucketLike,
 } from "./cloudflare-r2-storage-provider";
 import type {
+  ListStoredObjectsOptions,
+  ListStoredObjectsResult,
   PutObjectInput,
   ReadAuthorization,
   StorageProvider,
@@ -74,6 +77,31 @@ export class S3CompatibleStorageProvider implements StorageProvider {
     };
   }
 
+  async listObjects(
+    options: ListStoredObjectsOptions = {},
+  ): Promise<ListStoredObjectsResult> {
+    const result = await this.client.send(
+      new ListObjectsV2Command({
+        Bucket: this.bucket,
+        Prefix: options.prefix || undefined,
+        ContinuationToken: options.cursor || undefined,
+        MaxKeys: Math.max(1, Math.min(1000, Math.floor(options.limit ?? 500))),
+      }),
+    );
+
+    return {
+      objects: (result.Contents ?? [])
+        .filter((object) => Boolean(object.Key))
+        .map((object) => ({
+          assetId: object.Key as string,
+          size: object.Size ?? null,
+          uploadedAt: object.LastModified ?? null,
+        })),
+      truncated: Boolean(result.IsTruncated),
+      cursor: result.NextContinuationToken ?? null,
+    };
+  }
+
   async createReadAuthorization(
     assetId: string,
     options: { ttlSeconds?: number } = {},
@@ -106,6 +134,10 @@ function getCloudflareStorageBinding(): R2BucketLike | null {
   } catch {
     return null;
   }
+}
+
+export function hasCloudflareStorageBinding(): boolean {
+  return Boolean(getCloudflareStorageBinding());
 }
 
 export function getConfiguredStorageProvider(): StorageProvider {
