@@ -68,6 +68,12 @@ test('active settings UI and API contain no OCI Media Flow or free deployment gu
   assert.doesNotMatch(route, /"oci"/i);
 });
 
+test('legacy OCI settings values are normalized before the active settings form is rendered', () => {
+  const repository = read('src/features/settings/repositories/postgres-settings.repository.ts');
+  assert.match(repository, /row\.media_provider\s*===\s*"oci-media-flow"/);
+  assert.match(repository, /row\.storage_provider\s*===\s*"oci"/);
+});
+
 test('active hosting dashboard no longer depends on legacy OCI ingest accounting', () => {
   const page = read('src/app/(admin)/admin/hosting/page.tsx');
   const panel = read('src/features/hosting/components/managed-hosting-panel.tsx');
