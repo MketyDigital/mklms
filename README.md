@@ -102,19 +102,29 @@ media/transformation-program/module-01/lesson-01.mp4
 
 and register that key as the media provider asset reference. Do not register a public R2 URL.
 
+### Admin media upload
+
+`/admin/media` now supports direct protected MP4 upload through the existing provider-neutral storage adapter.
+
+- Cloudflare deployments write through the bound private `APP_STORAGE_BUCKET` R2 adapter.
+- Non-Cloudflare deployments can use the configured S3-compatible storage adapter or another provider adapter.
+- New uploads are written under `media/...`, remain private, and are registered as `DIRECT` media assets.
+- Existing media records and supported source types remain intact, including `DIRECT`, `HLS`, `YOUTUBE`, `EXTERNAL_EMBED`, and `CUSTOM`.
+- Protected playback continues through `mklms-media-delivery`; browsers are not given permanent R2 origin URLs or private storage credentials.
+
+Videos uploaded directly to R2 by an operator remain valid and can continue to be registered by their private object key; the admin upload form is an additional convenience path, not a replacement for existing stored objects.
+
 ### OCI Media Flow
 
-OCI Media Flow → R2 is now a **legacy/optional adapter path**, not a current production requirement. Keep:
+OCI Media Flow → R2 is now a **legacy/optional adapter path**, not part of the active production Admin → Media workflow. Keep:
 
 ```env
 MKLMS_OCI_MEDIA_AUTOMATION_ENABLED=false
 ```
 
-unless a future installation deliberately chooses that workflow.
+unless a future installation deliberately chooses that adapter.
 
-Historical migration 009 and its ingest-job model remain intact for migration-history safety. The current admin Media page still contains older OCI ingest UI/guidance; replacing that with a portable admin upload/register experience is a follow-up project and does not block current protected direct-MP4 production testing.
-
-The future upload UI should remain provider-portable: Cloudflare deployments can use native bound R2 storage, while Vercel/OCI/VPS installations can use the existing S3-compatible storage adapter or another provider adapter.
+Historical migration 009 and its ingest-job model remain intact for migration-history safety. The older OCI implementation is retained only for history/compatibility; the visible OCI Media Flow control panel and active ingest-state querying were removed from `/admin/media`.
 
 ## Live classes
 
@@ -239,7 +249,7 @@ npm run deploy
 - `/admin` — operational dashboard
 - `/admin/access` — preauthorization/students/enrollments
 - `/admin/courses` — course/module/lesson management
-- `/admin/media` — reusable media library; current legacy OCI ingest panel is optional/deferred
+- `/admin/media` — reusable media library with direct private MP4 upload/register plus existing manual media registration
 - `/admin/live-classes` — scheduled simulated-live sessions and attendee operations
 - `/admin/certificates` — certificate operations
 - `/admin/messages` — student conversations
@@ -250,6 +260,6 @@ npm run deploy
 
 ## Project continuity
 
-Read [`AGENTS.md`](AGENTS.md) first. It records the current release state, verified architecture, production setup gates, known account-side issue, media direction, and exact next project handoff.
+Read [`AGENTS.md`](AGENTS.md) first. It records the current release state, verified architecture, production setup gates, account-side actions, media direction, and exact next safe starting point.
 
 `agentmklms.md` is retained as historical architecture/progress context, but `AGENTS.md` takes precedence where older decisions differ.
