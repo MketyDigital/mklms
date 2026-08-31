@@ -60,6 +60,7 @@ export default async function AdminSettingsPage() {
   ]);
   const integrations = getIntegrationStatus(process.env, {
     cloudflareStorageBound: hasCloudflareStorageBinding(),
+    databaseConnected: dbHealth.connected,
   });
 
   return (
@@ -102,7 +103,7 @@ export default async function AdminSettingsPage() {
                     <p className="text-xs font-medium text-muted-foreground">Required configuration</p>
                     <div className="mt-2 flex flex-wrap gap-1.5">{item.requiredVariables.map((variable) => <code key={variable} className="rounded bg-muted px-2 py-1 text-[11px]">{variable}</code>)}</div>
                   </>
-                ) : <p className="text-xs text-muted-foreground">Detected from the active Cloudflare binding.</p>}
+                ) : <p className="text-xs text-muted-foreground">Detected from the active runtime connection/binding.</p>}
                 {item.id === "telegram" ? <div className="mt-3 rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground"><p><strong>Setup:</strong> create a bot with Telegram <code>@BotFather</code>, add it to the destination group/channel, then configure the token and chat/channel ID as Worker secrets/variables.</p></div> : null}
               </CardContent>
             </Card>
