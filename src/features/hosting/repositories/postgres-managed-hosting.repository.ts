@@ -114,4 +114,36 @@ export class PostgresManagedHostingRepository {
       paymentStatus: row.payment_status,
     };
   }
+
+  async markMonthPaid(input: {
+    monthKey: string;
+    defaultMinimumFloorUsd: number;
+  }): Promise<ManagedHostingMonthOverride> {
+    const result = await this.pool.query<{
+      month_key: string;
+      minimum_floor_usd: string | number;
+      operator_note: string | null;
+      payment_status: "PENDING" | "PAID" | "WAIVED";
+    }>(
+      `INSERT INTO managed_hosting_months (
+         month_key, minimum_floor_usd, operator_note, payment_status, created_at, updated_at
+       ) VALUES ($1, $2, NULL, 'PAID', NOW(), NOW())
+       ON CONFLICT (month_key)
+       DO UPDATE SET
+         payment_status = 'PAID',
+         updated_at = NOW()
+       RETURNING month_key, minimum_floor_usd, operator_note, payment_status`,
+      [
+        input.monthKey,
+        Math.max(0, Math.round(input.defaultMinimumFloorUsd * 100) / 100),
+      ],
+    );
+    const row = result.rows[0];
+    return {
+      monthKey: row.month_key,
+      minimumFloorUsd: Number(row.minimum_floor_usd),
+      operatorNote: row.operator_note,
+      paymentStatus: row.payment_status,
+    };
+  }
 }

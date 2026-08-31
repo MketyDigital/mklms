@@ -9,6 +9,7 @@ import {
   type ManagedHostingPolicy,
 } from "../domain/managed-hosting";
 import { ManagedHostingMonthEditor } from "./managed-hosting-month-editor";
+import { ManagedHostingPayButton } from "./managed-hosting-pay-button";
 
 export interface ManagedHostingUsageClientSummary {
   courseWatchMinutesMeasured: number;
@@ -21,11 +22,13 @@ export function ManagedHostingPanel({
   usage,
   monthStart,
   monthOverride,
+  billingAutomationEnabled = false,
 }: {
   policy: ManagedHostingPolicy;
   usage: ManagedHostingUsageClientSummary;
   monthStart: Date;
   monthOverride?: ManagedHostingMonthOverride | null;
+  billingAutomationEnabled?: boolean;
 }) {
   const totalUsageMinutes = usage.courseWatchMinutesMeasured + usage.liveAudienceMinutesEstimated;
   const monthKey = getBillingMonthKey(monthStart);
@@ -35,6 +38,7 @@ export function ManagedHostingPanel({
     monthlyMinimumFloorUsd: monthOverride?.minimumFloorUsd,
   });
   const paymentStatus = monthOverride?.paymentStatus ?? "PENDING";
+  const paymentStatusLabel = paymentStatus === "PENDING" ? "UNPAID" : paymentStatus;
 
   return (
     <div className="space-y-6">
@@ -91,21 +95,29 @@ export function ManagedHostingPanel({
               <div className="rounded-lg border border-primary/40 bg-primary/5 p-4">
                 <p className="text-xs text-muted-foreground">Amount due</p>
                 <p className="mt-1 text-2xl font-semibold">${billing.amountDueUsd.toFixed(2)}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{paymentStatus}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{paymentStatusLabel}</p>
               </div>
             </div>
 
             {monthOverride?.operatorNote ? <p className="text-sm leading-6 text-muted-foreground">{monthOverride.operatorNote}</p> : null}
             {policy.notice ? <p className="text-sm leading-6 text-muted-foreground">{policy.notice}</p> : null}
 
-            {policy.paymentUrl ? (
-              <Button asChild>
-                <a href={policy.paymentUrl} target="_blank" rel="noreferrer noopener">
-                  Pay now <ExternalLink className="ml-1.5 size-4" />
-                </a>
-              </Button>
+            {paymentStatus === "PENDING" ? (
+              billingAutomationEnabled ? (
+                <ManagedHostingPayButton />
+              ) : policy.paymentUrl ? (
+                <Button asChild>
+                  <a href={policy.paymentUrl} target="_blank" rel="noreferrer noopener">
+                    Pay now <ExternalLink className="ml-1.5 size-4" />
+                  </a>
+                </Button>
+              ) : (
+                <p className="text-xs text-muted-foreground">Payment link has not been configured by the operator.</p>
+              )
             ) : (
-              <p className="text-xs text-muted-foreground">Payment link has not been configured by the operator.</p>
+              <p className="text-sm font-medium">
+                {paymentStatus === "PAID" ? "Payment received for this month." : "Payment has been waived for this month."}
+              </p>
             )}
 
             <ManagedHostingMonthEditor

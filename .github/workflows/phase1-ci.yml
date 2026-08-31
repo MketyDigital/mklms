@@ -66,3 +66,6 @@ jobs:
 
       - name: Protected media Worker packaging dry run
         run: npx wrangler deploy --dry-run --config workers/media-delivery/wrangler.jsonc --outdir .media-worker-dry-run
+
+      - name: External billing Worker packaging dry run
+        run: npx wrangler deploy --dry-run --config workers/billing/wrangler.jsonc --outdir .billing-worker-dry-run
