@@ -18,6 +18,13 @@ test('manual approval claim records the request and permits an approved retry', 
   assert.match(route, /manualApprovedAt/);
 });
 
+test('student onboarding uses the configured claim strategy', () => {
+  const page = read('src/app/(auth)/onboarding/page.tsx');
+  assert.match(page, /PostgresSettingsRepository/);
+  assert.match(page, /settings\.claimVerificationStrategy/);
+  assert.doesNotMatch(page, /verificationStrategy="preauth-only"/);
+});
+
 test('student login honors the documented MkLMS session TTL variable', () => {
   const route = read('src/app/api/access/login/route.ts');
   assert.match(route, /MKLMS_STUDENT_SESSION_TTL_SECONDS/);
@@ -33,12 +40,25 @@ test('admin media can discover compatible files already present in private stora
   assert.match(page, /StorageMediaBrowser/);
 });
 
-test('active settings UI contains no OCI Media Flow or free deployment guidance', () => {
+test('active media UI keeps supported sources without legacy OCI wording', () => {
+  const manager = read('src/features/media/components/admin-media-manager.tsx');
+  assert.match(manager, /DIRECT/);
+  assert.match(manager, /HLS/);
+  assert.match(manager, /YOUTUBE/);
+  assert.match(manager, /EXTERNAL_EMBED/);
+  assert.match(manager, /CUSTOM/);
+  assert.doesNotMatch(manager, /oci-r2|OCI Media Flow/i);
+});
+
+test('active settings UI and API contain no OCI Media Flow or free deployment guidance', () => {
   const form = read('src/features/settings/components/settings-form.tsx');
   const page = read('src/app/(admin)/admin/settings/page.tsx');
+  const route = read('src/app/api/admin/settings/platform/route.ts');
   assert.doesNotMatch(form, /oci-media-flow/i);
   assert.doesNotMatch(form, /options=\{\["r2",\s*"s3",\s*"oci"/i);
   assert.doesNotMatch(page, /Cloudflare Free deployment/i);
+  assert.doesNotMatch(route, /"oci-media-flow"/i);
+  assert.doesNotMatch(route, /"oci"/i);
 });
 
 test('active hosting dashboard no longer depends on legacy OCI ingest accounting', () => {
