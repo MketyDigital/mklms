@@ -16,8 +16,19 @@ test('student claim completes atomically and can recover an existing partial stu
   assert.match(postgres, /COMMIT/);
   assert.match(postgres, /ROLLBACK/);
   assert.match(postgres, /SELECT[\s\S]*FROM students/i);
-  assert.match(postgres, /ON CONFLICT[\s\S]*student_access_credentials/i);
-  assert.match(service, /completeVerifiedClaim/i);
+  assert.match(postgres, /UPDATE student_access_credentials/);
+  assert.match(postgres, /INSERT INTO student_access_credentials/);
+  assert.match(service, /repository\.completeVerifiedClaim/);
+});
+
+test('active admin verification choices are limited to implemented end-to-end strategies', () => {
+  const domain = read('src/features/access/domain/claim-verification.ts');
+  const panel = read('src/features/access/components/admin/admin-access-panel.tsx');
+  const settings = read('src/features/settings/components/settings-form.tsx');
+
+  assert.match(domain, /ACTIVE_CLAIM_VERIFICATION_STRATEGIES/);
+  assert.doesNotMatch(panel, /Email OTP|SMS OTP|Custom verification/);
+  assert.doesNotMatch(settings, /otp-email|otp-sms|custom/);
 });
 
 test('course administration has real update and guarded delete routes', () => {
