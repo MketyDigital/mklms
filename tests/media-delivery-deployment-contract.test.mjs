@@ -11,7 +11,7 @@ test("media delivery has an isolated private R2 Worker configuration", () => {
   assert.equal(wrangler.name, "mklms-media-delivery");
   assert.equal(wrangler.main, "src/index.ts");
   assert.deepEqual(wrangler.r2_buckets, [
-    { binding: "MEDIA_BUCKET", bucket_name: "mklms-media" },
+    { binding: "MEDIA_BUCKET", bucket_name: "spf-media" },
   ]);
   assert.doesNotMatch(JSON.stringify(wrangler), /secret_access|access_key|MKLMS_MEDIA_SIGNING_SECRET/i);
 });
