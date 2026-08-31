@@ -1,6 +1,14 @@
 # Cloudflare Workers production build settings
 
-Use these settings for MkLMS Cloudflare production deployments.
+Use these settings for the main MkLMS Cloudflare production deployment.
+
+## Build environment
+
+```text
+Node: 24.x
+Production branch: main
+Root directory: /
+```
 
 ## Build
 
@@ -16,16 +24,45 @@ This creates the `.open-next` output required by OpenNext.
 npx opennextjs-cloudflare deploy
 ```
 
-Do not use `npm run build` followed by `wrangler deploy` for this Next.js/OpenNext application. `npm run build` creates `.next`, while OpenNext deployment expects its compiled `.open-next` configuration and Worker bundle.
+Do not use `npm run build` followed by `wrangler deploy` for this Next.js/OpenNext application. `npm run build` creates normal `.next` Node/Vercel output, while OpenNext deployment expects the generated `.open-next` Worker bundle.
 
-## Runtime
+If a deployment surface provides only one combined command, use:
 
-- Node compatibility is enabled through `wrangler.jsonc`.
-- Cloudflare Workers is the primary production runtime.
-- A Hyperdrive binding named `HYPERDRIVE` is recommended for PostgreSQL production traffic.
-- Without Hyperdrive, MkLMS still supports a direct `DATABASE_URL` and uses request-scoped PostgreSQL clients on Workers.
-- Vercel/OCI Node deployments use the ordinary Node PostgreSQL pool path.
+```text
+npm run deploy
+```
+
+## Runtime database bindings
+
+Cloudflare production uses two explicit Hyperdrive bindings declared in the main `wrangler.jsonc`:
+
+- `HYPERDRIVE_FRESH` — default cache-disabled/fresh database path;
+- `HYPERDRIVE_CACHED` — explicit opt-in path for stable public reads that may tolerate brief staleness.
+
+These are Cloudflare bindings, **not environment variables**. `DATABASE_URL` remains the Node/Vercel/OCI, migration, build and runtime-fallback database URL.
+
+The main Worker also has the OpenNext `ASSETS` binding.
+
+See `docs/deployment/environment-variables.md` for the complete environment/binding matrix.
+
+## Protected video Worker
+
+Protected private R2 video is served by the separate Worker in `workers/media-delivery/`. It is deliberately not coupled to the main OpenNext deployment command.
+
+Dry-run it with:
+
+```bash
+npx wrangler deploy --dry-run --config workers/media-delivery/wrangler.jsonc
+```
+
+Deploy it with:
+
+```bash
+npx wrangler deploy --config workers/media-delivery/wrangler.jsonc
+```
+
+Its direct private R2 binding is `MEDIA_BUCKET`; its shared HMAC secret is `MKLMS_MEDIA_SIGNING_SECRET`.
 
 ## Database schema
 
-Do not add `npm run db:migrate` to the Cloudflare build/deploy command. Migrations belong to the database installation and run separately, once per database when new migration files exist.
+Do not add `npm run db:migrate` to the Cloudflare Build or Deploy command. Migrations belong to the database installation and run separately, once per database when new migration files exist.

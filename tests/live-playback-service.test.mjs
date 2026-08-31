@@ -29,8 +29,10 @@ class FakeMediaProvider {
   async createPlaybackAuthorization(asset, context) {
     this.calls.push({ asset, context });
     return {
-      playbackType: 'HLS',
-      url: 'https://delivery.example/signed.m3u8',
+      playbackType: asset.sourceType === 'DIRECT' ? 'DIRECT' : 'HLS',
+      url: asset.sourceType === 'DIRECT'
+        ? 'https://delivery.example/signed.mp4'
+        : 'https://delivery.example/signed.m3u8',
       expiresAt: new Date(context.now.getTime() + context.ttlSeconds * 1000),
       protection: 'PRIVATE_AUTHORIZATION',
     };
@@ -57,6 +59,29 @@ test('active session receives viewer-scoped authorization and server-derived sta
   assert.equal(result.testMode, false);
   assert.equal(result.authorization?.playbackType, 'HLS');
   assert.equal(media.calls[0].context.viewerId, 'viewer-1');
+  assert.equal(media.calls[0].context.studentId, null);
+  assert.equal(media.calls[0].context.courseId, null);
+  assert.equal(media.calls[0].context.lessonId, null);
+});
+
+test('live authorization expires no later than the scheduled session end', async () => {
+  const media = new FakeMediaProvider();
+  const directRepository = {
+    async getMediaAsset(id) {
+      return id === 'asset-1'
+        ? { id, sourceType: 'DIRECT', providerAssetId: 'media/live/day-01.mp4', status: 'READY' }
+        : null;
+    },
+  };
+  const service = new LivePlaybackService(directRepository, media, { ttlSeconds: 180 });
+  const now = new Date('2026-08-30T19:59:50Z');
+  const result = await service.authorize({ batch, viewerId: 'viewer-free', now });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.authorization?.playbackType, 'DIRECT');
+  assert.equal(media.calls.length, 1);
+  assert.equal(media.calls[0].context.ttlSeconds, 10);
+  assert.equal(result.authorization?.expiresAt?.toISOString(), '2026-08-30T20:00:00.000Z');
 });
 
 test('ended class receives no playback authorization', async () => {
