@@ -32,10 +32,10 @@ export default async function AdminHostingPage() {
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     const looksLikeMissingSchema =
-      /media_watch_credits|media_ingest_jobs|managed_hosting/i.test(message) ||
+      /media_watch_credits|managed_hosting/i.test(message) ||
       /does not exist|undefined table|relation/i.test(message);
     setupError = looksLikeMissingSchema
-      ? "The hosting/usage database schema has not been installed yet. Run `npm run db:migrate` once against this deployment's PostgreSQL database, then reload this page."
+      ? "The hosting/usage database schema is not current. Run the MkLMS DB migrations GitHub Action, require the verification step to pass, then reload this page."
       : "Hosting usage could not be loaded. Check the database connection and migration status in Settings & Integrations.";
   }
 
@@ -53,7 +53,7 @@ export default async function AdminHostingPage() {
         <div className="mb-6">
           <h1 className="text-2xl font-semibold tracking-tight">Hosting & Usage</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Monthly measured/estimated usage and, when enabled for this deployment, the current managed-service amount.
+            Monthly course/live usage and, when enabled for this deployment, the current managed-hosting amount and payment status.
           </p>
         </div>
 
@@ -66,7 +66,6 @@ export default async function AdminHostingPage() {
             usage={{
               courseWatchMinutesMeasured: usage.courseWatchMinutesMeasured,
               liveAudienceMinutesEstimated: usage.liveAudienceMinutesEstimated,
-              ociMediaFlowEstimatedCostUsd: usage.ociMediaFlowEstimatedCostUsd,
             }}
           />
         ) : (
@@ -76,18 +75,11 @@ export default async function AdminHostingPage() {
                 <AlertTriangle className="size-5 text-amber-500" /> Hosting setup is not complete
               </CardTitle>
               <CardDescription>
-                This page depends on the latest MkLMS database migrations. The rest of the portal can still run while this module is being configured.
+                This page depends on the current MkLMS database migrations and managed-hosting configuration.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent>
               <p className="text-sm leading-6 text-muted-foreground">{setupError}</p>
-              <div className="rounded-lg border bg-muted/30 p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Migration command</p>
-                <code className="mt-2 block break-all text-sm">npm run db:migrate</code>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Run migrations from a trusted machine or release job that has the same DATABASE_URL as this deployment. Do not add migrations to every Vercel/Cloudflare build.
-              </p>
             </CardContent>
           </Card>
         )}
