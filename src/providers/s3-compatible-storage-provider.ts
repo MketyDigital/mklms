@@ -1,3 +1,4 @@
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -6,6 +7,10 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
+import {
+  CloudflareR2StorageProvider,
+  type R2BucketLike,
+} from "./cloudflare-r2-storage-provider";
 import type {
   PutObjectInput,
   ReadAuthorization,
@@ -93,7 +98,22 @@ export class S3CompatibleStorageProvider implements StorageProvider {
   }
 }
 
+function getCloudflareStorageBinding(): R2BucketLike | null {
+  try {
+    const context = getCloudflareContext();
+    const env = context.env as unknown as { APP_STORAGE_BUCKET?: R2BucketLike };
+    return env.APP_STORAGE_BUCKET ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function getConfiguredStorageProvider(): StorageProvider {
+  const cloudflareBucket = getCloudflareStorageBinding();
+  if (cloudflareBucket) {
+    return new CloudflareR2StorageProvider(cloudflareBucket);
+  }
+
   const bucket = process.env.MKLMS_STORAGE_BUCKET?.trim();
   const region = process.env.MKLMS_STORAGE_REGION?.trim() || "auto";
   const accessKeyId = process.env.MKLMS_STORAGE_ACCESS_KEY_ID?.trim();
@@ -102,7 +122,7 @@ export function getConfiguredStorageProvider(): StorageProvider {
 
   if (!bucket || !accessKeyId || !secretAccessKey) {
     throw new Error(
-      "Storage is not configured. Supply MKLMS_STORAGE_BUCKET, MKLMS_STORAGE_ACCESS_KEY_ID and MKLMS_STORAGE_SECRET_ACCESS_KEY, or provide another StorageProvider adapter.",
+      "Storage is not configured. On Cloudflare bind APP_STORAGE_BUCKET; on other hosts supply MKLMS_STORAGE_BUCKET, MKLMS_STORAGE_ACCESS_KEY_ID and MKLMS_STORAGE_SECRET_ACCESS_KEY.",
     );
   }
 
