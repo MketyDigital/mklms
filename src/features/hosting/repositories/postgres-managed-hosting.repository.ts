@@ -1,7 +1,6 @@
 import type { Pool } from "pg";
 
 import { getPostgresPool } from "@/lib/postgres";
-import type { ManagedHostingSettings } from "../domain/managed-hosting";
 
 export interface ManagedHostingUsageSummary {
   monthStart: Date;
@@ -15,64 +14,6 @@ export class PostgresManagedHostingRepository {
 
   constructor(pool: Pool = getPostgresPool()) {
     this.pool = pool;
-  }
-
-  async getSettings(): Promise<ManagedHostingSettings> {
-    const result = await this.pool.query<{
-      enabled: boolean;
-      minimum_monthly_fee_usd: string | number;
-      maximum_monthly_fee_usd: string | number;
-      current_monthly_fee_usd: string | number;
-      payment_network: "TRC20" | "TON" | "CUSTOM";
-      wallet_address: string;
-      payment_note: string | null;
-    }>(
-      `SELECT enabled, minimum_monthly_fee_usd, maximum_monthly_fee_usd,
-              current_monthly_fee_usd, payment_network, wallet_address, payment_note
-       FROM managed_hosting_settings
-       WHERE id = 'default'
-       LIMIT 1`,
-    );
-    const row = result.rows[0];
-    return {
-      enabled: row?.enabled ?? false,
-      minimumMonthlyFeeUsd: Number(row?.minimum_monthly_fee_usd ?? 15),
-      maximumMonthlyFeeUsd: Number(row?.maximum_monthly_fee_usd ?? 50),
-      currentMonthlyFeeUsd: Number(row?.current_monthly_fee_usd ?? 15),
-      paymentNetwork: row?.payment_network ?? "TRC20",
-      walletAddress: row?.wallet_address ?? "",
-      paymentNote: row?.payment_note ?? null,
-    };
-  }
-
-  async updateSettings(settings: ManagedHostingSettings): Promise<void> {
-    await this.pool.query(
-      `INSERT INTO managed_hosting_settings (
-         id, enabled, minimum_monthly_fee_usd, maximum_monthly_fee_usd,
-         current_monthly_fee_usd, payment_network, wallet_address,
-         payment_note, updated_at
-       )
-       VALUES ('default', $1, $2, $3, $4, $5, $6, $7, NOW())
-       ON CONFLICT (id)
-       DO UPDATE SET
-         enabled = EXCLUDED.enabled,
-         minimum_monthly_fee_usd = EXCLUDED.minimum_monthly_fee_usd,
-         maximum_monthly_fee_usd = EXCLUDED.maximum_monthly_fee_usd,
-         current_monthly_fee_usd = EXCLUDED.current_monthly_fee_usd,
-         payment_network = EXCLUDED.payment_network,
-         wallet_address = EXCLUDED.wallet_address,
-         payment_note = EXCLUDED.payment_note,
-         updated_at = NOW()`,
-      [
-        settings.enabled,
-        settings.minimumMonthlyFeeUsd,
-        settings.maximumMonthlyFeeUsd,
-        settings.currentMonthlyFeeUsd,
-        settings.paymentNetwork,
-        settings.walletAddress,
-        settings.paymentNote ?? null,
-      ],
-    );
   }
 
   async getCurrentMonthUsage(now = new Date()): Promise<ManagedHostingUsageSummary> {
