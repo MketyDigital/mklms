@@ -18,7 +18,7 @@ This file is the current operational source of truth for `MketyDigital/mklms`. R
 4. Paid Courses require enrollment, published content, sequential/prerequisite access, active session, and protected playback authorization.
 5. Live Classes are standalone from Courses and remain public/free only while their scheduled session resolves `LIVE`. They do not require a paid enrollment.
 6. The server, not the browser, is authoritative for simulated-live state and playback offset.
-7. Protected video bytes never pass through PostgreSQL or the main Next/OpenNext Worker.
+7. Protected video bytes never pass through PostgreSQL or the main Next/OpenNext Worker during playback.
 8. Direct private MP4 is the current production media format. HLS application support remains available for future adapters.
 9. PostgreSQL is portable: Supabase, self-hosted PostgreSQL, or another compatible managed PostgreSQL are supported.
 10. Cloudflare/OpenNext is the primary runtime, while Vercel and normal Node/OCI/VPS remain supported through portable adapters/env variables.
@@ -130,13 +130,14 @@ The old OCI Media Flow → R2 ingest system is **not required for current produc
 
 Historical migration 009 and old ingest records are preserved for migration-history integrity. Do not rewrite/remove the migration merely because OCI is no longer the recommended media path.
 
-The current `/admin/media` screen still contains the older OCI ingest control-panel language. Treat replacing that with a portable admin upload/register experience as a follow-up UX/adapter project, not a blocker for the current release. Any implementation of that replacement must preserve provider portability:
+`/admin/media` now uses the portable direct upload/register path for current production media:
 
-- Cloudflare installation: upload/write through the bound private R2 application/storage adapter where appropriate.
+- Cloudflare installation: upload/write through the bound private R2 application/storage adapter.
 - Non-Cloudflare installation: use the configured S3-compatible storage adapter or another provider adapter.
-- Protected playback still uses the media-delivery provider; never hand browsers direct private-origin credentials or permanent R2 URLs.
+- Uploaded MP4s are stored under `media/...`, remain private, and are registered as `DIRECT` media assets using the storage object reference rather than a permanent public URL.
+- Protected playback still uses the separate media-delivery provider; never hand browsers direct private-origin credentials or permanent R2 URLs.
 
-Do not implement this follow-up by editing historical migrations. Design the upload lifecycle separately before coding it.
+The older OCI ingest implementation and historical records remain in the repository for migration/history compatibility, but the OCI control panel is no longer part of the active `/admin/media` production workflow. Do not remove or rewrite historical migration 009 as part of future cleanup.
 
 ## Live-class media behavior to preserve
 
@@ -185,7 +186,7 @@ Before calling a real environment production-ready:
 7. Run GitHub DB migrations with `MIGRATE`; require final status green.
 8. Redeploy `mklms`; require the Cloudflare production build/deploy to pass.
 9. Test admin login and student access-code flow.
-10. Test one protected direct MP4, including Range seeking.
+10. In `/admin/media`, upload one MP4 through the direct private upload form; then test protected playback including Range seeking.
 11. Test a paid lesson authorization/refresh/progress path.
 12. Test a public live class before LIVE, during LIVE, and after ENDED.
 13. Test certificate object storage/download path.
@@ -195,6 +196,18 @@ Before calling a real environment production-ready:
 ## Cost/plan principle
 
 The architecture should continue to use free-tier/free-included capabilities whenever usage stays inside those allowances. A paid Cloudflare Workers plan is a capacity/safety margin, not a reason to introduce paid services unnecessarily. Do not design a feature that *requires* paid infrastructure when the same correct architecture can operate within included/free usage at small scale. Scale limits and provider pricing must still be checked before large production loads.
+
+## Current bounded media-admin cleanup
+
+- Branch: `chore/remove-legacy-oci-media-admin`.
+- Pull request: `#28` targeting `main`; still draft/unmerged at this handoff point.
+- Starting production SHA: `62a979bfd40e26e6468e48c5aeb2e5fb4ce67872`.
+- Change: removed the active OCI Media Flow control panel/querying from `/admin/media`; added direct private MP4 upload through the existing configured storage adapter; uploaded objects use `media/...`; successful uploads register existing `DIRECT` media records; failed DB registration performs best-effort object cleanup.
+- TDD evidence: the first admin-media contract commit failed the GitHub `Domain tests` step before implementation, as intended.
+- Verification on implementation SHA `c943327bf5748485c138b34124c45faf534d89ce`: GitHub Actions `MkLMS CI` run `33410002554` passed domain tests, lint, Next.js production build, Cloudflare OpenNext build, main Worker dry-run, protected-media Worker dry-run, and billing Worker dry-run.
+- Migrations added/run for this cleanup: none. Existing numbered migrations `001`–`011`, including historical migration 009, were not changed by the implementation.
+- Account-side action specific to this code change: none beyond the existing production requirement that `APP_STORAGE_BUCKET` (or the portable S3-compatible adapter) is configured and private.
+- Exact next safe starting point after merge/deploy: resume the production test gate at `/admin/media` by uploading one MP4, confirm the asset appears as `DIRECT`, then verify protected playback/Range seeking before continuing paid-course/live-class regression tests.
 
 ## Next project handoff
 
