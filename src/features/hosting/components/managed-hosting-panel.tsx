@@ -1,4 +1,4 @@
-import { CalendarClock, Copy, CreditCard, ExternalLink, Gauge } from "lucide-react";
+import { CalendarClock, CreditCard, ExternalLink, Gauge } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -98,22 +98,15 @@ export function ManagedHostingPanel({
             {monthOverride?.operatorNote ? <p className="text-sm leading-6 text-muted-foreground">{monthOverride.operatorNote}</p> : null}
             {policy.notice ? <p className="text-sm leading-6 text-muted-foreground">{policy.notice}</p> : null}
 
-            {policy.usdtAddress ? (
-              <div className="rounded-lg border p-4">
-                <div className="flex items-center gap-2 text-sm font-medium"><Copy className="size-4" /> USDT payment details</div>
-                <p className="mt-2 text-xs text-muted-foreground">Network: {policy.usdtNetwork ?? "Confirm network with operator"}</p>
-                <code className="mt-2 block break-all rounded bg-muted/40 p-2 text-xs">{policy.usdtAddress}</code>
-                <p className="mt-2 text-xs text-muted-foreground">Send only USDT on the stated network. Payment confirmation remains a manual managed-service operation.</p>
-              </div>
-            ) : null}
-
             {policy.paymentUrl ? (
               <Button asChild>
                 <a href={policy.paymentUrl} target="_blank" rel="noreferrer noopener">
-                  Payment instructions <ExternalLink className="ml-1.5 size-4" />
+                  Pay now <ExternalLink className="ml-1.5 size-4" />
                 </a>
               </Button>
-            ) : null}
+            ) : (
+              <p className="text-xs text-muted-foreground">Payment link has not been configured by the operator.</p>
+            )}
 
             <ManagedHostingMonthEditor
               monthKey={monthKey}
