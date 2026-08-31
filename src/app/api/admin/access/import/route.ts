@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { CLAIM_VERIFICATION_STRATEGIES } from "@/features/access/domain/claim-verification";
+import { ACTIVE_CLAIM_VERIFICATION_STRATEGIES } from "@/features/access/domain/claim-verification";
 import { PostgresAdminAccessRepository } from "@/features/access/repositories/postgres-admin-access.repository";
 import { AccessAdminService } from "@/features/access/services/access-admin.service";
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
@@ -12,21 +12,13 @@ const schema = z.object({
   mode: z.enum(["csv", "paste"]),
   content: z.string().min(1).max(2_000_000),
   courseId: z.string().max(160).optional(),
-  claimStrategy: z.enum(CLAIM_VERIFICATION_STRATEGIES),
+  claimStrategy: z.enum(ACTIVE_CLAIM_VERIFICATION_STRATEGIES),
 });
 
 export async function POST(request: Request) {
-  if (!(await hasValidAdminSession())) {
-    return NextResponse.json({ ok: false }, { status: 401 });
-  }
-
+  if (!(await hasValidAdminSession())) return NextResponse.json({ ok: false }, { status: 401 });
   const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) {
-    return NextResponse.json(
-      { ok: false, message: "Invalid bulk authorization request." },
-      { status: 400 },
-    );
-  }
+  if (!parsed.success) return NextResponse.json({ ok: false, message: "Invalid bulk authorization request." }, { status: 400 });
 
   const [settings, courses] = await Promise.all([
     new PostgresSettingsRepository().getPlatformSettings(),
