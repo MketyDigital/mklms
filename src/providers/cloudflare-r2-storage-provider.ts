@@ -1,4 +1,6 @@
 import type {
+  ListStoredObjectsOptions,
+  ListStoredObjectsResult,
   PutObjectInput,
   StorageProvider,
   StoredObjectContent,
@@ -13,6 +15,12 @@ interface R2ObjectBodyLike {
   };
 }
 
+interface R2ListedObjectLike {
+  key: string;
+  size?: number;
+  uploaded?: Date;
+}
+
 export interface R2BucketLike {
   put(
     key: string,
@@ -25,6 +33,15 @@ export interface R2BucketLike {
     },
   ): Promise<unknown>;
   get(key: string): Promise<R2ObjectBodyLike | null>;
+  list(options?: {
+    prefix?: string;
+    cursor?: string;
+    limit?: number;
+  }): Promise<{
+    objects: R2ListedObjectLike[];
+    truncated: boolean;
+    cursor?: string;
+  }>;
   delete(key: string): Promise<unknown>;
 }
 
@@ -65,6 +82,26 @@ export class CloudflareR2StorageProvider implements StorageProvider {
     return {
       bytes,
       contentType: object.httpMetadata?.contentType ?? "application/octet-stream",
+    };
+  }
+
+  async listObjects(
+    options: ListStoredObjectsOptions = {},
+  ): Promise<ListStoredObjectsResult> {
+    const result = await this.bucket.list({
+      ...(options.prefix ? { prefix: options.prefix } : {}),
+      ...(options.cursor ? { cursor: options.cursor } : {}),
+      limit: Math.max(1, Math.min(1000, Math.floor(options.limit ?? 500))),
+    });
+
+    return {
+      objects: result.objects.map((object) => ({
+        assetId: object.key,
+        size: object.size ?? null,
+        uploadedAt: object.uploaded ? new Date(object.uploaded) : null,
+      })),
+      truncated: result.truncated,
+      cursor: result.cursor ?? null,
     };
   }
 
