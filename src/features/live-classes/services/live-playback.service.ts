@@ -98,13 +98,24 @@ export class LivePlaybackService {
       };
     }
 
+    const sessionEndsAtMs =
+      state.session.startsAt.getTime() + state.session.durationSeconds * 1000;
+    const remainingSessionSeconds = Math.max(
+      1,
+      Math.floor((sessionEndsAtMs - now.getTime()) / 1000),
+    );
+    const effectiveTtlSeconds = Math.min(
+      this.ttlSeconds,
+      remainingSessionSeconds,
+    );
+
     const authorization = await this.mediaProvider.createPlaybackAuthorization(asset, {
       viewerId: input.viewerId,
       studentId: null,
       courseId: null,
       lessonId: null,
       now,
-      ttlSeconds: this.ttlSeconds,
+      ttlSeconds: effectiveTtlSeconds,
     });
 
     return {
