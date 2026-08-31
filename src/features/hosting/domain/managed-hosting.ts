@@ -10,6 +10,15 @@ export interface ManagedHostingPolicy {
   maximumMonthlyFeeUsd: number;
   paymentUrl?: string | null;
   notice?: string | null;
+  usdtNetwork?: string | null;
+  usdtAddress?: string | null;
+}
+
+export interface ManagedHostingMonthOverride {
+  monthKey: string;
+  minimumFloorUsd: number;
+  operatorNote?: string | null;
+  paymentStatus: "PENDING" | "PAID" | "WAIVED";
 }
 
 export function normalizeManagedHostingPolicy(
@@ -27,6 +36,8 @@ export function normalizeManagedHostingPolicy(
     maximumMonthlyFeeUsd,
     paymentUrl: input.paymentUrl?.trim() || null,
     notice: input.notice?.trim() || null,
+    usdtNetwork: input.usdtNetwork?.trim().slice(0, 40) || null,
+    usdtAddress: input.usdtAddress?.trim().slice(0, 200) || null,
   };
 }
 
@@ -47,6 +58,33 @@ export function calculateManagedHostingFee(input: {
     policy.minimumMonthlyFeeUsd +
     (policy.maximumMonthlyFeeUsd - policy.minimumMonthlyFeeUsd) * ratio;
   return Math.round(fee * 100) / 100;
+}
+
+export function calculateManagedHostingAmountDue(input: {
+  watchMinutes: number;
+  policy: ManagedHostingPolicy;
+  monthlyMinimumFloorUsd?: number | null;
+}): { usageDerivedFeeUsd: number; minimumFloorUsd: number; amountDueUsd: number } {
+  const policy = normalizeManagedHostingPolicy(input.policy);
+  if (!policy.enabled) {
+    return { usageDerivedFeeUsd: 0, minimumFloorUsd: 0, amountDueUsd: 0 };
+  }
+
+  const usageDerivedFeeUsd = calculateManagedHostingFee({
+    watchMinutes: input.watchMinutes,
+    policy,
+  });
+  const requestedFloor = Number(input.monthlyMinimumFloorUsd);
+  const minimumFloorUsd = Number.isFinite(requestedFloor) && requestedFloor >= 0
+    ? Math.round(requestedFloor * 100) / 100
+    : policy.minimumMonthlyFeeUsd;
+  const amountDueUsd = Math.max(minimumFloorUsd, usageDerivedFeeUsd);
+
+  return {
+    usageDerivedFeeUsd,
+    minimumFloorUsd,
+    amountDueUsd: Math.round(amountDueUsd * 100) / 100,
+  };
 }
 
 export function getBillingMonthKey(now = new Date()): string {
