@@ -9,6 +9,8 @@ export interface ManagedHostingPolicy {
   minimumMonthlyFeeUsd: number;
   maximumMonthlyFeeUsd: number;
   paymentUrl?: string | null;
+  usdtTrc20Address?: string | null;
+  usdtTonAddress?: string | null;
   notice?: string | null;
 }
 
@@ -26,6 +28,8 @@ export function normalizeManagedHostingPolicy(
     minimumMonthlyFeeUsd,
     maximumMonthlyFeeUsd,
     paymentUrl: input.paymentUrl?.trim() || null,
+    usdtTrc20Address: input.usdtTrc20Address?.trim() || null,
+    usdtTonAddress: input.usdtTonAddress?.trim() || null,
     notice: input.notice?.trim() || null,
   };
 }
