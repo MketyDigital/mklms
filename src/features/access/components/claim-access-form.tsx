@@ -37,7 +37,7 @@ export function ClaimAccessForm({ verificationStrategy }: ClaimAccessFormProps) 
           phone: phone || undefined,
           certificateName,
           certificateEmail: certificateEmail || undefined,
-          claimCode: verificationStrategy === "claim-code" ? claimCode || undefined : undefined,
+          claimCode: claimCode || undefined,
         }),
       });
       const result = await response.json().catch(() => null) as {
@@ -105,12 +105,22 @@ export function ClaimAccessForm({ verificationStrategy }: ClaimAccessFormProps) 
         <Input id="certificate-email" type="email" value={certificateEmail} onChange={(event) => setCertificateEmail(event.target.value)} placeholder="Optional if same as approved email" />
       </div>
 
-      {verificationStrategy === "claim-code" ? (
-        <div className="space-y-2">
-          <Label htmlFor="claim-code">One-time claim code</Label>
-          <Input id="claim-code" value={claimCode} onChange={(event) => setClaimCode(event.target.value.toUpperCase())} placeholder="Enter the code from the administrator" autoComplete="one-time-code" required />
-        </div>
-      ) : null}
+      <div className="space-y-2">
+        <Label htmlFor="claim-code">
+          {verificationStrategy === "claim-code" ? "One-time claim code" : "Claim code (if provided)"}
+        </Label>
+        <Input
+          id="claim-code"
+          value={claimCode}
+          onChange={(event) => setClaimCode(event.target.value.toUpperCase())}
+          placeholder="Enter the code from the administrator"
+          autoComplete="one-time-code"
+          required={verificationStrategy === "claim-code"}
+        />
+        {verificationStrategy !== "claim-code" ? (
+          <p className="text-xs text-muted-foreground">Leave this blank unless the administrator supplied a one-time claim code for your access record.</p>
+        ) : null}
+      </div>
 
       {verificationStrategy === "manual-approval" ? (
         <p className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">Your first submission creates an approval request. After the administrator approves it, submit the same details again to receive your access code.</p>
