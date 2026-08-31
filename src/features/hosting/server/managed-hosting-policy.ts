@@ -12,7 +12,7 @@ function parseNumber(value: string | undefined, fallback: number): number {
 export function getManagedHostingPolicy(): ManagedHostingPolicy {
   let paymentUrl: string | null = null;
   try {
-    paymentUrl = normalizeSafeExternalUrl(process.env.MKLMS_MANAGED_HOSTING_PAYMENT_URL);
+    paymentUrl = normalizeSafeExternalUrl(process.env.MKLMS_MANAGED_PAYMENT_URL);
   } catch {
     paymentUrl = null;
   }
