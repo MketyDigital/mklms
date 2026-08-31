@@ -23,5 +23,11 @@
       "binding": "HYPERDRIVE_CACHED",
       "id": "14a4baf3773d41c88e4600967ab3b68d"
     }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "APP_STORAGE_BUCKET",
+      "bucket_name": "spf-media"
+    }
   ]
 }
