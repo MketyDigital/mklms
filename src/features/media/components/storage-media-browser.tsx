@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -16,10 +16,36 @@ type StorageMediaObject = {
   registered: boolean;
 };
 
+type StorageMediaPage = {
+  objects: StorageMediaObject[];
+  cursor: string | null;
+  truncated: boolean;
+};
+
 function formatBytes(bytes: number | null): string {
   if (bytes === null || !Number.isFinite(bytes)) return "Size unavailable";
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024)).toLocaleString()} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function fetchStorageMediaPage(nextCursor?: string): Promise<StorageMediaPage> {
+  const query = nextCursor ? `?cursor=${encodeURIComponent(nextCursor)}` : "";
+  const response = await fetch(`/api/admin/media/storage${query}`, { cache: "no-store" });
+  const result = await response.json().catch(() => null) as {
+    ok?: boolean;
+    message?: string;
+    objects?: StorageMediaObject[];
+    cursor?: string | null;
+    truncated?: boolean;
+  } | null;
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.message ?? "Private storage media could not be loaded.");
+  }
+  return {
+    objects: result.objects ?? [],
+    cursor: result.cursor ?? null,
+    truncated: Boolean(result.truncated),
+  };
 }
 
 export function StorageMediaBrowser() {
@@ -32,45 +58,53 @@ export function StorageMediaBrowser() {
   const [busyAssetId, setBusyAssetId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const load = useCallback(async (nextCursor?: string) => {
-    await Promise.resolve();
+  useEffect(() => {
+    let cancelled = false;
+
+    void fetchStorageMediaPage()
+      .then((page) => {
+        if (cancelled) return;
+        setObjects(page.objects);
+        setTitles(Object.fromEntries(page.objects.map((object) => [object.assetId, object.title])));
+        setCursor(page.cursor);
+        setTruncated(page.truncated);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setMessage(error instanceof Error ? error.message : "Private storage media could not be loaded.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function loadMore() {
+    if (!cursor || loading) return;
     setLoading(true);
     setMessage(null);
     try {
-      const query = nextCursor ? `?cursor=${encodeURIComponent(nextCursor)}` : "";
-      const response = await fetch(`/api/admin/media/storage${query}`, { cache: "no-store" });
-      const result = await response.json().catch(() => null) as {
-        ok?: boolean;
-        message?: string;
-        objects?: StorageMediaObject[];
-        cursor?: string | null;
-        truncated?: boolean;
-      } | null;
-      if (!response.ok || !result?.ok) {
-        setMessage(result?.message ?? "Private storage media could not be loaded.");
-        return;
-      }
-      const nextObjects = result.objects ?? [];
-      setObjects((current) => nextCursor ? [...current, ...nextObjects] : nextObjects);
+      const page = await fetchStorageMediaPage(cursor);
+      setObjects((current) => [...current, ...page.objects]);
       setTitles((current) => {
         const updated = { ...current };
-        for (const object of nextObjects) {
+        for (const object of page.objects) {
           if (!updated[object.assetId]) updated[object.assetId] = object.title;
         }
         return updated;
       });
-      setCursor(result.cursor ?? null);
-      setTruncated(Boolean(result.truncated));
-    } catch {
-      setMessage("Private storage media could not be loaded.");
+      setCursor(page.cursor);
+      setTruncated(page.truncated);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Private storage media could not be loaded.");
     } finally {
       setLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  }
 
   async function register(object: StorageMediaObject) {
     setBusyAssetId(object.assetId);
@@ -145,7 +179,7 @@ export function StorageMediaBrowser() {
         ) : null}
         {loading ? <p className="text-sm text-muted-foreground">Loading private storage media...</p> : null}
         {truncated && cursor ? (
-          <Button type="button" variant="outline" onClick={() => void load(cursor)} disabled={loading}>
+          <Button type="button" variant="outline" onClick={() => void loadMore()} disabled={loading}>
             Load more
           </Button>
         ) : null}
