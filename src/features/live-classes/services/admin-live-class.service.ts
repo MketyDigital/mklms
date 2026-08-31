@@ -40,7 +40,11 @@ export interface AdminLiveSessionRecord {
 
 export interface AdminLiveClassRepository {
   createBatch(input: Omit<AdminLiveBatchRecord, "id">): Promise<AdminLiveBatchRecord>;
+  updateBatch(batchId: string, input: Omit<AdminLiveBatchRecord, "id" | "status">): Promise<void>;
+  deleteBatch(batchId: string): Promise<void>;
   createSession(batchId: string, input: Omit<AdminLiveSessionRecord, "id" | "batchId">): Promise<AdminLiveSessionRecord>;
+  updateSession(sessionId: string, input: Omit<AdminLiveSessionRecord, "id" | "batchId" | "status">): Promise<void>;
+  deleteSession(sessionId: string): Promise<void>;
   replaceTimelineMessages(sessionId: string, items: ImportedLiveChatItem[]): Promise<unknown>;
   setBatchStatus(batchId: string, status: LiveBatchAdminStatus): Promise<void>;
 }
@@ -53,95 +57,76 @@ function optionalText(value?: string | null): string | null {
   return value?.trim() || null;
 }
 
+function normalizeBatchInput(input: {
+  title: string; slug?: string | null; description?: string | null; expectedViewerBaseline?: number | null;
+  viewerDisplayMode?: ViewerDisplayMode; endedMessage?: string | null; endedRedirectUrl?: string | null; notificationDestination?: string | null;
+}) {
+  const title = input.title.trim();
+  if (!title) throw new Error("Live class title is required.");
+  const expectedViewerBaseline = Math.floor(input.expectedViewerBaseline ?? 0);
+  if (!Number.isFinite(expectedViewerBaseline) || expectedViewerBaseline < 0) throw new Error("Viewer baseline cannot be negative.");
+  return {
+    title,
+    slug: slugify(input.slug || title),
+    description: optionalText(input.description),
+    expectedViewerBaseline,
+    viewerDisplayMode: input.viewerDisplayMode ?? "CONFIGURED_BASELINE" as ViewerDisplayMode,
+    endedMessage: optionalText(input.endedMessage),
+    endedRedirectUrl: normalizeSafeExternalUrl(input.endedRedirectUrl),
+    notificationDestination: optionalText(input.notificationDestination),
+  };
+}
+
+function normalizeSessionInput(input: {
+  title: string; position: number; startsAt: Date; durationSeconds: number; mediaAssetId?: string | null;
+  ctaText?: string | null; ctaUrl?: string | null; ctaRevealOffsetSeconds?: number | null;
+  endedMessage?: string | null; endedRedirectUrl?: string | null;
+}) {
+  const title = input.title.trim();
+  if (!title) throw new Error("Live session title is required.");
+  if (!Number.isInteger(input.position) || input.position < 1 || input.position > 3) throw new Error("Live session position must be between 1 and 3.");
+  if (!(input.startsAt instanceof Date) || Number.isNaN(input.startsAt.getTime())) throw new Error("Live session start time is invalid.");
+  const durationSeconds = Math.floor(input.durationSeconds);
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) throw new Error("Live session duration must be positive.");
+  const ctaRevealOffsetSeconds = input.ctaRevealOffsetSeconds ?? null;
+  if (ctaRevealOffsetSeconds !== null && (!Number.isFinite(ctaRevealOffsetSeconds) || ctaRevealOffsetSeconds < 0)) throw new Error("CTA reveal offset cannot be negative.");
+  return {
+    title, position: input.position, startsAt: input.startsAt, durationSeconds,
+    mediaAssetId: optionalText(input.mediaAssetId), ctaText: optionalText(input.ctaText),
+    ctaUrl: normalizeSafeExternalUrl(input.ctaUrl),
+    ctaRevealOffsetSeconds: ctaRevealOffsetSeconds === null ? null : Math.floor(ctaRevealOffsetSeconds),
+    endedMessage: optionalText(input.endedMessage), endedRedirectUrl: normalizeSafeExternalUrl(input.endedRedirectUrl),
+  };
+}
+
 export class AdminLiveClassService {
-  private readonly repository: AdminLiveClassRepository;
+  constructor(private readonly repository: AdminLiveClassRepository) {}
 
-  constructor(repository: AdminLiveClassRepository) {
-    this.repository = repository;
+  async createBatch(input: Parameters<typeof normalizeBatchInput>[0]): Promise<AdminLiveBatchRecord> {
+    return this.repository.createBatch({ ...normalizeBatchInput(input), status: "DRAFT" });
   }
 
-  async createBatch(input: {
-    title: string;
-    slug?: string | null;
-    description?: string | null;
-    expectedViewerBaseline?: number | null;
-    viewerDisplayMode?: ViewerDisplayMode;
-    endedMessage?: string | null;
-    endedRedirectUrl?: string | null;
-    notificationDestination?: string | null;
-  }): Promise<AdminLiveBatchRecord> {
-    const title = input.title.trim();
-    if (!title) throw new Error("Live class title is required.");
-    const expectedViewerBaseline = Math.floor(input.expectedViewerBaseline ?? 0);
-    if (!Number.isFinite(expectedViewerBaseline) || expectedViewerBaseline < 0) throw new Error("Viewer baseline cannot be negative.");
-    return this.repository.createBatch({
-      title,
-      slug: slugify(input.slug || title),
-      description: optionalText(input.description),
-      status: "DRAFT",
-      expectedViewerBaseline,
-      viewerDisplayMode: input.viewerDisplayMode ?? "CONFIGURED_BASELINE",
-      endedMessage: optionalText(input.endedMessage),
-      endedRedirectUrl: normalizeSafeExternalUrl(input.endedRedirectUrl),
-      notificationDestination: optionalText(input.notificationDestination),
-    });
+  async updateBatch(batchId: string, input: Parameters<typeof normalizeBatchInput>[0]): Promise<void> {
+    await this.repository.updateBatch(batchId, normalizeBatchInput(input));
   }
 
-  async createSession(batchId: string, input: {
-    title: string;
-    position: number;
-    startsAt: Date;
-    durationSeconds: number;
-    mediaAssetId?: string | null;
-    status?: "DRAFT" | "PUBLISHED";
-    ctaText?: string | null;
-    ctaUrl?: string | null;
-    ctaRevealOffsetSeconds?: number | null;
-    endedMessage?: string | null;
-    endedRedirectUrl?: string | null;
-  }): Promise<AdminLiveSessionRecord> {
-    const title = input.title.trim();
-    if (!title) throw new Error("Live session title is required.");
-    if (!Number.isInteger(input.position) || input.position < 1 || input.position > 3) throw new Error("Live session position must be between 1 and 3.");
-    if (!(input.startsAt instanceof Date) || Number.isNaN(input.startsAt.getTime())) throw new Error("Live session start time is invalid.");
-    const durationSeconds = Math.floor(input.durationSeconds);
-    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) throw new Error("Live session duration must be positive.");
-    const ctaRevealOffsetSeconds = input.ctaRevealOffsetSeconds ?? null;
-    if (ctaRevealOffsetSeconds !== null && (!Number.isFinite(ctaRevealOffsetSeconds) || ctaRevealOffsetSeconds < 0)) throw new Error("CTA reveal offset cannot be negative.");
-    return this.repository.createSession(batchId, {
-      title,
-      position: input.position,
-      startsAt: input.startsAt,
-      durationSeconds,
-      mediaAssetId: optionalText(input.mediaAssetId),
-      status: input.status ?? "DRAFT",
-      ctaText: optionalText(input.ctaText),
-      ctaUrl: normalizeSafeExternalUrl(input.ctaUrl),
-      ctaRevealOffsetSeconds: ctaRevealOffsetSeconds === null ? null : Math.floor(ctaRevealOffsetSeconds),
-      endedMessage: optionalText(input.endedMessage),
-      endedRedirectUrl: normalizeSafeExternalUrl(input.endedRedirectUrl),
-    });
+  deleteBatch(batchId: string): Promise<void> { return this.repository.deleteBatch(batchId); }
+
+  async createSession(batchId: string, input: Parameters<typeof normalizeSessionInput>[0] & { status?: "DRAFT" | "PUBLISHED" }): Promise<AdminLiveSessionRecord> {
+    return this.repository.createSession(batchId, { ...normalizeSessionInput(input), status: input.status ?? "DRAFT" });
   }
+
+  async updateSession(sessionId: string, input: Parameters<typeof normalizeSessionInput>[0]): Promise<void> {
+    await this.repository.updateSession(sessionId, normalizeSessionInput(input));
+  }
+
+  deleteSession(sessionId: string): Promise<void> { return this.repository.deleteSession(sessionId); }
 
   async createQuickTest(input: { title?: string; expectedViewerBaseline?: number; now?: Date } = {}) {
     const now = input.now ?? new Date();
     const suffix = now.toISOString().replace(/\D/g, "").slice(0, 14);
-    const batch = await this.createBatch({
-      title: input.title?.trim() || "Live Room Test",
-      slug: `live-room-test-${suffix}`,
-      description: "Temporary no-media test room for verifying the live experience.",
-      expectedViewerBaseline: input.expectedViewerBaseline ?? 100,
-      viewerDisplayMode: "CONFIGURED_BASELINE",
-      endedMessage: "This live-room test has ended.",
-    });
-    const session = await this.createSession(batch.id, {
-      title: "Test Session",
-      position: 1,
-      startsAt: new Date(now.getTime() - 5_000),
-      durationSeconds: 15 * 60,
-      mediaAssetId: null,
-      status: "PUBLISHED",
-    });
+    const batch = await this.createBatch({ title: input.title?.trim() || "Live Room Test", slug: `live-room-test-${suffix}`, description: "Temporary no-media test room for verifying the live experience.", expectedViewerBaseline: input.expectedViewerBaseline ?? 100, viewerDisplayMode: "CONFIGURED_BASELINE", endedMessage: "This live-room test has ended." });
+    const session = await this.createSession(batch.id, { title: "Test Session", position: 1, startsAt: new Date(now.getTime() - 5_000), durationSeconds: 15 * 60, mediaAssetId: null, status: "PUBLISHED" });
     await this.setBatchStatus(batch.id, "ACTIVE");
     return { batch: { ...batch, status: "ACTIVE" as const }, session };
   }
@@ -152,7 +137,5 @@ export class AdminLiveClassService {
     return { imported: parsed.items.length, errors: parsed.errors };
   }
 
-  setBatchStatus(batchId: string, status: LiveBatchAdminStatus): Promise<void> {
-    return this.repository.setBatchStatus(batchId, status);
-  }
+  setBatchStatus(batchId: string, status: LiveBatchAdminStatus): Promise<void> { return this.repository.setBatchStatus(batchId, status); }
 }
