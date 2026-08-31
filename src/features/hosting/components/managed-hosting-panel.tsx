@@ -38,6 +38,7 @@ export function ManagedHostingPanel({
     monthlyMinimumFloorUsd: monthOverride?.minimumFloorUsd,
   });
   const paymentStatus = monthOverride?.paymentStatus ?? "PENDING";
+  const paymentStatusLabel = paymentStatus === "PENDING" ? "UNPAID" : paymentStatus;
 
   return (
     <div className="space-y-6">
@@ -94,7 +95,7 @@ export function ManagedHostingPanel({
               <div className="rounded-lg border border-primary/40 bg-primary/5 p-4">
                 <p className="text-xs text-muted-foreground">Amount due</p>
                 <p className="mt-1 text-2xl font-semibold">${billing.amountDueUsd.toFixed(2)}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{paymentStatus}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{paymentStatusLabel}</p>
               </div>
             </div>
 
