@@ -57,6 +57,20 @@ export async function POST(request: Request) {
         { status: 403 },
       );
     }
+  } else if (strategy === "manual-approval") {
+    if (!preauthorization.manualApprovedAt) {
+      await repository.markPreauthorizationClaimRequested(preauthorization.id);
+      return NextResponse.json(
+        {
+          ok: false,
+          verificationRequired: true,
+          strategy,
+          message:
+            "Your access request has been sent to the administrator. After approval, submit these same details again to receive your access code.",
+        },
+        { status: 202 },
+      );
+    }
   } else if (strategy !== "preauth-only") {
     return NextResponse.json(
       {
@@ -64,9 +78,7 @@ export async function POST(request: Request) {
         verificationRequired: true,
         strategy,
         message:
-          strategy === "manual-approval"
-            ? "Your access must be approved by the administrator before it can be claimed."
-            : "This portal uses an additional verification step before access can be claimed.",
+          "This portal uses an additional verification step before access can be claimed.",
       },
       { status: 202 },
     );
