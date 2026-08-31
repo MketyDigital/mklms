@@ -4,14 +4,16 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("managed-hosting payment policy is not exposed in normal env example or editable API", async () => {
+test("managed-hosting billing is operator-controlled rather than editable by ordinary admin alone", async () => {
   const envExample = await read(".env.example");
-  assert.equal(envExample.includes("MKLMS_MANAGED_HOSTING_"), false);
+  const api = await read("src/app/api/admin/hosting/month/route.ts");
+  const auth = await read("src/features/hosting/server/hosting-operator-auth.ts");
 
-  await assert.rejects(
-    read("src/app/api/admin/hosting/route.ts"),
-    /ENOENT|no such file/i,
-  );
+  assert.match(envExample, /MKLMS_MANAGED_HOSTING_OPERATOR_KEY=/);
+  assert.match(api, /hasValidAdminSession/);
+  assert.match(api, /isValidManagedHostingOperatorKey/);
+  assert.match(auth, /timingSafeEqual/);
+  assert.match(auth, /expected\.length < 16/);
 });
 
 test("public home uses a certificate lookup instead of raw live-slug instructions", async () => {

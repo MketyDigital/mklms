@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { LiveClassRoom } from "@/features/live-classes/components/live-class-room";
+import { LiveClassRoomMobileFirst } from "@/features/live-classes/components/live-class-room-mobile-first";
 import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +27,7 @@ export default async function PublicLiveClassPage({
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
-      <LiveClassRoom
+      <LiveClassRoomMobileFirst
         slug={slug}
         organizationName={settings.organizationName || "Live Class"}
       />

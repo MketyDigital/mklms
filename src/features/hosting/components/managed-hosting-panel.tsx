@@ -3,10 +3,12 @@ import { CalendarClock, CreditCard, ExternalLink, Gauge } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  calculateManagedHostingFee,
+  calculateManagedHostingAmountDue,
   getBillingMonthKey,
+  type ManagedHostingMonthOverride,
   type ManagedHostingPolicy,
 } from "../domain/managed-hosting";
+import { ManagedHostingMonthEditor } from "./managed-hosting-month-editor";
 
 export interface ManagedHostingUsageClientSummary {
   courseWatchMinutesMeasured: number;
@@ -18,14 +20,21 @@ export function ManagedHostingPanel({
   policy,
   usage,
   monthStart,
+  monthOverride,
 }: {
   policy: ManagedHostingPolicy;
   usage: ManagedHostingUsageClientSummary;
   monthStart: Date;
+  monthOverride?: ManagedHostingMonthOverride | null;
 }) {
   const totalUsageMinutes = usage.courseWatchMinutesMeasured + usage.liveAudienceMinutesEstimated;
-  const amountDue = calculateManagedHostingFee({ watchMinutes: totalUsageMinutes, policy });
   const monthKey = getBillingMonthKey(monthStart);
+  const billing = calculateManagedHostingAmountDue({
+    watchMinutes: totalUsageMinutes,
+    policy,
+    monthlyMinimumFloorUsd: monthOverride?.minimumFloorUsd,
+  });
+  const paymentStatus = monthOverride?.paymentStatus ?? "PENDING";
 
   return (
     <div className="space-y-6">
@@ -66,18 +75,27 @@ export function ManagedHostingPanel({
               <CalendarClock className="size-5" /> Managed hosting · {monthKey}
             </CardTitle>
             <CardDescription>
-              This month is calculated independently. A new calendar month automatically starts with fresh usage while prior months remain in history.
+              The monthly operator floor is the minimum due. If usage calculates a higher managed-service charge, the higher amount is due instead.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-lg border bg-muted/20 p-4">
-              <p className="text-xs text-muted-foreground">Amount due</p>
-              <p className="mt-1 text-3xl font-semibold">${amountDue.toFixed(2)}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Managed-service charge based on this month&apos;s measured/estimated usage. It is separate from provider invoices.
-              </p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border bg-muted/20 p-4">
+                <p className="text-xs text-muted-foreground">Monthly floor</p>
+                <p className="mt-1 text-2xl font-semibold">${billing.minimumFloorUsd.toFixed(2)}</p>
+              </div>
+              <div className="rounded-lg border bg-muted/20 p-4">
+                <p className="text-xs text-muted-foreground">Usage-derived amount</p>
+                <p className="mt-1 text-2xl font-semibold">${billing.usageDerivedFeeUsd.toFixed(2)}</p>
+              </div>
+              <div className="rounded-lg border border-primary/40 bg-primary/5 p-4">
+                <p className="text-xs text-muted-foreground">Amount due</p>
+                <p className="mt-1 text-2xl font-semibold">${billing.amountDueUsd.toFixed(2)}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{paymentStatus}</p>
+              </div>
             </div>
 
+            {monthOverride?.operatorNote ? <p className="text-sm leading-6 text-muted-foreground">{monthOverride.operatorNote}</p> : null}
             {policy.notice ? <p className="text-sm leading-6 text-muted-foreground">{policy.notice}</p> : null}
 
             {policy.paymentUrl ? (
@@ -87,8 +105,15 @@ export function ManagedHostingPanel({
                 </a>
               </Button>
             ) : (
-              <p className="text-sm text-muted-foreground">Payment link is not currently available.</p>
+              <p className="text-xs text-muted-foreground">Payment link has not been configured by the operator.</p>
             )}
+
+            <ManagedHostingMonthEditor
+              monthKey={monthKey}
+              currentFloorUsd={billing.minimumFloorUsd}
+              currentStatus={paymentStatus}
+              currentNote={monthOverride?.operatorNote}
+            />
           </CardContent>
         </Card>
       ) : null}
