@@ -14,6 +14,13 @@ export interface CreatePreauthorizationInput {
   externalReference?: string | null;
 }
 
+export interface UpdatePendingPreauthorizationInput {
+  nameHint?: string | null;
+  courseId?: string | null;
+  claimStrategy: ClaimVerificationStrategy;
+  claimCodeHash?: string | null;
+}
+
 export interface CreatePreauthorizationResult {
   record: PreauthorizationRecord;
   created: boolean;
@@ -29,10 +36,10 @@ export interface AdminStudentSummary {
 }
 
 export interface AdminAccessRepository {
-  createPreauthorization(
-    input: CreatePreauthorizationInput,
-  ): Promise<CreatePreauthorizationResult>;
+  createPreauthorization(input: CreatePreauthorizationInput): Promise<CreatePreauthorizationResult>;
   listPreauthorizations(limit?: number): Promise<PreauthorizationRecord[]>;
+  updatePendingPreauthorization(preauthorizationId: string, input: UpdatePendingPreauthorizationInput): Promise<void>;
+  cancelPendingPreauthorization(preauthorizationId: string): Promise<void>;
   approveManualClaim(preauthorizationId: string): Promise<void>;
   listStudents(limit?: number): Promise<AdminStudentSummary[]>;
   replaceAccessCredential(
