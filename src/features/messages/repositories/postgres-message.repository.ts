@@ -175,14 +175,16 @@ export class PostgresMessageRepository {
       [threadId],
     );
 
+    return result.rows.map((row) => this.mapMessage(row));
+  }
+
+  async markThreadRead(threadId: string): Promise<void> {
     await this.pool.query(
       `UPDATE messages
        SET read_by_admin_at = COALESCE(read_by_admin_at, NOW())
        WHERE thread_id = $1 AND sender_role = 'STUDENT'`,
       [threadId],
     );
-
-    return result.rows.map((row) => this.mapMessage(row));
   }
 
   async sendAdminReply(
