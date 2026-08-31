@@ -5,10 +5,11 @@ This file is the current operational source of truth for `MketyDigital/mklms`. R
 ## Current release state
 
 - Production branch: `main`.
-- Integrated release merge: `caa4a9c116a4e11f10498e3f3a2f1a48974d8b0f` (2026-08-31).
-- No intended feature PR is left open after the final media/billing/R2 integration.
-- The exact integrated release candidate passed domain tests, lint, Next.js production build, OpenNext build, main Worker dry-run, protected-media Worker dry-run, billing Worker dry-run, CodeQL, and a Cloudflare preview build.
-- The merged `main` GitHub CI also passed. A Cloudflare production build failed after merge even though the same code built successfully as a preview; treat that as a Cloudflare account/configuration/deploy gate, not as evidence of an application compile failure. Inspect the production Cloudflare build log if it still fails after bindings/secrets are configured.
+- Latest merged media-admin cleanup: `706714a8837029da6f9ffc84b6519c65047049c5` (2026-08-31), from PR `#29`.
+- Earlier integrated release merge: `caa4a9c116a4e11f10498e3f3a2f1a48974d8b0f` (2026-08-31).
+- The merged `main` media-admin cleanup passed domain tests, lint, Next.js production build, OpenNext build, main Worker dry-run, protected-media Worker dry-run, billing Worker dry-run, and CodeQL.
+- No application/database migration was added for the media-admin cleanup. Numbered migrations remain `001` through `011`.
+- A prior Cloudflare production build had failed even though the same release code built successfully in preview/CI; if production deployment still fails after bindings/secrets are configured, treat that as a Cloudflare account/configuration/deploy gate and inspect the production build log rather than assuming an application compile regression.
 
 ## Product boundaries that must not regress
 
@@ -61,7 +62,7 @@ Bindings already declared in root `wrangler.jsonc`:
 - `HYPERDRIVE_CACHED` → explicitly cache-tolerant stable public reads
 - `APP_STORAGE_BUCKET` → private R2 bucket `spf-media`
 
-`APP_STORAGE_BUCKET` is the preferred Cloudflare storage path for certificates/general private application objects. On Cloudflare, S3 access-key env variables are not required merely for this application storage.
+`APP_STORAGE_BUCKET` is the preferred Cloudflare storage path for certificates/general private application objects and admin direct MP4 uploads. On Cloudflare, S3 access-key env variables are not required merely for this application storage.
 
 ### Worker 2 — `mklms-media-delivery`
 
@@ -135,9 +136,11 @@ Historical migration 009 and old ingest records are preserved for migration-hist
 - Cloudflare installation: upload/write through the bound private R2 application/storage adapter.
 - Non-Cloudflare installation: use the configured S3-compatible storage adapter or another provider adapter.
 - Uploaded MP4s are stored under `media/...`, remain private, and are registered as `DIRECT` media assets using the storage object reference rather than a permanent public URL.
+- Existing media records and supported source types remain intact, including `DIRECT`, `HLS`, `YOUTUBE`, `EXTERNAL_EMBED`, and `CUSTOM`.
 - Protected playback still uses the separate media-delivery provider; never hand browsers direct private-origin credentials or permanent R2 URLs.
+- Operator-uploaded R2 objects remain valid and unchanged; they can continue to be registered by their private object key. The admin upload form is an additional convenience path.
 
-The older OCI ingest implementation and historical records remain in the repository for migration/history compatibility, but the OCI control panel is no longer part of the active `/admin/media` production workflow. Do not remove or rewrite historical migration 009 as part of future cleanup.
+The older OCI ingest implementation and historical records remain in the repository for migration/history compatibility, but the OCI control panel and active ingest-state querying are no longer part of the active `/admin/media` production workflow. Do not remove or rewrite historical migration 009 as part of future cleanup.
 
 ## Live-class media behavior to preserve
 
@@ -163,6 +166,7 @@ Paid course playback keeps its separate enrollment/session/course/lesson authori
 
 Use these together:
 
+- `README.md` — current project overview and operator-facing production path.
 - `docs/deployment/environment-variables.md` — authoritative host-by-host env/binding reference.
 - `.env.cloudflare.example` — concrete three-Worker Cloudflare setup checklist.
 - `.env.example` — portable application env template.
@@ -186,7 +190,7 @@ Before calling a real environment production-ready:
 7. Run GitHub DB migrations with `MIGRATE`; require final status green.
 8. Redeploy `mklms`; require the Cloudflare production build/deploy to pass.
 9. Test admin login and student access-code flow.
-10. In `/admin/media`, upload one MP4 through the direct private upload form; then test protected playback including Range seeking.
+10. Test existing registered direct MP4 media and protected Range seeking. The new `/admin/media` direct-upload form can also be tested separately as a convenience path; existing operator-uploaded R2 videos do not need to be re-uploaded.
 11. Test a paid lesson authorization/refresh/progress path.
 12. Test a public live class before LIVE, during LIVE, and after ENDED.
 13. Test certificate object storage/download path.
@@ -197,17 +201,17 @@ Before calling a real environment production-ready:
 
 The architecture should continue to use free-tier/free-included capabilities whenever usage stays inside those allowances. A paid Cloudflare Workers plan is a capacity/safety margin, not a reason to introduce paid services unnecessarily. Do not design a feature that *requires* paid infrastructure when the same correct architecture can operate within included/free usage at small scale. Scale limits and provider pricing must still be checked before large production loads.
 
-## Current bounded media-admin cleanup
+## Final media-admin cleanup handoff
 
-- Branch: `chore/remove-legacy-oci-media-admin`.
-- Pull request: `#28` targeting `main`; still draft/unmerged at this handoff point.
-- Starting production SHA: `62a979bfd40e26e6468e48c5aeb2e5fb4ce67872`.
+- Production merge: `706714a8837029da6f9ffc84b6519c65047049c5` on `main`, merged from PR `#29`.
+- Starting production SHA before cleanup: `62a979bfd40e26e6468e48c5aeb2e5fb4ce67872`.
 - Change: removed the active OCI Media Flow control panel/querying from `/admin/media`; added direct private MP4 upload through the existing configured storage adapter; uploaded objects use `media/...`; successful uploads register existing `DIRECT` media records; failed DB registration performs best-effort object cleanup.
+- Scope audit: the implementation diff was limited to `AGENTS.md`, `src/app/(admin)/admin/media/page.tsx`, `src/app/api/admin/media/upload/route.ts`, `src/features/media/components/media-upload-panel.tsx`, and `tests/admin-media-upload.test.mjs`. No migration, playback provider, media-delivery Worker, course, live-class, auth, certificate, billing, or database-architecture file changed in that implementation.
 - TDD evidence: the first admin-media contract commit failed the GitHub `Domain tests` step before implementation, as intended.
-- Verification on implementation SHA `c943327bf5748485c138b34124c45faf534d89ce`: GitHub Actions `MkLMS CI` run `33410002554` passed domain tests, lint, Next.js production build, Cloudflare OpenNext build, main Worker dry-run, protected-media Worker dry-run, and billing Worker dry-run.
+- Verification: merged `main` commit `706714a8837029da6f9ffc84b6519c65047049c5` passed domain tests, lint, Next.js production build, Cloudflare OpenNext build, main Worker dry-run, protected-media Worker dry-run, billing Worker dry-run, and CodeQL.
 - Migrations added/run for this cleanup: none. Existing numbered migrations `001`–`011`, including historical migration 009, were not changed by the implementation.
 - Account-side action specific to this code change: none beyond the existing production requirement that `APP_STORAGE_BUCKET` (or the portable S3-compatible adapter) is configured and private.
-- Exact next safe starting point after merge/deploy: resume the production test gate at `/admin/media` by uploading one MP4, confirm the asset appears as `DIRECT`, then verify protected playback/Range seeking before continuing paid-course/live-class regression tests.
+- Exact next safe starting point: run the one-click GitHub DB migration workflow with `MIGRATE`, require **Verify database is current** to pass, then begin the production test gate. Existing R2 videos do not need re-uploading.
 
 ## Next project handoff
 
