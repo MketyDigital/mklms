@@ -11,3 +11,15 @@ test('admin media page no longer exposes the legacy OCI ingest control panel', (
   assert.doesNotMatch(page, /OCI Media Flow/);
   assert.match(page, /MediaUploadPanel/);
 });
+
+test('admin media upload stores private MP4 through the configured storage adapter and registers DIRECT media', () => {
+  const route = fs.readFileSync('src/app/api/admin/media/upload/route.ts', 'utf8');
+
+  assert.match(route, /hasValidAdminSession/);
+  assert.match(route, /getConfiguredStorageProvider/);
+  assert.match(route, /video\/mp4/);
+  assert.match(route, /visibility:\s*"private"/);
+  assert.match(route, /media\//);
+  assert.match(route, /sourceType:\s*"DIRECT"/);
+  assert.doesNotMatch(route, /OCI|Media Flow|oci/i);
+});
