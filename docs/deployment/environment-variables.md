@@ -76,8 +76,9 @@ These are **bindings, not string environment variables**. They are declared in t
 - `HYPERDRIVE_FRESH` — cache-disabled/fresh database path for auth, permissions, writes, admin, billing, playback authorization, live viewer state, and other consistency-sensitive work.
 - `HYPERDRIVE_CACHED` — explicit opt-in path for stable public reads that tolerate brief staleness.
 - `ASSETS` — OpenNext static-asset binding.
+- `APP_STORAGE_BUCKET` — private R2 binding to `spf-media` for certificates and general application-managed objects.
 
-Do not create ordinary variables such as `HYPERDRIVE_FRESH=<id>`. The configuration IDs belong in Wrangler's `hyperdrive` binding entries.
+Do not create ordinary variables such as `HYPERDRIVE_FRESH=<id>` or `APP_STORAGE_BUCKET=spf-media`. The binding IDs/bucket names belong in Wrangler configuration.
 
 `DATABASE_URL` should still be configured as the Node/build/migration/fallback connection. The Cloudflare runtime code prefers the fresh Hyperdrive binding when it is available.
 
@@ -145,9 +146,10 @@ Vercel runs MkLMS through the normal Node database path:
 - configure `MKLMS_ADMIN_ACCESS_KEY` and `MKLMS_ADMIN_SESSION_SECRET`;
 - configure `MKLMS_MEDIA_DELIVERY_BASE_URL` and `MKLMS_MEDIA_SIGNING_SECRET` when protected video is enabled;
 - configure `MKLMS_BILLING_SERVICE_URL`, `MKLMS_BILLING_INSTALLATION_ID`, and `MKLMS_BILLING_SHARED_SECRET` when automatic managed-hosting billing is enabled;
+- configure `MKLMS_STORAGE_*` credentials when certificates/general private object storage is required, because Vercel cannot consume the Cloudflare `APP_STORAGE_BUCKET` binding;
 - add optional student/SMTP/Telegram/hosting/media-automation settings only when you want to override their defaults or enable those integrations.
 
-Vercel does not use `HYPERDRIVE_FRESH` or `HYPERDRIVE_CACHED`. A Vercel-hosted MkLMS installation can still use the same Cloudflare R2 bucket, media-delivery Worker, and central billing Worker.
+Vercel does not use `HYPERDRIVE_FRESH`, `HYPERDRIVE_CACHED`, or `APP_STORAGE_BUCKET`. A Vercel-hosted MkLMS installation can still use the same Cloudflare R2 bucket, media-delivery Worker, and central billing Worker.
 
 ## 7. OCI / VPS / Docker / normal Node hosting
 
@@ -191,11 +193,25 @@ Requirements:
 4. all MkLMS migrations are applied in order;
 5. Cloudflare deployments use Hyperdrive to that database when Cloudflare is the main application runtime.
 
-## 9. S3-compatible application storage
+## 9. Application object storage
 
-These variables configure the generic `StorageProvider`, used for private application-managed objects such as certificates and provider-managed files. Cloudflare R2, AWS S3, MinIO, or another S3-compatible provider can fill this role.
+The generic `StorageProvider` is used for private application-managed objects such as certificates and provider-managed files.
 
-| Variable | Required when storage feature is used | Secret |
+### Cloudflare main Worker
+
+Cloudflare now prefers the native binding:
+
+```text
+APP_STORAGE_BUCKET -> spf-media
+```
+
+This binding is already declared in the main `wrangler.jsonc`. When it is present, the main Cloudflare Worker does **not** need S3 Access Key ID / Secret Access Key credentials for certificate/general application storage.
+
+### Vercel / OCI / VPS / Docker / other Node hosts
+
+Those hosts use the existing S3-compatible fallback:
+
+| Variable | Required when portable storage is used | Secret |
 | --- | --- | --- |
 | `MKLMS_STORAGE_BUCKET` | Yes | No |
 | `MKLMS_STORAGE_REGION` | Recommended; defaults to `auto` | No |
@@ -204,17 +220,17 @@ These variables configure the generic `StorageProvider`, used for private applic
 | `MKLMS_STORAGE_SECRET_ACCESS_KEY` | Yes | Yes |
 | `MKLMS_STORAGE_FORCE_PATH_STYLE` | Optional; default `false` | No |
 
-For the protected video path, the separate media Worker uses its direct `MEDIA_BUCKET` binding instead of these S3 credentials.
+Cloudflare R2, AWS S3, MinIO, or another S3-compatible provider can fill this portable role. For protected video, the separate media Worker always uses its own direct `MEDIA_BUCKET` binding on Cloudflare.
 
 ## 10. R2 operator/rclone credentials
 
-These are operator/local-upload credentials, not browser variables and not required by the media-delivery Worker:
+These are operator/local-upload credentials, not browser variables and not required by either Cloudflare R2 binding:
 
 - `R2_ACCOUNT_ID`
 - `R2_ACCESS_KEY_ID`
 - `R2_SECRET_ACCESS_KEY`
 
-They are used by local scripts/rclone or other S3-compatible upload tooling. Scope an R2 token to only the required bucket where practical.
+They are used by local scripts/rclone/Cyberduck or other S3-compatible upload tooling. Scope an R2 token to only the required bucket where practical.
 
 ## 11. Optional Telegram notifications
 
@@ -307,7 +323,7 @@ MKLMS_CLAIM_VERIFICATION_STRATEGY=preauth-only
 MKLMS_STUDENT_SESSION_TTL_SECONDS=1209600
 ```
 
-On the Cloudflare main Worker, keep the existing `HYPERDRIVE_FRESH`, `HYPERDRIVE_CACHED`, and `ASSETS` bindings.
+On the Cloudflare main Worker, keep the existing `HYPERDRIVE_FRESH`, `HYPERDRIVE_CACHED`, `ASSETS`, and `APP_STORAGE_BUCKET -> spf-media` bindings. Do not set `MKLMS_STORAGE_ACCESS_KEY_ID` / `MKLMS_STORAGE_SECRET_ACCESS_KEY` on Cloudflare merely for normal certificate/general app storage when that binding is active.
 
 For the separate media-delivery Worker:
 
