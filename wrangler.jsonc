@@ -14,4 +14,20 @@
   "observability": {
     "enabled": true
   }
+
+  // Hyperdrive is a Cloudflare binding, not a normal environment variable.
+  // Keep this template commented until the two configurations are created in
+  // your Cloudflare account. Then replace the example IDs with the IDs that
+  // Cloudflare returns and uncomment the block. Never commit database passwords.
+  //
+  // "hyperdrive": [
+  //   {
+  //     "binding": "HYPERDRIVE_FRESH",
+  //     "id": "<fresh-hyperdrive-config-id>"
+  //   },
+  //   {
+  //     "binding": "HYPERDRIVE_CACHED",
+  //     "id": "<cached-hyperdrive-config-id>"
+  //   }
+  // ]
 }
