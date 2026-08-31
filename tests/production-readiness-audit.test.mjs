@@ -25,6 +25,13 @@ test('student onboarding uses the configured claim strategy', () => {
   assert.doesNotMatch(page, /verificationStrategy="preauth-only"/);
 });
 
+test('student onboarding can submit a per-student claim code even when the global default differs', () => {
+  const form = read('src/features/access/components/claim-access-form.tsx');
+  assert.match(form, /claimCode:\s*claimCode\s*\|\|\s*undefined/);
+  assert.match(form, /Claim code \(if issued\)/);
+  assert.doesNotMatch(form, /claimCode:\s*verificationStrategy\s*===\s*"claim-code"\s*\?/);
+});
+
 test('student login honors the documented MkLMS session TTL variable', () => {
   const route = read('src/app/api/access/login/route.ts');
   assert.match(route, /MKLMS_STUDENT_SESSION_TTL_SECONDS/);
