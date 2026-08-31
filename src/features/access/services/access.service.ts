@@ -42,36 +42,27 @@ export class AccessService {
       return { ok: false, publicMessage: NEUTRAL_CLAIM_FAILURE };
     }
 
-    const student = await this.repository.createStudent({
-      displayName: input.certificateName.trim(),
-      email: input.identity.email?.trim() || null,
-      phone: input.identity.phone?.trim() || null,
-      certificateName: input.certificateName.trim(),
-      certificateEmail: input.certificateEmail?.trim() || null,
-    });
-
     const accessCode = generateAccessCode({
       prefix: this.options.accessCodePrefix,
     });
     const hash = hashAccessCode(accessCode);
 
-    await this.repository.replaceAccessCredential(student.id, {
-      hash,
-      lookupHash: getAccessCodeLookupHash(accessCode),
-      prefix: this.options.accessCodePrefix,
+    const student = await this.repository.completeVerifiedClaim({
+      preauthorizationId: preauthorization.id,
+      student: {
+        displayName: input.certificateName.trim(),
+        email: input.identity.email?.trim() || null,
+        phone: input.identity.phone?.trim() || null,
+        certificateName: input.certificateName.trim(),
+        certificateEmail: input.certificateEmail?.trim() || null,
+      },
+      courseId: preauthorization.courseId,
+      credential: {
+        hash,
+        lookupHash: getAccessCodeLookupHash(accessCode),
+        prefix: this.options.accessCodePrefix,
+      },
     });
-
-    if (preauthorization.courseId) {
-      await this.repository.activateEnrollment(
-        student.id,
-        preauthorization.courseId,
-      );
-    }
-
-    await this.repository.markPreauthorizationClaimed(
-      preauthorization.id,
-      student.id,
-    );
 
     return {
       ok: true,
