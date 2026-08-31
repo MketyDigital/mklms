@@ -7,7 +7,7 @@ import { PostgresSettingsRepository } from "@/features/settings/repositories/pos
 
 const sendSchema = z.object({ text: z.string().trim().min(1).max(5000) });
 
-export async function GET(
+export async function PATCH(
   _request: Request,
   context: { params: Promise<{ threadId: string }> },
 ) {
@@ -21,9 +21,8 @@ export async function GET(
     return NextResponse.json({ ok: false, message: "Conversation not found." }, { status: 404 });
   }
 
-  const messages = await repository.getThreadMessages(threadId);
   await repository.markThreadRead(threadId);
-  return NextResponse.json({ ok: true, messages });
+  return NextResponse.json({ ok: true });
 }
 
 export async function POST(
