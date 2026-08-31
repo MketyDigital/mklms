@@ -3,11 +3,12 @@ import { BookOpen, KeyRound, Radio, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PublicCertificateLookup } from "@/features/certificates/components/public-certificate-lookup";
 
 const surfaces = [
   {
     title: "Student portal",
-    description: "Sign in with a MkLMS student access code and test courses, progress, certificates, messages and profile.",
+    description: "Sign in with a MkLMS student access code and access courses, progress, certificates, messages and profile.",
     href: "/login",
     action: "Student login",
     icon: BookOpen,
@@ -34,7 +35,7 @@ export default function HomePage() {
       <div className="mx-auto flex min-h-dvh max-w-6xl flex-col justify-center px-5 py-12 sm:px-8">
         <div className="max-w-3xl">
           <div className="mb-5 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium text-muted-foreground">
-            <Radio className="size-3.5" /> MkLMS test environment
+            <Radio className="size-3.5" /> MkLMS
           </div>
           <h1 className="text-4xl font-semibold tracking-tight sm:text-6xl">MkLMS</h1>
           <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
@@ -59,9 +60,15 @@ export default function HomePage() {
           ))}
         </div>
 
-        <p className="mt-8 text-sm text-muted-foreground">
-          Public live classes use <code>/live/&lt;slug&gt;</code>. Certificate verification uses <code>/verify/&lt;certificate-id&gt;</code>.
-        </p>
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="text-base">Verify a certificate</CardTitle>
+            <CardDescription>Enter the certificate ID exactly as it appears on the issued certificate.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PublicCertificateLookup />
+          </CardContent>
+        </Card>
       </div>
     </main>
   );

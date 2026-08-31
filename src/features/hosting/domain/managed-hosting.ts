@@ -4,58 +4,53 @@ export type HostingUsageKind =
   | "LIVE_MEASURED_AUDIENCE_MINUTES"
   | "LIVE_BASELINE_AUDIENCE_MINUTES";
 
-export interface ManagedHostingSettings {
+export interface ManagedHostingPolicy {
   enabled: boolean;
   minimumMonthlyFeeUsd: number;
   maximumMonthlyFeeUsd: number;
-  currentMonthlyFeeUsd: number;
-  paymentNetwork: "TRC20" | "TON" | "CUSTOM";
-  walletAddress: string;
-  paymentNote?: string | null;
+  paymentUrl?: string | null;
+  notice?: string | null;
 }
 
-export function normalizeManagedHostingSettings(
-  input: ManagedHostingSettings,
-): ManagedHostingSettings {
-  const minimumMonthlyFeeUsd = Math.max(0, Number(input.minimumMonthlyFeeUsd) || 0);
+export function normalizeManagedHostingPolicy(
+  input: ManagedHostingPolicy,
+): ManagedHostingPolicy {
+  const minimumMonthlyFeeUsd = Math.max(15, Number(input.minimumMonthlyFeeUsd) || 15);
   const maximumMonthlyFeeUsd = Math.max(
     minimumMonthlyFeeUsd,
-    Number(input.maximumMonthlyFeeUsd) || minimumMonthlyFeeUsd,
-  );
-  const currentMonthlyFeeUsd = Math.min(
-    maximumMonthlyFeeUsd,
-    Math.max(minimumMonthlyFeeUsd, Number(input.currentMonthlyFeeUsd) || minimumMonthlyFeeUsd),
+    Number(input.maximumMonthlyFeeUsd) || 50,
   );
 
   return {
-    ...input,
+    enabled: Boolean(input.enabled),
     minimumMonthlyFeeUsd,
     maximumMonthlyFeeUsd,
-    currentMonthlyFeeUsd,
-    walletAddress: input.walletAddress.trim(),
-    paymentNote: input.paymentNote?.trim() || null,
+    paymentUrl: input.paymentUrl?.trim() || null,
+    notice: input.notice?.trim() || null,
   };
 }
 
 export function calculateManagedHostingFee(input: {
   watchMinutes: number;
-  settings: ManagedHostingSettings;
+  policy: ManagedHostingPolicy;
 }): number {
-  const settings = normalizeManagedHostingSettings(input.settings);
-  if (!settings.enabled) return 0;
+  const policy = normalizeManagedHostingPolicy(input.policy);
+  if (!policy.enabled) return 0;
   const watchMinutes = Math.max(0, Math.floor(input.watchMinutes));
 
-  // Transparent service tiers. This is a managed-service fee, not a claim that
-  // the infrastructure itself cost this amount.
   let ratio = 0;
   if (watchMinutes >= 150_000) ratio = 1;
   else if (watchMinutes >= 50_000) ratio = 0.7;
   else if (watchMinutes >= 10_000) ratio = 0.35;
 
   const fee =
-    settings.minimumMonthlyFeeUsd +
-    (settings.maximumMonthlyFeeUsd - settings.minimumMonthlyFeeUsd) * ratio;
+    policy.minimumMonthlyFeeUsd +
+    (policy.maximumMonthlyFeeUsd - policy.minimumMonthlyFeeUsd) * ratio;
   return Math.round(fee * 100) / 100;
+}
+
+export function getBillingMonthKey(now = new Date()): string {
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 export function summarizeUsageMetric(input: {
