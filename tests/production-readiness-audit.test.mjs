@@ -74,6 +74,13 @@ test('legacy OCI settings values are normalized before the active settings form 
   assert.match(repository, /row\.storage_provider\s*===\s*"oci"/);
 });
 
+test('settings integration health treats a reachable Hyperdrive database as configured', () => {
+  const status = read('src/features/settings/integration-status.ts');
+  const page = read('src/app/(admin)/admin/settings/page.tsx');
+  assert.match(status, /databaseConnected/);
+  assert.match(page, /databaseConnected:\s*dbHealth\.connected/);
+});
+
 test('active hosting dashboard no longer depends on legacy OCI ingest accounting', () => {
   const page = read('src/app/(admin)/admin/hosting/page.tsx');
   const panel = read('src/features/hosting/components/managed-hosting-panel.tsx');
