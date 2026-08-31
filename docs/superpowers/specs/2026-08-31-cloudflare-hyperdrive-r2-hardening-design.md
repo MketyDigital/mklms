@@ -12,7 +12,7 @@ Make MkLMS deploy reliably to Cloudflare Workers while preserving the working Ve
 - `HYPERDRIVE_CACHED` is opt-in only and may be used for public/stable read-only data that can tolerate brief staleness, such as organization/platform presentation settings shown on a public live-class shell.
 - `HYPERDRIVE` remains a backwards-compatible fresh binding fallback so an existing one-binding installation does not break.
 - Hyperdrive configurations connect to the Supabase Direct PostgreSQL connection. Hyperdrive is the pooling layer; it must not be pointed at Supabase's session/transaction pooler.
-- No Hyperdrive configuration ID is committed until the operator creates the configuration in their Cloudflare account. `wrangler.jsonc` will retain a deploy-safe commented template rather than a fake ID that would break deployment.
+- No Hyperdrive configuration ID is committed until the operator creates the configuration in their Cloudflare account. `wrangler.jsonc` remains strict, deployable JSON with no fake binding IDs; the exact binding block is documented in `docs/deployment/cloudflare-hyperdrive.md` and is added only after the real Cloudflare IDs exist.
 
 ## Public/live caching
 
@@ -33,7 +33,7 @@ Make MkLMS deploy reliably to Cloudflare Workers while preserving the working Ve
 - Restore migration 009 to its released content, including the legacy `managed_hosting_settings` table, because installations may already have recorded that checksum.
 - Keep current migration 010 (`managed_hosting_months`) intact.
 - Add migration 011 to remove the legacy `managed_hosting_settings` table. This preserves both historical checksum safety and the current database model.
-- The existing GitHub migration workflow remains the installation mechanism and continues to use the repository secret `DATABASE_URL`.
+- The existing GitHub migration workflow remains the installation mechanism and continues to use the repository secret mapped into runtime `DATABASE_URL`.
 
 ## Local transcoding and R2 upload
 
