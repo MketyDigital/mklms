@@ -104,6 +104,28 @@ test('Cloudflare R2 provider supports create, part upload, complete and abort mu
   assert.deepEqual(bucket.aborted, { key: created.key, uploadId: created.uploadId });
 });
 
+test('non-Cloudflare storage fallback implements S3 multipart commands', () => {
+  const source = fs.readFileSync('src/providers/s3-compatible-storage-provider.ts', 'utf8');
+  assert.match(source, /CreateMultipartUploadCommand/);
+  assert.match(source, /UploadPartCommand/);
+  assert.match(source, /CompleteMultipartUploadCommand/);
+  assert.match(source, /AbortMultipartUploadCommand/);
+  assert.match(source, /MultipartStorageProvider/);
+});
+
+test('admin upload API is admin-only, multipart, and registers completed media as DIRECT storage', () => {
+  const route = fs.readFileSync('src/app/api/admin/media/upload/route.ts', 'utf8');
+  assert.match(route, /hasValidAdminSession/);
+  assert.match(route, /createMultipartUpload/);
+  assert.match(route, /uploadPart/);
+  assert.match(route, /completeMultipartUpload/);
+  assert.match(route, /abortMultipartUpload/);
+  assert.match(route, /provider:\s*["']storage["']/);
+  assert.match(route, /sourceType:\s*["']DIRECT["']/);
+  assert.match(route, /status:\s*["']READY["']/);
+  assert.match(route, /deleteObject/);
+});
+
 test('admin media page contract replaces OCI ingest panel with storage upload UI while preserving manual registration', () => {
   const page = fs.readFileSync('src/app/(admin)/admin/media/page.tsx', 'utf8');
   assert.match(page, /AdminMediaUpload/);
