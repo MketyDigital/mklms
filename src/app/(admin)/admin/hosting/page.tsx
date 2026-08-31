@@ -3,6 +3,7 @@ import { AlertTriangle } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ManagedHostingPanel } from "@/features/hosting/components/managed-hosting-panel";
+import type { ManagedHostingMonthOverride } from "@/features/hosting/domain/managed-hosting";
 import { PostgresManagedHostingRepository } from "@/features/hosting/repositories/postgres-managed-hosting.repository";
 import { getManagedHostingPolicy } from "@/features/hosting/server/managed-hosting-policy";
 import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
@@ -16,10 +17,14 @@ export default async function AdminHostingPage() {
   const policy = getManagedHostingPolicy();
 
   let usage: Awaited<ReturnType<PostgresManagedHostingRepository["getCurrentMonthUsage"]>> | null = null;
+  let monthOverride: ManagedHostingMonthOverride | null = null;
   let setupError: string | null = null;
 
   try {
-    usage = await hostingRepository.getCurrentMonthUsage();
+    [usage, monthOverride] = await Promise.all([
+      hostingRepository.getCurrentMonthUsage(),
+      hostingRepository.getMonthOverride(),
+    ]);
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     const looksLikeMissingSchema =
@@ -52,6 +57,7 @@ export default async function AdminHostingPage() {
           <ManagedHostingPanel
             policy={policy}
             monthStart={usage.monthStart}
+            monthOverride={monthOverride}
             usage={{
               courseWatchMinutesMeasured: usage.courseWatchMinutesMeasured,
               liveAudienceMinutesEstimated: usage.liveAudienceMinutesEstimated,
