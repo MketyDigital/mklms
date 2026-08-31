@@ -96,9 +96,15 @@ export function AdminMessagePanel({
           timestamp: new Date(message.timestamp).toLocaleString(locale),
         })),
       }));
-      setThreads((current) => current.map((thread) => (
-        thread.id === threadId ? { ...thread, unread: false } : thread
-      )));
+
+      const markReadResponse = await fetch(`/api/admin/messages/${threadId}`, {
+        method: "PATCH",
+      });
+      if (markReadResponse.ok) {
+        setThreads((current) => current.map((thread) => (
+          thread.id === threadId ? { ...thread, unread: false } : thread
+        )));
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Conversation could not be loaded.");
     } finally {
