@@ -8,8 +8,8 @@ This file is the current operational source of truth for `MketyDigital/mklms`. R
 - Latest merged media-admin cleanup: `706714a8837029da6f9ffc84b6519c65047049c5` (2026-08-31), from PR `#29`.
 - Earlier integrated release merge: `caa4a9c116a4e11f10498e3f3a2f1a48974d8b0f` (2026-08-31).
 - The merged `main` media-admin cleanup passed domain tests, lint, Next.js production build, OpenNext build, main Worker dry-run, protected-media Worker dry-run, billing Worker dry-run, and CodeQL.
-- Current production-readiness audit is on `fix/production-readiness-audit`, draft PR `#30`; it is not merged into `main` yet.
-- No application/database migration was added for the production-readiness audit. Numbered migrations remain `001` through `011`.
+- Production incident repair is on `fix/production-incident-end-to-end`, PR `#32`; implementation head `11e71dc1fb682d370e98a62f681b0fd16cee8f16` passed the complete CI gate and CodeQL before this handoff-only update.
+- No application/database migration was added for the incident repair. Numbered migrations remain `001` through `011`.
 - A prior Cloudflare production build had failed even though the same release code built successfully in preview/CI; if production deployment still fails after bindings/secrets are configured, treat that as a Cloudflare account/configuration/deploy gate and inspect the production build log rather than assuming an application compile regression.
 
 ## Product boundaries that must not regress
@@ -247,6 +247,29 @@ The architecture should continue to use free-tier/free-included capabilities whe
 - Migrations added/changed: none. Numbered migrations remain `001`–`011`; migration 009 remains unchanged.
 - Account-side actions still required: after explicit merge approval, deploy/redeploy the main app and run the production smoke-test gate above against the real Cloudflare/PostgreSQL/R2 environment. Private browser interactions and a real NOWPayments settlement cannot be proven by CI alone.
 - Exact next safe starting point: require CI on the final PR head to be green, review PR `#30`, merge only with explicit user approval, deploy, then run the production smoke-test gate beginning with Admin → Media existing-R2 registration and the student claim/login/enrollment flow.
+
+## Production incident repair handoff — PR #32
+
+- Branch: `fix/production-incident-end-to-end`.
+- Pull request: PR `#32` (`fix: end-to-end production incident repair`).
+- Production base: `0dc9dd068e9495b4d3550e06871d16fcd0c6bb35` on `main`.
+- Verified implementation head before this handoff-only update: `11e71dc1fb682d370e98a62f681b0fd16cee8f16`.
+- Root causes fixed:
+  - student claim is now one PostgreSQL transaction and can recover an ACTIVE student row left by an earlier partial failure;
+  - claim/login routes return JSON-safe production failures instead of opaque 500s;
+  - pending preauthorizations can be edited/cancelled so an old bad strategy or sticky identity/course authorization can be repaired without manual SQL;
+  - active verification/settings choices are limited to implementations that can complete end-to-end in this release;
+  - Settings performs a real transaction probe in addition to schema/connectivity health;
+  - Courses, Modules, and Lessons have real edit/delete APIs and UI controls; destructive deletion is guarded when learner history exists;
+  - Live Classes and Sessions have real edit/delete controls and explicit ACTIVE/PUBLISHED public availability requirements;
+  - public live 404/unavailable responses are `no-store`, removing stale CDN "not available" results after activation;
+  - existing private R2 media registration and protected signed playback architecture remain unchanged.
+- Audit coverage included Admin navigation, Access, Students, Courses, Media, Live Classes, Certificates/Templates, Messages, Hosting/Billing, Settings, student claim/login/session/enrollment, paid learning/progress/playback, public live state/playback, certificates, messages, protected Range delivery, Hyperdrive, R2, and Worker bindings.
+- TDD evidence: the incident regression suite was committed red-first and failed against the prior implementation; subsequent CI also caught and forced correction of compatibility and lint regressions before the release gate.
+- Verification evidence for implementation head `11e71dc1fb682d370e98a62f681b0fd16cee8f16`: GitHub Actions run `33442789875` passed all 204 domain/integration contract tests, lint, Next.js production build, Cloudflare OpenNext build, main Worker packaging dry-run, protected-media Worker packaging dry-run, and external billing Worker packaging dry-run. CodeQL run `33442784383` also passed.
+- Migrations added/changed: none. Numbered migrations remain `001`–`011`; no historical migration was edited.
+- Account-side actions still required after merge: deploy/redeploy `main` to Cloudflare, run the one-click DB migration verification (safe/idempotent), open Settings and require database/schema/transaction health green, then perform the real production smoke-test gate. CI cannot itself submit a real browser claim against the production database or perform a real NOWPayments payment.
+- Exact next safe starting point after merge: deploy `main`, verify Cloudflare bindings/secrets, run DB migration verification, then test a fresh paid student claim → issued access code → login → enrolled course, followed by a real ACTIVE/PUBLISHED Live Class public URL.
 
 ## Next project handoff
 
