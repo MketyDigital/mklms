@@ -18,7 +18,13 @@ export async function GET(
   if (!batch) {
     return NextResponse.json(
       { ok: false, message: "This live class is not available." },
-      { status: 404, headers: { "Cache-Control": "public, max-age=0, s-maxage=15" } },
+      {
+        status: 404,
+        headers: {
+          "Cache-Control": "private, no-store, max-age=0",
+          "CDN-Cache-Control": "no-store",
+        },
+      },
     );
   }
 
