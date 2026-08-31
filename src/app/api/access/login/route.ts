@@ -37,7 +37,9 @@ export async function POST(request: Request) {
 
   const repository = new PostgresAccessRepository();
   const service = new AccessLoginService(repository, {
-    sessionTtlSeconds: Number(process.env.STUDENT_SESSION_TTL_SECONDS ?? 604800),
+    sessionTtlSeconds: Number(
+      process.env.MKLMS_STUDENT_SESSION_TTL_SECONDS ?? 1209600,
+    ),
   });
   const result = await service.login(parsed.data.accessCode);
 
