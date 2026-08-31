@@ -10,8 +10,6 @@ export interface ManagedHostingPolicy {
   maximumMonthlyFeeUsd: number;
   paymentUrl?: string | null;
   notice?: string | null;
-  usdtNetwork?: string | null;
-  usdtAddress?: string | null;
 }
 
 export interface ManagedHostingMonthOverride {
@@ -36,8 +34,6 @@ export function normalizeManagedHostingPolicy(
     maximumMonthlyFeeUsd,
     paymentUrl: input.paymentUrl?.trim() || null,
     notice: input.notice?.trim() || null,
-    usdtNetwork: input.usdtNetwork?.trim().slice(0, 40) || null,
-    usdtAddress: input.usdtAddress?.trim().slice(0, 200) || null,
   };
 }
 
