@@ -33,6 +33,7 @@ export function StorageMediaBrowser() {
   const [message, setMessage] = useState<string | null>(null);
 
   const load = useCallback(async (nextCursor?: string) => {
+    await Promise.resolve();
     setLoading(true);
     setMessage(null);
     try {
