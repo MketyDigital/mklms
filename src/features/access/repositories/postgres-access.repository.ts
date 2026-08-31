@@ -6,6 +6,7 @@ import type {
   AccessRepository,
   ActiveCredentialRecord,
   ActiveSessionRecord,
+  CompleteVerifiedClaimRepositoryInput,
   CreateSessionInput,
   CreateStudentInput,
   StudentRecord,
@@ -183,6 +184,168 @@ export class PostgresAccessRepository implements AccessRepository {
     }
   }
 
+  async activateEnrollment(studentId: string, courseId: string): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO enrollments (
+         id, student_id, course_id, status, authorized_at, activated_at
+       )
+       VALUES ($1, $2, $3, 'ACTIVE', NOW(), NOW())
+       ON CONFLICT (student_id, course_id)
+       DO UPDATE SET status = 'ACTIVE', activated_at = NOW(), updated_at = NOW()`,
+      [randomUUID(), studentId, courseId],
+    );
+  }
+
+  async completeVerifiedClaim(
+    input: CompleteVerifiedClaimRepositoryInput,
+  ): Promise<StudentRecord> {
+    const client = await this.pool.connect();
+    const email = input.student.email?.trim().toLowerCase() || null;
+    const phone = input.student.phone?.replace(/\D/g, "") || null;
+
+    try {
+      await client.query("BEGIN");
+
+      const preauthorization = await client.query<{ id: string }>(
+        `SELECT id
+         FROM preauthorizations
+         WHERE id = $1 AND status = 'PREAUTHORIZED'
+         FOR UPDATE`,
+        [input.preauthorizationId],
+      );
+      if (!preauthorization.rows[0]) {
+        throw new Error("Preauthorization is no longer available for claiming.");
+      }
+
+      const existing = await client.query<{
+        id: string;
+        display_name: string;
+        email: string | null;
+        phone: string | null;
+        status: string;
+        certificate_name: string;
+        certificate_email: string | null;
+      }>(
+        `SELECT id, display_name, email, phone, status,
+                certificate_name, certificate_email
+         FROM students
+         WHERE ($1::text IS NOT NULL AND LOWER(email) = $1)
+            OR ($2::text IS NOT NULL AND phone = $2)
+         ORDER BY created_at ASC
+         LIMIT 1
+         FOR UPDATE`,
+        [email, phone],
+      );
+
+      let student: StudentRecord;
+      const existingStudent = existing.rows[0];
+      if (existingStudent) {
+        if (existingStudent.status !== "ACTIVE") {
+          throw new Error("Existing student access is not active.");
+        }
+        student = {
+          id: existingStudent.id,
+          displayName: existingStudent.display_name,
+          email: existingStudent.email,
+          phone: existingStudent.phone,
+          certificateName: existingStudent.certificate_name,
+          certificateEmail: existingStudent.certificate_email,
+        };
+      } else {
+        const studentId = randomUUID();
+        const created = await client.query<{
+          id: string;
+          display_name: string;
+          email: string | null;
+          phone: string | null;
+          certificate_name: string;
+          certificate_email: string | null;
+        }>(
+          `INSERT INTO students (
+             id, display_name, email, phone, certificate_name,
+             certificate_email, certificate_identity_locked_at
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, NOW())
+           RETURNING id, display_name, email, phone,
+                     certificate_name, certificate_email`,
+          [
+            studentId,
+            input.student.displayName,
+            email,
+            phone,
+            input.student.certificateName,
+            input.student.certificateEmail?.trim().toLowerCase() || null,
+          ],
+        );
+        const row = created.rows[0];
+        student = {
+          id: row.id,
+          displayName: row.display_name,
+          email: row.email,
+          phone: row.phone,
+          certificateName: row.certificate_name,
+          certificateEmail: row.certificate_email,
+        };
+      }
+
+      await client.query(
+        `UPDATE student_access_credentials
+         SET status = 'REVOKED', revoked_at = NOW(), updated_at = NOW()
+         WHERE student_id = $1
+           AND provider_type = 'access-code'
+           AND status = 'ACTIVE'`,
+        [student.id],
+      );
+      await client.query(
+        `INSERT INTO student_access_credentials (
+           id, student_id, provider_type, credential_lookup_hash,
+           credential_hash, credential_salt, credential_algorithm,
+           credential_prefix, status
+         )
+         VALUES ($1, $2, 'access-code', $3, $4, $5, $6, $7, 'ACTIVE')`,
+        [
+          randomUUID(),
+          student.id,
+          input.credential.lookupHash,
+          input.credential.hash.hash,
+          input.credential.hash.salt,
+          input.credential.hash.algorithm,
+          input.credential.prefix,
+        ],
+      );
+
+      if (input.courseId) {
+        await client.query(
+          `INSERT INTO enrollments (
+             id, student_id, course_id, status, authorized_at, activated_at
+           )
+           VALUES ($1, $2, $3, 'ACTIVE', NOW(), NOW())
+           ON CONFLICT (student_id, course_id)
+           DO UPDATE SET status = 'ACTIVE', activated_at = NOW(), updated_at = NOW()`,
+          [randomUUID(), student.id, input.courseId],
+        );
+      }
+
+      const claimed = await client.query(
+        `UPDATE preauthorizations
+         SET status = 'CLAIMED', claimed_by_student_id = $2, updated_at = NOW()
+         WHERE id = $1 AND status = 'PREAUTHORIZED'`,
+        [input.preauthorizationId, student.id],
+      );
+      if (claimed.rowCount !== 1) {
+        throw new Error("Preauthorization could not be finalized.");
+      }
+
+      await client.query("COMMIT");
+      return student;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async findActiveCredentialByLookupHash(
     lookupHash: string,
   ): Promise<ActiveCredentialRecord | null> {
@@ -213,18 +376,6 @@ export class PostgresAccessRepository implements AccessRepository {
         algorithm: row.credential_algorithm,
       },
     };
-  }
-
-  async activateEnrollment(studentId: string, courseId: string): Promise<void> {
-    await this.pool.query(
-      `INSERT INTO enrollments (
-         id, student_id, course_id, status, authorized_at, activated_at
-       )
-       VALUES ($1, $2, $3, 'ACTIVE', NOW(), NOW())
-       ON CONFLICT (student_id, course_id)
-       DO UPDATE SET status = 'ACTIVE', activated_at = NOW(), updated_at = NOW()`,
-      [randomUUID(), studentId, courseId],
-    );
   }
 
   async createSession(
