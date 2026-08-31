@@ -14,21 +14,27 @@ function all(env: EnvLike, keys: string[]): boolean {
 
 export function getIntegrationStatus(
   env: EnvLike = process.env,
-  runtime: { cloudflareStorageBound?: boolean } = {},
+  runtime: {
+    cloudflareStorageBound?: boolean;
+    databaseConnected?: boolean;
+  } = {},
 ): IntegrationStatusItem[] {
   const portableStorageConfigured = all(env, [
     "MKLMS_STORAGE_BUCKET",
     "MKLMS_STORAGE_ACCESS_KEY_ID",
     "MKLMS_STORAGE_SECRET_ACCESS_KEY",
   ]);
+  const databaseConfigured = Boolean(runtime.databaseConnected) || all(env, ["DATABASE_URL"]);
 
   return [
     {
       id: "database",
       label: "PostgreSQL database",
-      configured: all(env, ["DATABASE_URL"]),
-      requiredVariables: ["DATABASE_URL"],
-      description: "Core MkLMS persistence. Works with Supabase PostgreSQL, self-hosted PostgreSQL, Hyperdrive-backed PostgreSQL and other compatible providers.",
+      configured: databaseConfigured,
+      requiredVariables: databaseConfigured ? [] : ["DATABASE_URL"],
+      description: runtime.databaseConnected
+        ? "Core MkLMS persistence is reachable through the active PostgreSQL/Hyperdrive runtime connection."
+        : "Core MkLMS persistence. Works with Supabase PostgreSQL, self-hosted PostgreSQL, Hyperdrive-backed PostgreSQL and other compatible providers.",
     },
     {
       id: "admin-auth",
