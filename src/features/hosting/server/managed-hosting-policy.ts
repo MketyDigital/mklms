@@ -22,6 +22,8 @@ export function getManagedHostingPolicy(): ManagedHostingPolicy {
     minimumMonthlyFeeUsd: parseNumber(process.env.MKLMS_MANAGED_HOSTING_MIN_USD, 15),
     maximumMonthlyFeeUsd: parseNumber(process.env.MKLMS_MANAGED_HOSTING_MAX_USD, 50),
     paymentUrl,
+    usdtTrc20Address: process.env.MKLMS_MANAGED_HOSTING_USDT_TRC20?.slice(0, 300) ?? null,
+    usdtTonAddress: process.env.MKLMS_MANAGED_HOSTING_USDT_TON?.slice(0, 300) ?? null,
     notice: process.env.MKLMS_MANAGED_HOSTING_NOTICE?.slice(0, 2000) ?? null,
   });
 }
