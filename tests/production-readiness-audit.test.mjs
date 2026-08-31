@@ -32,6 +32,20 @@ test('student onboarding can submit a per-student claim code even when the globa
   assert.doesNotMatch(form, /claimCode:\s*verificationStrategy\s*===\s*"claim-code"\s*\?/);
 });
 
+test('admin paid-student authorization selects from real courses and validates course ids server-side', () => {
+  const page = read('src/app/(admin)/admin/access/page.tsx');
+  const panel = read('src/features/access/components/admin/admin-access-panel.tsx');
+  const service = read('src/features/access/services/access-admin.service.ts');
+  const singleRoute = read('src/app/api/admin/access/preauthorizations/route.ts');
+  const bulkRoute = read('src/app/api/admin/access/import/route.ts');
+  assert.match(page, /PostgresAdminLearningRepository/);
+  assert.match(page, /courses=/);
+  assert.match(panel, /Portal access only/);
+  assert.match(service, /validCourseIds/);
+  assert.match(singleRoute, /validCourseIds/);
+  assert.match(bulkRoute, /validCourseIds/);
+});
+
 test('student login honors the documented MkLMS session TTL variable', () => {
   const route = read('src/app/api/access/login/route.ts');
   assert.match(route, /MKLMS_STUDENT_SESSION_TTL_SECONDS/);
