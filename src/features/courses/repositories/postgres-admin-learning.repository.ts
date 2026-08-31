@@ -9,7 +9,12 @@ import type {
   LessonRecord,
   LessonStatus,
 } from "../domain/model";
-import type { AdminLearningRepository } from "../services/admin-learning.service";
+import type {
+  AdminLearningRepository,
+  UpdateCourseAdminInput,
+  UpdateLessonAdminInput,
+  UpdateModuleAdminInput,
+} from "../services/admin-learning.service";
 
 export class PostgresAdminLearningRepository implements AdminLearningRepository {
   private readonly pool: Pool;
@@ -81,6 +86,32 @@ export class PostgresAdminLearningRepository implements AdminLearningRepository 
     };
   }
 
+  async updateCourse(courseId: string, input: UpdateCourseAdminInput): Promise<void> {
+    const result = await this.pool.query(
+      `UPDATE courses
+       SET title = $2, description = $3, updated_at = NOW()
+       WHERE id = $1`,
+      [courseId, input.title, input.description ?? null],
+    );
+    if (result.rowCount !== 1) throw new Error("Course not found.");
+  }
+
+  async deleteCourse(courseId: string): Promise<void> {
+    const history = await this.pool.query<{ used: boolean }>(
+      `SELECT (
+         EXISTS(SELECT 1 FROM enrollments WHERE course_id = $1)
+         OR EXISTS(SELECT 1 FROM lesson_progress WHERE course_id = $1)
+         OR EXISTS(SELECT 1 FROM certificates WHERE course_id = $1)
+       ) AS used`,
+      [courseId],
+    );
+    if (history.rows[0]?.used) {
+      throw new Error("This course has student history and cannot be deleted. Return it to draft instead.");
+    }
+    const result = await this.pool.query(`DELETE FROM courses WHERE id = $1`, [courseId]);
+    if (result.rowCount !== 1) throw new Error("Course not found.");
+  }
+
   async createModule(
     courseId: string,
     input: Omit<CourseModuleRecord, "id" | "courseId" | "position">,
@@ -109,6 +140,33 @@ export class PostgresAdminLearningRepository implements AdminLearningRepository 
       description: row.description,
       position: row.position,
     };
+  }
+
+  async updateModule(moduleId: string, input: UpdateModuleAdminInput): Promise<void> {
+    const result = await this.pool.query(
+      `UPDATE course_modules
+       SET title = $2, description = $3, updated_at = NOW()
+       WHERE id = $1`,
+      [moduleId, input.title, input.description ?? null],
+    );
+    if (result.rowCount !== 1) throw new Error("Module not found.");
+  }
+
+  async deleteModule(moduleId: string): Promise<void> {
+    const history = await this.pool.query<{ used: boolean }>(
+      `SELECT EXISTS(
+         SELECT 1
+         FROM lesson_progress lp
+         JOIN lessons l ON l.id = lp.lesson_id
+         WHERE l.module_id = $1
+       ) AS used`,
+      [moduleId],
+    );
+    if (history.rows[0]?.used) {
+      throw new Error("This module contains student progress and cannot be deleted.");
+    }
+    const result = await this.pool.query(`DELETE FROM course_modules WHERE id = $1`, [moduleId]);
+    if (result.rowCount !== 1) throw new Error("Module not found.");
   }
 
   async createLesson(
@@ -165,6 +223,42 @@ export class PostgresAdminLearningRepository implements AdminLearningRepository 
       completionThresholdPercent: row.completion_threshold_percent,
       durationSeconds: row.duration_seconds,
     };
+  }
+
+  async updateLesson(lessonId: string, input: UpdateLessonAdminInput): Promise<void> {
+    const result = await this.pool.query(
+      `UPDATE lessons
+       SET title = $2,
+           description = $3,
+           media_asset_id = $4,
+           completion_mode = $5,
+           completion_threshold_percent = $6,
+           duration_seconds = $7,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [
+        lessonId,
+        input.title,
+        input.description ?? null,
+        input.mediaAssetId ?? null,
+        input.completionMode ?? "VIDEO_PROGRESS",
+        input.completionThresholdPercent ?? 90,
+        input.durationSeconds ?? null,
+      ],
+    );
+    if (result.rowCount !== 1) throw new Error("Lesson not found.");
+  }
+
+  async deleteLesson(lessonId: string): Promise<void> {
+    const history = await this.pool.query<{ used: boolean }>(
+      `SELECT EXISTS(SELECT 1 FROM lesson_progress WHERE lesson_id = $1) AS used`,
+      [lessonId],
+    );
+    if (history.rows[0]?.used) {
+      throw new Error("This lesson has student progress and cannot be deleted.");
+    }
+    const result = await this.pool.query(`DELETE FROM lessons WHERE id = $1`, [lessonId]);
+    if (result.rowCount !== 1) throw new Error("Lesson not found.");
   }
 
   async setCourseStatus(courseId: string, status: CourseStatus): Promise<void> {
