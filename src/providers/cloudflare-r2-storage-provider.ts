@@ -37,7 +37,11 @@ function validateKey(key: string): string {
 }
 
 export class CloudflareR2StorageProvider implements StorageProvider {
-  constructor(private readonly bucket: R2BucketLike) {}
+  private readonly bucket: R2BucketLike;
+
+  constructor(bucket: R2BucketLike) {
+    this.bucket = bucket;
+  }
 
   async putObject(input: PutObjectInput): Promise<StoredObjectReference> {
     const key = validateKey(input.key);
