@@ -37,9 +37,15 @@ interface PreauthorizationRow {
   manualApprovedAt?: string | null;
 }
 
+interface CourseOption {
+  id: string;
+  title: string;
+}
+
 interface AdminAccessPanelProps {
   initialStudents: StudentRow[];
   initialPreauthorizations: PreauthorizationRow[];
+  courses: CourseOption[];
   defaultClaimStrategy: ClaimVerificationStrategy;
 }
 
@@ -52,9 +58,12 @@ const STRATEGIES: Array<{ value: ClaimVerificationStrategy; label: string }> = [
   { value: "custom", label: "Custom verification" },
 ];
 
+const PORTAL_ONLY = "__portal_only__";
+
 export function AdminAccessPanel({
   initialStudents,
   initialPreauthorizations,
+  courses,
   defaultClaimStrategy,
 }: AdminAccessPanelProps) {
   const [students, setStudents] = useState(initialStudents);
@@ -245,7 +254,7 @@ export function AdminAccessPanel({
         <Card><CardHeader><CardTitle>Authorize one paid student</CardTitle></CardHeader><CardContent><form onSubmit={addStudent} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label>Email</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div><div className="space-y-2"><Label>Phone</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} /></div></div>
           <div className="space-y-2"><Label>Name hint</Label><Input value={nameHint} onChange={(e) => setNameHint(e.target.value)} /></div>
-          <div className="space-y-2"><Label>Course ID</Label><Input value={courseId} onChange={(e) => setCourseId(e.target.value)} /></div>
+          <div className="space-y-2"><Label>Course</Label><Select value={courseId || PORTAL_ONLY} onValueChange={(value) => setCourseId(value === PORTAL_ONLY ? "" : value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value={PORTAL_ONLY}>Portal access only</SelectItem>{courses.map((course) => <SelectItem key={course.id} value={course.id}>{course.title}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-2"><Label>Verification method</Label><Select value={strategy} onValueChange={(value) => setStrategy(value as ClaimVerificationStrategy)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{STRATEGIES.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent></Select></div>
           {strategy === "claim-code" ? <div className="space-y-2"><Label>One-time claim code</Label><Input value={claimCode} onChange={(e) => setClaimCode(e.target.value.toUpperCase())} required /></div> : null}
           <Button type="submit" disabled={busy}>Authorize student</Button>
@@ -253,8 +262,8 @@ export function AdminAccessPanel({
 
         <Card><CardHeader><CardTitle>Bulk authorize paid students</CardTitle></CardHeader><CardContent><form onSubmit={bulkAuthorize} className="space-y-4">
           <div className="space-y-2"><Label>Input format</Label><Select value={bulkMode} onValueChange={(value) => setBulkMode(value as "paste" | "csv")}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="paste">One email or phone per line</SelectItem><SelectItem value="csv">CSV</SelectItem></SelectContent></Select></div>
-          <Textarea value={bulkContent} onChange={(e) => setBulkContent(e.target.value)} className="min-h-52 font-mono text-xs" placeholder={bulkMode === "csv" ? "name,email,phone,course\nJane,jane@example.com,,course-1" : "jane@example.com\n+2348030000000"} required />
-          <p className="text-xs text-muted-foreground">Uses the verification method and fallback Course ID selected on the left.</p>
+          <Textarea value={bulkContent} onChange={(e) => setBulkContent(e.target.value)} className="min-h-52 font-mono text-xs" placeholder={bulkMode === "csv" ? "name,email,phone,course\nJane,jane@example.com,,<course-id>" : "jane@example.com\n+2348030000000"} required />
+          <p className="text-xs text-muted-foreground">Uses the verification method and fallback course selected on the left. CSV course values must match an existing course ID.</p>
           <Button type="submit" disabled={busy}>Process bulk authorization</Button>
         </form></CardContent></Card>
       </div>
@@ -264,7 +273,7 @@ export function AdminAccessPanel({
       <Card><CardHeader><CardTitle>Pre-authorizations & claim requests</CardTitle></CardHeader><CardContent className="overflow-x-auto"><table className="w-full min-w-[850px] text-sm"><thead><tr className="border-b text-left"><th className="py-3 pr-4">Identity</th><th className="py-3 pr-4">Course</th><th className="py-3 pr-4">Verification</th><th className="py-3 pr-4">State</th><th className="py-3 text-right">Action</th></tr></thead><tbody>{preauthorizations.map((item) => {
         const waiting = item.claimStrategy === "manual-approval" && item.claimRequestedAt && !item.manualApprovedAt && item.status === "PREAUTHORIZED";
         const state = item.status === "CLAIMED" ? "Claimed" : item.manualApprovedAt ? "Approved — awaiting student retry" : waiting ? "Waiting for approval" : "Pre-authorized";
-        return <tr key={item.id} className="border-b last:border-0"><td className="py-3 pr-4">{item.nameHint || item.email || item.phone || "—"}</td><td className="py-3 pr-4 text-muted-foreground">{item.courseId ?? "—"}</td><td className="py-3 pr-4">{item.claimStrategy ?? defaultClaimStrategy}</td><td className="py-3 pr-4">{state}</td><td className="py-3 text-right">{waiting ? <Button size="sm" disabled={busy} onClick={() => approveManualClaim(item.id)}>Approve claim</Button> : null}</td></tr>;
+        return <tr key={item.id} className="border-b last:border-0"><td className="py-3 pr-4">{item.nameHint || item.email || item.phone || "—"}</td><td className="py-3 pr-4 text-muted-foreground">{item.courseId ? courses.find((course) => course.id === item.courseId)?.title ?? item.courseId : "Portal only"}</td><td className="py-3 pr-4">{item.claimStrategy ?? defaultClaimStrategy}</td><td className="py-3 pr-4">{state}</td><td className="py-3 text-right">{waiting ? <Button size="sm" disabled={busy} onClick={() => approveManualClaim(item.id)}>Approve claim</Button> : null}</td></tr>;
       })}</tbody></table></CardContent></Card>
     </div>
   );

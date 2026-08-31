@@ -12,14 +12,29 @@ function all(env: EnvLike, keys: string[]): boolean {
   return keys.every((key) => Boolean(env[key]?.trim()));
 }
 
-export function getIntegrationStatus(env: EnvLike = process.env): IntegrationStatusItem[] {
+export function getIntegrationStatus(
+  env: EnvLike = process.env,
+  runtime: {
+    cloudflareStorageBound?: boolean;
+    databaseConnected?: boolean;
+  } = {},
+): IntegrationStatusItem[] {
+  const portableStorageConfigured = all(env, [
+    "MKLMS_STORAGE_BUCKET",
+    "MKLMS_STORAGE_ACCESS_KEY_ID",
+    "MKLMS_STORAGE_SECRET_ACCESS_KEY",
+  ]);
+  const databaseConfigured = Boolean(runtime.databaseConnected) || all(env, ["DATABASE_URL"]);
+
   return [
     {
       id: "database",
       label: "PostgreSQL database",
-      configured: all(env, ["DATABASE_URL"]),
-      requiredVariables: ["DATABASE_URL"],
-      description: "Core MkLMS persistence. Works with Supabase PostgreSQL, self-hosted PostgreSQL, Hyperdrive-backed PostgreSQL and other compatible providers.",
+      configured: databaseConfigured,
+      requiredVariables: databaseConfigured ? [] : ["DATABASE_URL"],
+      description: runtime.databaseConnected
+        ? "Core MkLMS persistence is reachable through the active PostgreSQL/Hyperdrive runtime connection."
+        : "Core MkLMS persistence. Works with Supabase PostgreSQL, self-hosted PostgreSQL, Hyperdrive-backed PostgreSQL and other compatible providers.",
     },
     {
       id: "admin-auth",
@@ -44,17 +59,21 @@ export function getIntegrationStatus(env: EnvLike = process.env): IntegrationSta
     },
     {
       id: "storage",
-      label: "S3-compatible storage / Cloudflare R2",
-      configured: all(env, ["MKLMS_STORAGE_BUCKET", "MKLMS_STORAGE_ACCESS_KEY_ID", "MKLMS_STORAGE_SECRET_ACCESS_KEY"]),
-      requiredVariables: ["MKLMS_STORAGE_BUCKET", "MKLMS_STORAGE_ENDPOINT", "MKLMS_STORAGE_ACCESS_KEY_ID", "MKLMS_STORAGE_SECRET_ACCESS_KEY", "MKLMS_STORAGE_REGION"],
-      description: "Private object storage for certificates and provider-managed files. Cloudflare R2 works through its S3-compatible endpoint.",
+      label: "Private object storage",
+      configured: Boolean(runtime.cloudflareStorageBound) || portableStorageConfigured,
+      requiredVariables: runtime.cloudflareStorageBound
+        ? []
+        : ["MKLMS_STORAGE_BUCKET", "MKLMS_STORAGE_ENDPOINT", "MKLMS_STORAGE_ACCESS_KEY_ID", "MKLMS_STORAGE_SECRET_ACCESS_KEY", "MKLMS_STORAGE_REGION"],
+      description: runtime.cloudflareStorageBound
+        ? "Private application storage is connected through the native APP_STORAGE_BUCKET binding."
+        : "Private application storage can use an S3-compatible adapter on non-Cloudflare hosts.",
     },
     {
       id: "media-delivery",
       label: "Protected media delivery",
       configured: all(env, ["MKLMS_MEDIA_DELIVERY_BASE_URL", "MKLMS_MEDIA_SIGNING_SECRET"]),
       requiredVariables: ["MKLMS_MEDIA_DELIVERY_BASE_URL", "MKLMS_MEDIA_SIGNING_SECRET"],
-      description: "Creates short-lived signed playback URLs for private HLS/direct media. Replaceable by another MediaProvider adapter.",
+      description: "Creates short-lived signed playback URLs for private HLS/direct media through the configured media-delivery adapter.",
     },
   ];
 }

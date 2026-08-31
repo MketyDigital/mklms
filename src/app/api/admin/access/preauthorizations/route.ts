@@ -5,6 +5,7 @@ import { CLAIM_VERIFICATION_STRATEGIES } from "@/features/access/domain/claim-ve
 import { PostgresAdminAccessRepository } from "@/features/access/repositories/postgres-admin-access.repository";
 import { AccessAdminService } from "@/features/access/services/access-admin.service";
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
+import { PostgresAdminLearningRepository } from "@/features/courses/repositories/postgres-admin-learning.repository";
 import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
 
 const createSchema = z.object({
@@ -44,9 +45,13 @@ export async function POST(request: Request) {
     );
   }
 
-  const settings = await new PostgresSettingsRepository().getPlatformSettings();
+  const [settings, courses] = await Promise.all([
+    new PostgresSettingsRepository().getPlatformSettings(),
+    new PostgresAdminLearningRepository().listCourses(),
+  ]);
   const service = new AccessAdminService(new PostgresAdminAccessRepository(), {
     accessCodePrefix: settings.accessCodePrefix,
+    validCourseIds: new Set(courses.map((course) => course.id)),
   });
 
   try {

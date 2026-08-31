@@ -7,7 +7,6 @@ export interface ManagedHostingUsageSummary {
   monthStart: Date;
   courseWatchMinutesMeasured: number;
   liveAudienceMinutesEstimated: number;
-  ociMediaFlowEstimatedCostUsd: number;
 }
 
 export class PostgresManagedHostingRepository {
@@ -21,7 +20,7 @@ export class PostgresManagedHostingRepository {
     const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
     const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 
-    const [course, live, ingest] = await Promise.all([
+    const [course, live] = await Promise.all([
       this.pool.query<{ seconds: string | number }>(
         `SELECT COALESCE(SUM(credited_seconds), 0) AS seconds
          FROM media_watch_credits
@@ -37,20 +36,12 @@ export class PostgresManagedHostingRepository {
            AND lb.viewer_display_mode = 'CONFIGURED_BASELINE'`,
         [monthStart, nextMonth],
       ),
-      this.pool.query<{ cost: string | number }>(
-        `SELECT COALESCE(SUM(estimated_cost_usd), 0) AS cost
-         FROM media_ingest_jobs
-         WHERE created_at >= $1 AND created_at < $2
-           AND cost_accepted_at IS NOT NULL`,
-        [monthStart, nextMonth],
-      ),
     ]);
 
     return {
       monthStart,
       courseWatchMinutesMeasured: Math.round(Number(course.rows[0]?.seconds ?? 0) / 60),
       liveAudienceMinutesEstimated: Math.round(Number(live.rows[0]?.audience_seconds ?? 0) / 60),
-      ociMediaFlowEstimatedCostUsd: Math.round(Number(ingest.rows[0]?.cost ?? 0) * 100) / 100,
     };
   }
 

@@ -1,4 +1,4 @@
-import { CalendarClock, CreditCard, ExternalLink, Gauge } from "lucide-react";
+import { CalendarClock, ExternalLink, Gauge } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +14,6 @@ import { ManagedHostingPayButton } from "./managed-hosting-pay-button";
 export interface ManagedHostingUsageClientSummary {
   courseWatchMinutesMeasured: number;
   liveAudienceMinutesEstimated: number;
-  ociMediaFlowEstimatedCostUsd: number;
 }
 
 export function ManagedHostingPanel({
@@ -42,14 +41,14 @@ export function ManagedHostingPanel({
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm"><Gauge className="size-4" /> Course watch</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-semibold">{usage.courseWatchMinutesMeasured.toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground">minutes · MEASURED from trusted playback evidence</p>
+            <p className="text-xs text-muted-foreground">minutes · measured from trusted playback evidence</p>
           </CardContent>
         </Card>
         <Card>
@@ -58,16 +57,7 @@ export function ManagedHostingPanel({
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-semibold">{usage.liveAudienceMinutesEstimated.toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground">audience-minutes · ESTIMATED when baseline viewer mode is used</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm"><CreditCard className="size-4" /> Media processing</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-semibold">${usage.ociMediaFlowEstimatedCostUsd.toFixed(2)}</p>
-            <p className="text-xs text-muted-foreground">accepted OCI estimates this month · not an OCI invoice</p>
+            <p className="text-xs text-muted-foreground">audience-minutes · estimated when baseline viewer mode is used</p>
           </CardContent>
         </Card>
       </div>

@@ -69,7 +69,7 @@ export function ClaimAccessForm({ verificationStrategy }: ClaimAccessFormProps) 
             {issuedAccessCode}
           </p>
           <p className="mt-3 text-sm text-muted-foreground">
-            Save this code securely. It is your private credential for returning to the paid learning portal.
+            Save this code securely. It is your private credential for returning to the learning portal.
           </p>
         </div>
         {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
@@ -92,7 +92,7 @@ export function ClaimAccessForm({ verificationStrategy }: ClaimAccessFormProps) 
           <Input id="claim-phone" type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Your approved phone" />
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">Enter at least one detail that matches the paid-student list supplied to the portal administrator.</p>
+      <p className="text-xs text-muted-foreground">Enter at least one detail that matches the student list supplied to the portal administrator.</p>
 
       <div className="space-y-2">
         <Label htmlFor="certificate-name">Name to appear on certificate</Label>
@@ -106,19 +106,34 @@ export function ClaimAccessForm({ verificationStrategy }: ClaimAccessFormProps) 
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="claim-code">One-time verification / claim code</Label>
-        <Input id="claim-code" value={claimCode} onChange={(event) => setClaimCode(event.target.value.toUpperCase())} placeholder="Leave blank unless the administrator gave you one" autoComplete="one-time-code" />
-        <p className="text-xs text-muted-foreground">Some deployments use a free administrator-issued claim code instead of email or SMS OTP.</p>
+        <Label htmlFor="claim-code">
+          {verificationStrategy === "claim-code" ? "One-time claim code" : "Claim code (if provided)"}
+        </Label>
+        <Input
+          id="claim-code"
+          value={claimCode}
+          onChange={(event) => setClaimCode(event.target.value.toUpperCase())}
+          placeholder="Enter the code from the administrator"
+          autoComplete="one-time-code"
+          required={verificationStrategy === "claim-code"}
+        />
+        {verificationStrategy !== "claim-code" ? (
+          <p className="text-xs text-muted-foreground">Leave this blank unless the administrator supplied a one-time claim code for your access record.</p>
+        ) : null}
       </div>
 
-      {verificationStrategy !== "preauth-only" ? (
-        <p className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">This portal may require an additional verification step after your approved details are matched.</p>
+      {verificationStrategy === "manual-approval" ? (
+        <p className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">Your first submission creates an approval request. After the administrator approves it, submit the same details again to receive your access code.</p>
+      ) : null}
+
+      {verificationStrategy !== "preauth-only" && verificationStrategy !== "claim-code" && verificationStrategy !== "manual-approval" ? (
+        <p className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">This portal requires an additional verification step before access can be claimed.</p>
       ) : null}
 
       {message ? <p className="rounded-md border border-border bg-muted/40 p-3 text-sm">{message}</p> : null}
 
       <Button type="submit" className="w-full" disabled={submitting}>
-        {submitting ? "Verifying paid access..." : "Claim my course access"}
+        {submitting ? "Verifying access..." : "Claim my course access"}
       </Button>
     </form>
   );

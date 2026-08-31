@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Send } from "lucide-react";
-import { useRouter } from "next/navigation";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -50,20 +49,68 @@ function ThreadList({
 }
 
 export function AdminMessagePanel({
-  threads,
-  threadMessages,
+  threads: initialThreads,
+  locale,
 }: {
   threads: Thread[];
-  threadMessages: Record<string, Message[]>;
+  locale: string;
 }) {
-  const router = useRouter();
-  const [selectedThread, setSelectedThread] = useState<string | null>(threads[0]?.id ?? null);
+  const [threads, setThreads] = useState(initialThreads);
+  const [selectedThread, setSelectedThread] = useState<string | null>(null);
+  const [threadMessages, setThreadMessages] = useState<Record<string, Message[]>>({});
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loadingThread, setLoadingThread] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const messages = selectedThread ? threadMessages[selectedThread] ?? [] : [];
   const selectedThreadData = threads.find((thread) => thread.id === selectedThread);
+
+  async function loadThread(threadId: string) {
+    setSelectedThread(threadId);
+    setLoadingThread(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/admin/messages/${threadId}`, { cache: "no-store" });
+      const payload = await response.json().catch(() => null) as {
+        ok?: boolean;
+        message?: string;
+        messages?: Array<{
+          id: string;
+          senderRole: "STUDENT" | "ADMIN";
+          senderName: string;
+          text: string;
+          timestamp: string;
+        }>;
+      } | null;
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.message ?? "Conversation could not be loaded.");
+      }
+      setThreadMessages((current) => ({
+        ...current,
+        [threadId]: (payload.messages ?? []).map((message) => ({
+          id: message.id,
+          sender: message.senderRole === "ADMIN" ? "admin" : "member",
+          senderName: message.senderName,
+          text: message.text,
+          timestamp: new Date(message.timestamp).toLocaleString(locale),
+        })),
+      }));
+
+      const markReadResponse = await fetch(`/api/admin/messages/${threadId}`, {
+        method: "PATCH",
+      });
+      if (markReadResponse.ok) {
+        setThreads((current) => current.map((thread) => (
+          thread.id === threadId ? { ...thread, unread: false } : thread
+        )));
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Conversation could not be loaded.");
+    } finally {
+      setLoadingThread(false);
+    }
+  }
 
   async function handleSend() {
     const text = reply.trim();
@@ -76,10 +123,15 @@ export function AdminMessagePanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
       });
-      const payload = (await response.json()) as { ok?: boolean; message?: string };
-      if (!response.ok || !payload.ok) throw new Error(payload.message ?? "Reply could not be sent.");
+      const payload = await response.json().catch(() => null) as {
+        ok?: boolean;
+        message?: string | { id: string; senderRole: "STUDENT" | "ADMIN"; senderName: string; text: string; timestamp: string };
+      } | null;
+      if (!response.ok || !payload?.ok) {
+        throw new Error(typeof payload?.message === "string" ? payload.message : "Reply could not be sent.");
+      }
       setReply("");
-      router.refresh();
+      await loadThread(selectedThread);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Reply could not be sent.");
     } finally {
@@ -95,14 +147,14 @@ export function AdminMessagePanel({
           <p className="text-xs text-muted-foreground">{threads.filter((thread) => thread.unread).length} unread</p>
         </div>
         <div className="py-1">
-          <ThreadList threads={threads} selectedThread={selectedThread} onSelect={setSelectedThread} />
+          <ThreadList threads={threads} selectedThread={selectedThread} onSelect={(threadId) => void loadThread(threadId)} />
         </div>
       </div>
 
       {!selectedThread ? (
         <div className="flex-1 overflow-y-auto sm:hidden">
           <div className="border-b px-4 py-3"><h1 className="text-base font-semibold tracking-tight">Messages</h1></div>
-          <div className="py-1"><ThreadList threads={threads} selectedThread={selectedThread} onSelect={setSelectedThread} /></div>
+          <div className="py-1"><ThreadList threads={threads} selectedThread={selectedThread} onSelect={(threadId) => void loadThread(threadId)} /></div>
         </div>
       ) : null}
 
@@ -116,7 +168,8 @@ export function AdminMessagePanel({
 
           <div className="flex-1 overflow-y-auto px-4 py-6">
             <div className="mx-auto max-w-2xl space-y-4">
-              {messages.map((message) => {
+              {loadingThread ? <p className="py-8 text-center text-sm text-muted-foreground">Loading conversation...</p> : null}
+              {!loadingThread ? messages.map((message) => {
                 const isAdmin = message.sender === "admin";
                 return (
                   <div key={message.id} className={cn("flex gap-3", isAdmin && "flex-row-reverse")}>
@@ -127,8 +180,8 @@ export function AdminMessagePanel({
                     </div>
                   </div>
                 );
-              })}
-              {messages.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">No messages yet.</p> : null}
+              }) : null}
+              {!loadingThread && messages.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">No messages yet.</p> : null}
             </div>
           </div>
 

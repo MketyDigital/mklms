@@ -11,6 +11,11 @@ type HyperdriveBinding = {
   connectionString?: string;
 };
 
+type WorkerDatabaseConfig = {
+  connectionString: string;
+  useHyperdrive: boolean;
+};
+
 function sslOption() {
   return process.env.DATABASE_SSL === "disable"
     ? false
@@ -21,10 +26,7 @@ function sslOption() {
 
 function getCloudflareDatabaseConfig(
   mode: CloudflareDatabaseMode,
-): {
-  connectionString: string;
-  useHyperdrive: boolean;
-} | null {
+): WorkerDatabaseConfig | null {
   try {
     const context = getCloudflareContext();
     const env = context.env as unknown as {
@@ -53,22 +55,36 @@ function getCloudflareDatabaseConfig(
   }
 }
 
-function createWorkerQueryable(config: {
-  connectionString: string;
-  useHyperdrive: boolean;
-}): Pool {
+function createWorkerClient(config: WorkerDatabaseConfig): Client {
+  return new Client({
+    connectionString: config.connectionString,
+    ...(config.useHyperdrive ? {} : { ssl: sslOption() }),
+  });
+}
+
+function createWorkerQueryable(config: WorkerDatabaseConfig): Pool {
   const queryable = {
     async query(...args: unknown[]) {
-      const client = new Client({
-        connectionString: config.connectionString,
-        ...(config.useHyperdrive ? {} : { ssl: sslOption() }),
-      });
+      const client = createWorkerClient(config);
       await client.connect();
       try {
         return await (client.query as (...queryArgs: unknown[]) => Promise<unknown>)(...args);
       } finally {
         await client.end().catch(() => undefined);
       }
+    },
+    async connect() {
+      const client = createWorkerClient(config);
+      await client.connect();
+      let released = false;
+
+      return Object.assign(client, {
+        release() {
+          if (released) return;
+          released = true;
+          void client.end().catch(() => undefined);
+        },
+      });
     },
   };
   return queryable as unknown as Pool;

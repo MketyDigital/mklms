@@ -18,6 +18,7 @@ import type { ClaimVerificationStrategy } from "../domain/claim-verification.ts"
 export interface AccessAdminServiceOptions {
   accessCodePrefix: string;
   claimCodePrefix?: string;
+  validCourseIds?: ReadonlySet<string>;
 }
 
 export interface PreauthorizeStudentInput {
@@ -68,6 +69,14 @@ export class AccessAdminService {
 
     if (!normalized.email && !normalized.phone) {
       throw new Error("At least one approved identity is required.");
+    }
+
+    if (
+      normalized.courseId &&
+      this.options.validCourseIds &&
+      !this.options.validCourseIds.has(normalized.courseId)
+    ) {
+      throw new Error("The selected course does not exist.");
     }
 
     if (normalized.claimStrategy === "claim-code" && !normalized.claimCodeHash) {

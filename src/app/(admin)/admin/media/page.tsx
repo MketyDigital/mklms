@@ -1,6 +1,7 @@
 import { AppLayout } from "@/components/layout/app-layout";
 import { AdminMediaManager } from "@/features/media/components/admin-media-manager";
 import { MediaUploadPanel } from "@/features/media/components/media-upload-panel";
+import { StorageMediaBrowser } from "@/features/media/components/storage-media-browser";
 import { PostgresAdminMediaRepository } from "@/features/media/repositories/postgres-admin-media.repository";
 import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
 
@@ -26,10 +27,11 @@ export default async function AdminMediaPage() {
         <div className="mb-6">
           <h1 className="text-2xl font-semibold tracking-tight">Media library</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Upload protected MP4 files to private storage or register reusable media records for course lessons and live classes.
+            Use protected media already in private storage, upload new MP4 files, or register another supported media source for course lessons and live classes.
           </p>
         </div>
         <div className="space-y-8">
+          <StorageMediaBrowser />
           <MediaUploadPanel />
           <AdminMediaManager initialAssets={assets} />
         </div>
