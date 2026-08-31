@@ -7,6 +7,30 @@ import { PostgresSettingsRepository } from "@/features/settings/repositories/pos
 
 const sendSchema = z.object({ text: z.string().trim().min(1).max(5000) });
 
+async function getRepositoryForThread(threadId: string) {
+  const repository = new PostgresMessageRepository();
+  if (!(await repository.getStudentIdForThread(threadId))) return null;
+  return repository;
+}
+
+export async function GET(
+  _request: Request,
+  context: { params: Promise<{ threadId: string }> },
+) {
+  if (!(await hasValidAdminSession())) {
+    return NextResponse.json({ ok: false, message: "Unauthorized." }, { status: 401 });
+  }
+
+  const { threadId } = await context.params;
+  const repository = await getRepositoryForThread(threadId);
+  if (!repository) {
+    return NextResponse.json({ ok: false, message: "Conversation not found." }, { status: 404 });
+  }
+
+  const messages = await repository.getThreadMessages(threadId);
+  return NextResponse.json({ ok: true, messages });
+}
+
 export async function PATCH(
   _request: Request,
   context: { params: Promise<{ threadId: string }> },
@@ -16,8 +40,8 @@ export async function PATCH(
   }
 
   const { threadId } = await context.params;
-  const repository = new PostgresMessageRepository();
-  if (!(await repository.getStudentIdForThread(threadId))) {
+  const repository = await getRepositoryForThread(threadId);
+  if (!repository) {
     return NextResponse.json({ ok: false, message: "Conversation not found." }, { status: 404 });
   }
 
@@ -39,8 +63,8 @@ export async function POST(
   }
 
   const { threadId } = await context.params;
-  const repository = new PostgresMessageRepository();
-  if (!(await repository.getStudentIdForThread(threadId))) {
+  const repository = await getRepositoryForThread(threadId);
+  if (!repository) {
     return NextResponse.json({ ok: false, message: "Conversation not found." }, { status: 404 });
   }
 
