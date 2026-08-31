@@ -9,7 +9,7 @@
   "r2_buckets": [
     {
       "binding": "MEDIA_BUCKET",
-      "bucket_name": "mklms-media"
+      "bucket_name": "spf-media"
     }
   ]
 }
