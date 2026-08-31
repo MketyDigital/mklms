@@ -12,7 +12,7 @@ function parseNumber(value: string | undefined, fallback: number): number {
 export function getManagedHostingPolicy(): ManagedHostingPolicy {
   let paymentUrl: string | null = null;
   try {
-    paymentUrl = normalizeSafeExternalUrl(process.env.MKLMS_MANAGED_HOSTING_PAYMENT_URL);
+    paymentUrl = normalizeSafeExternalUrl(process.env.MKLMS_MANAGED_PAYMENT_URL);
   } catch {
     paymentUrl = null;
   }
@@ -23,7 +23,5 @@ export function getManagedHostingPolicy(): ManagedHostingPolicy {
     maximumMonthlyFeeUsd: parseNumber(process.env.MKLMS_MANAGED_HOSTING_MAX_USD, 50),
     paymentUrl,
     notice: process.env.MKLMS_MANAGED_HOSTING_NOTICE?.slice(0, 2000) ?? null,
-    usdtNetwork: process.env.MKLMS_MANAGED_HOSTING_USDT_NETWORK?.slice(0, 40) ?? null,
-    usdtAddress: process.env.MKLMS_MANAGED_HOSTING_USDT_ADDRESS?.slice(0, 200) ?? null,
   });
 }
