@@ -63,3 +63,6 @@ jobs:
           MKLMS_ADMIN_ACCESS_KEY: ci-admin-key
           MKLMS_ADMIN_SESSION_SECRET: ci-admin-session-secret
         run: npx wrangler deploy --dry-run --outdir .wrangler-dry-run
+
+      - name: External billing Worker packaging dry run
+        run: npx wrangler deploy --dry-run --config workers/billing/wrangler.jsonc --outdir .billing-worker-dry-run
