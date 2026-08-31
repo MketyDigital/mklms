@@ -56,3 +56,10 @@ jobs:
           MKLMS_ADMIN_ACCESS_KEY: ci-admin-key
           MKLMS_ADMIN_SESSION_SECRET: ci-admin-session-secret
         run: npm run cf:build
+
+      - name: Cloudflare Worker packaging dry run
+        env:
+          DATABASE_URL: postgresql://user:pass@127.0.0.1:5432/mklms
+          MKLMS_ADMIN_ACCESS_KEY: ci-admin-key
+          MKLMS_ADMIN_SESSION_SECRET: ci-admin-session-secret
+        run: npx wrangler deploy --dry-run --outdir .wrangler-dry-run
