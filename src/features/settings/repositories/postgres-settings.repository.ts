@@ -9,6 +9,18 @@ import type { SettingsRepository } from "./settings.repository";
 
 const SETTINGS_ID = "default";
 
+function normalizeStorageProvider(
+  value: PlatformSettings["storageProvider"],
+): PlatformSettings["storageProvider"] {
+  return value === "oci" ? "r2" : value;
+}
+
+function normalizeMediaProvider(
+  value: PlatformSettings["mediaProvider"],
+): PlatformSettings["mediaProvider"] {
+  return value === "oci-media-flow" ? "custom" : value;
+}
+
 export class PostgresSettingsRepository implements SettingsRepository {
   private readonly pool: Pool;
 
@@ -67,8 +79,8 @@ export class PostgresSettingsRepository implements SettingsRepository {
       locale: row.locale,
       accessProvider: row.access_provider,
       claimVerificationStrategy: row.claim_verification_strategy,
-      storageProvider: row.storage_provider,
-      mediaProvider: row.media_provider,
+      storageProvider: normalizeStorageProvider(row.storage_provider),
+      mediaProvider: normalizeMediaProvider(row.media_provider),
       emailProvider: row.email_provider,
       notificationProvider: row.notification_provider,
       accessCodePrefix: row.access_code_prefix,
@@ -125,8 +137,8 @@ export class PostgresSettingsRepository implements SettingsRepository {
         settings.locale,
         settings.accessProvider,
         settings.claimVerificationStrategy,
-        settings.storageProvider,
-        settings.mediaProvider,
+        normalizeStorageProvider(settings.storageProvider),
+        normalizeMediaProvider(settings.mediaProvider),
         settings.emailProvider,
         settings.notificationProvider,
         settings.accessCodePrefix,
