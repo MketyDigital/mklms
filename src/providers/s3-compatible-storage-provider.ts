@@ -1,9 +1,13 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   PutObjectCommand,
   S3Client,
+  UploadPartCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -12,11 +16,16 @@ import {
   type R2BucketLike,
 } from "./cloudflare-r2-storage-provider";
 import type {
+  CompleteMultipartUploadInput,
+  CreateMultipartUploadInput,
+  MultipartStorageProvider,
+  MultipartUploadReference,
   PutObjectInput,
   ReadAuthorization,
-  StorageProvider,
   StoredObjectContent,
   StoredObjectReference,
+  UploadedMultipartPart,
+  UploadMultipartPartInput,
 } from "./storage-provider";
 
 export interface S3CompatibleStorageOptions {
@@ -28,7 +37,7 @@ export interface S3CompatibleStorageOptions {
   forcePathStyle?: boolean;
 }
 
-export class S3CompatibleStorageProvider implements StorageProvider {
+export class S3CompatibleStorageProvider implements MultipartStorageProvider {
   private readonly client: S3Client;
   private readonly bucket: string;
 
@@ -74,6 +83,60 @@ export class S3CompatibleStorageProvider implements StorageProvider {
     };
   }
 
+  async createMultipartUpload(input: CreateMultipartUploadInput): Promise<MultipartUploadReference> {
+    const result = await this.client.send(
+      new CreateMultipartUploadCommand({
+        Bucket: this.bucket,
+        Key: input.key,
+        ContentType: input.contentType,
+        CacheControl:
+          input.visibility === "private"
+            ? "private, no-store"
+            : "public, max-age=31536000, immutable",
+      }),
+    );
+    if (!result.UploadId) throw new Error("Storage provider did not return a multipart upload ID.");
+    return { key: input.key, uploadId: result.UploadId };
+  }
+
+  async uploadPart(input: UploadMultipartPartInput): Promise<UploadedMultipartPart> {
+    const result = await this.client.send(
+      new UploadPartCommand({
+        Bucket: this.bucket,
+        Key: input.key,
+        UploadId: input.uploadId,
+        PartNumber: input.partNumber,
+        Body: input.bytes,
+      }),
+    );
+    if (!result.ETag) throw new Error("Storage provider did not return a part ETag.");
+    return { partNumber: input.partNumber, etag: result.ETag };
+  }
+
+  async completeMultipartUpload(input: CompleteMultipartUploadInput): Promise<StoredObjectReference> {
+    await this.client.send(
+      new CompleteMultipartUploadCommand({
+        Bucket: this.bucket,
+        Key: input.key,
+        UploadId: input.uploadId,
+        MultipartUpload: {
+          Parts: input.parts.map((part) => ({ PartNumber: part.partNumber, ETag: part.etag })),
+        },
+      }),
+    );
+    return { assetId: input.key };
+  }
+
+  async abortMultipartUpload(input: MultipartUploadReference): Promise<void> {
+    await this.client.send(
+      new AbortMultipartUploadCommand({
+        Bucket: this.bucket,
+        Key: input.key,
+        UploadId: input.uploadId,
+      }),
+    );
+  }
+
   async createReadAuthorization(
     assetId: string,
     options: { ttlSeconds?: number } = {},
@@ -108,7 +171,7 @@ function getCloudflareStorageBinding(): R2BucketLike | null {
   }
 }
 
-export function getConfiguredStorageProvider(): StorageProvider {
+export function getConfiguredStorageProvider(): MultipartStorageProvider {
   const cloudflareBucket = getCloudflareStorageBinding();
   if (cloudflareBucket) {
     return new CloudflareR2StorageProvider(cloudflareBucket);
