@@ -22,7 +22,7 @@ export function AdminMediaManager({ initialAssets }: { initialAssets: AdminMedia
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [sourceType, setSourceType] = useState("HLS");
+  const [sourceType, setSourceType] = useState("DIRECT");
 
   async function submit(formData: FormData) {
     setBusy(true);
@@ -58,9 +58,9 @@ export function AdminMediaManager({ initialAssets }: { initialAssets: AdminMedia
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Register media asset</CardTitle>
+          <CardTitle className="text-base">Register another media source</CardTitle>
           <CardDescription>
-            Register the provider playback reference only. For private HLS/direct media this should be an opaque provider path or asset reference—not a public storage URL. Upload/transcoding can be supplied by the configured media adapter.
+            Register the provider playback reference only. For private HLS/direct media this should be an opaque provider path or asset reference—not a public storage URL.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -71,7 +71,7 @@ export function AdminMediaManager({ initialAssets }: { initialAssets: AdminMedia
             </label>
             <label className="space-y-1.5 text-sm">
               <span className="font-medium">Provider label</span>
-              <Input name="provider" defaultValue="custom" placeholder="oci-r2, s3, youtube…" />
+              <Input name="provider" defaultValue="private-storage" placeholder="private-storage, youtube, custom…" />
             </label>
             <label className="space-y-1.5 text-sm">
               <span className="font-medium">Source type</span>
@@ -80,8 +80,8 @@ export function AdminMediaManager({ initialAssets }: { initialAssets: AdminMedia
                 value={sourceType}
                 onChange={(event) => setSourceType(event.target.value)}
               >
-                <option value="HLS">HLS / m3u8</option>
                 <option value="DIRECT">Direct protected file</option>
+                <option value="HLS">HLS / m3u8</option>
                 <option value="YOUTUBE">YouTube</option>
                 <option value="EXTERNAL_EMBED">External embed</option>
                 <option value="CUSTOM">Custom provider</option>
@@ -103,7 +103,9 @@ export function AdminMediaManager({ initialAssets }: { initialAssets: AdminMedia
                 placeholder={
                   sourceType === "YOUTUBE" || sourceType === "EXTERNAL_EMBED"
                     ? "https://…"
-                    : "courses/course-1/lesson-1/master.m3u8"
+                    : sourceType === "DIRECT"
+                      ? "media/course-1/lesson-1.mp4"
+                      : "media/course-1/lesson-1/master.m3u8"
                 }
               />
             </label>
@@ -126,13 +128,13 @@ export function AdminMediaManager({ initialAssets }: { initialAssets: AdminMedia
         <CardHeader>
           <CardTitle className="text-base">Media library</CardTitle>
           <CardDescription>
-            Lessons refer to these records by ID; storage/origin details remain server-side.
+            Lessons and live sessions refer to these records by ID; storage/origin details remain server-side.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {initialAssets.length === 0 ? (
             <div className="flex min-h-36 flex-col items-center justify-center text-center text-sm text-muted-foreground">
-              <Film className="mb-2 size-8" /> No media assets yet.
+              <Film className="mb-2 size-8" /> No media assets registered yet.
             </div>
           ) : (
             <div className="divide-y rounded-lg border">
