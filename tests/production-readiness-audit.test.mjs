@@ -28,7 +28,7 @@ test('student onboarding uses the configured claim strategy', () => {
 test('student onboarding can submit a per-student claim code even when the global default differs', () => {
   const form = read('src/features/access/components/claim-access-form.tsx');
   assert.match(form, /claimCode:\s*claimCode\s*\|\|\s*undefined/);
-  assert.match(form, /Claim code \(if issued\)/);
+  assert.match(form, /Claim code \(if (?:issued|provided)\)/);
   assert.doesNotMatch(form, /claimCode:\s*verificationStrategy\s*===\s*"claim-code"\s*\?/);
 });
 
@@ -70,8 +70,12 @@ test('active settings UI and API contain no OCI Media Flow or free deployment gu
 
 test('legacy OCI settings values are normalized before the active settings form is rendered', () => {
   const repository = read('src/features/settings/repositories/postgres-settings.repository.ts');
-  assert.match(repository, /row\.media_provider\s*===\s*"oci-media-flow"/);
-  assert.match(repository, /row\.storage_provider\s*===\s*"oci"/);
+  assert.match(repository, /normalizeMediaProvider/);
+  assert.match(repository, /value\s*===\s*"oci-media-flow"\s*\?/);
+  assert.match(repository, /normalizeStorageProvider/);
+  assert.match(repository, /value\s*===\s*"oci"\s*\?/);
+  assert.match(repository, /mediaProvider:\s*normalizeMediaProvider\(row\.media_provider\)/);
+  assert.match(repository, /storageProvider:\s*normalizeStorageProvider\(row\.storage_provider\)/);
 });
 
 test('settings integration health treats a reachable Hyperdrive database as configured', () => {
@@ -96,9 +100,11 @@ test('live admin share URL uses the saved public portal URL', () => {
 });
 
 test('admin messages mark only the conversation the administrator actually opens as read', () => {
+  const page = read('src/app/(admin)/admin/messages/page.tsx');
   const repository = read('src/features/messages/repositories/postgres-message.repository.ts');
   const route = read('src/app/api/admin/messages/[threadId]/route.ts');
   const panel = read('src/features/messages/components/admin/admin-message-panel.tsx');
+  assert.doesNotMatch(page, /getThreadMessages/);
   assert.match(repository, /markThreadRead/);
   assert.match(route, /export async function PATCH/);
   assert.match(panel, /method:\s*"PATCH"/);
