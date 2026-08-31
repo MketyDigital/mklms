@@ -13,10 +13,17 @@ export interface CreateCourseAdminInput {
   slug?: string | null;
 }
 
+export interface UpdateCourseAdminInput {
+  title: string;
+  description?: string | null;
+}
+
 export interface CreateModuleAdminInput {
   title: string;
   description?: string | null;
 }
+
+export interface UpdateModuleAdminInput extends CreateModuleAdminInput {}
 
 export interface CreateLessonAdminInput {
   title: string;
@@ -27,6 +34,8 @@ export interface CreateLessonAdminInput {
   durationSeconds?: number | null;
 }
 
+export interface UpdateLessonAdminInput extends CreateLessonAdminInput {}
+
 export interface AdminLearningRepository {
   listCourses(): Promise<CourseRecord[]>;
   createCourse(
@@ -34,14 +43,20 @@ export interface AdminLearningRepository {
       status?: CourseStatus;
     },
   ): Promise<CourseRecord>;
+  updateCourse(courseId: string, input: UpdateCourseAdminInput): Promise<void>;
+  deleteCourse(courseId: string): Promise<void>;
   createModule(
     courseId: string,
     input: Omit<CourseModuleRecord, "id" | "courseId" | "position">,
   ): Promise<CourseModuleRecord>;
+  updateModule(moduleId: string, input: UpdateModuleAdminInput): Promise<void>;
+  deleteModule(moduleId: string): Promise<void>;
   createLesson(
     moduleId: string,
     input: Omit<LessonRecord, "id" | "moduleId" | "position" | "status">,
   ): Promise<LessonRecord>;
+  updateLesson(lessonId: string, input: UpdateLessonAdminInput): Promise<void>;
+  deleteLesson(lessonId: string): Promise<void>;
   setCourseStatus(courseId: string, status: CourseStatus): Promise<void>;
   setLessonStatus(lessonId: string, status: LessonStatus): Promise<void>;
 }
@@ -54,6 +69,30 @@ function slugify(value: string): string {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "") || "course";
+}
+
+function normalizeLessonInput(input: CreateLessonAdminInput | UpdateLessonAdminInput) {
+  const title = input.title.trim();
+  if (!title) throw new Error("Lesson title is required.");
+
+  const completionMode = input.completionMode ?? "VIDEO_PROGRESS";
+  const threshold = input.completionThresholdPercent ?? 90;
+  if (threshold < 1 || threshold > 100) {
+    throw new Error("Lesson completion threshold must be between 1 and 100.");
+  }
+  const durationSeconds = input.durationSeconds ?? null;
+  if (completionMode === "VIDEO_PROGRESS" && (!input.mediaAssetId?.trim() || !durationSeconds || durationSeconds < 1)) {
+    throw new Error("Video-progress lessons require media and a positive duration.");
+  }
+
+  return {
+    title,
+    description: input.description?.trim() || null,
+    mediaAssetId: input.mediaAssetId?.trim() || null,
+    completionMode,
+    completionThresholdPercent: completionMode === "VIDEO_PROGRESS" ? threshold : 100,
+    durationSeconds: completionMode === "VIDEO_PROGRESS" ? durationSeconds : null,
+  };
 }
 
 export class AdminLearningService {
@@ -79,6 +118,19 @@ export class AdminLearningService {
     });
   }
 
+  async updateCourse(courseId: string, input: UpdateCourseAdminInput): Promise<void> {
+    const title = input.title.trim();
+    if (!title) throw new Error("Course title is required.");
+    await this.repository.updateCourse(courseId, {
+      title,
+      description: input.description?.trim() || null,
+    });
+  }
+
+  deleteCourse(courseId: string): Promise<void> {
+    return this.repository.deleteCourse(courseId);
+  }
+
   async createModule(
     courseId: string,
     input: CreateModuleAdminInput,
@@ -92,26 +144,32 @@ export class AdminLearningService {
     });
   }
 
+  async updateModule(moduleId: string, input: UpdateModuleAdminInput): Promise<void> {
+    const title = input.title.trim();
+    if (!title) throw new Error("Module title is required.");
+    await this.repository.updateModule(moduleId, {
+      title,
+      description: input.description?.trim() || null,
+    });
+  }
+
+  deleteModule(moduleId: string): Promise<void> {
+    return this.repository.deleteModule(moduleId);
+  }
+
   async createLesson(
     moduleId: string,
     input: CreateLessonAdminInput,
   ): Promise<LessonRecord> {
-    const title = input.title.trim();
-    if (!title) throw new Error("Lesson title is required.");
+    return this.repository.createLesson(moduleId, normalizeLessonInput(input));
+  }
 
-    const threshold = input.completionThresholdPercent ?? 90;
-    if (threshold < 1 || threshold > 100) {
-      throw new Error("Lesson completion threshold must be between 1 and 100.");
-    }
+  async updateLesson(lessonId: string, input: UpdateLessonAdminInput): Promise<void> {
+    await this.repository.updateLesson(lessonId, normalizeLessonInput(input));
+  }
 
-    return this.repository.createLesson(moduleId, {
-      title,
-      description: input.description?.trim() || null,
-      mediaAssetId: input.mediaAssetId?.trim() || null,
-      completionMode: input.completionMode ?? "VIDEO_PROGRESS",
-      completionThresholdPercent: threshold,
-      durationSeconds: input.durationSeconds ?? null,
-    });
+  deleteLesson(lessonId: string): Promise<void> {
+    return this.repository.deleteLesson(lessonId);
   }
 
   setCourseStatus(courseId: string, status: CourseStatus): Promise<void> {
