@@ -100,7 +100,11 @@ function normalizeSessionInput(input: {
 }
 
 export class AdminLiveClassService {
-  constructor(private readonly repository: AdminLiveClassRepository) {}
+  private readonly repository: AdminLiveClassRepository;
+
+  constructor(repository: AdminLiveClassRepository) {
+    this.repository = repository;
+  }
 
   async createBatch(input: Parameters<typeof normalizeBatchInput>[0]): Promise<AdminLiveBatchRecord> {
     return this.repository.createBatch({ ...normalizeBatchInput(input), status: "DRAFT" });
