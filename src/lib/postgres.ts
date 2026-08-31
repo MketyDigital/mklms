@@ -15,7 +15,7 @@ function sslOption() {
 function getCloudflareConnectionString(): string | null {
   try {
     const context = getCloudflareContext();
-    const env = context.env as CloudflareEnv & {
+    const env = context.env as unknown as {
       HYPERDRIVE?: { connectionString?: string };
     };
     return env.HYPERDRIVE?.connectionString ?? process.env.DATABASE_URL ?? null;
