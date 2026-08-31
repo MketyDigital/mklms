@@ -9,6 +9,7 @@ import type {
   CreatePreauthorizationInput,
   CreatePreauthorizationResult,
   StudentAccessStatus,
+  UpdatePendingPreauthorizationInput,
 } from "./admin-access.repository";
 import type { AccessCodeHash, PreauthorizationRecord } from "../types";
 
@@ -47,9 +48,7 @@ export class PostgresAdminAccessRepository implements AdminAccessRepository {
     this.pool = pool;
   }
 
-  async createPreauthorization(
-    input: CreatePreauthorizationInput,
-  ): Promise<CreatePreauthorizationResult> {
+  async createPreauthorization(input: CreatePreauthorizationInput): Promise<CreatePreauthorizationResult> {
     const email = input.email ? normalizeIdentity(input.email, "email") : null;
     const phone = input.phone ? normalizeIdentity(input.phone, "phone") : null;
     const courseId = input.courseId ?? null;
@@ -70,9 +69,7 @@ export class PostgresAdminAccessRepository implements AdminAccessRepository {
       [email, phone, courseId],
     );
 
-    if (existing.rows[0]) {
-      return { created: false, record: mapPreauthorization(existing.rows[0]) };
-    }
+    if (existing.rows[0]) return { created: false, record: mapPreauthorization(existing.rows[0]) };
 
     const result = await this.pool.query<PreauthorizationRow>(
       `INSERT INTO preauthorizations (
@@ -82,17 +79,7 @@ export class PostgresAdminAccessRepository implements AdminAccessRepository {
        RETURNING id, email, phone, name_hint, course_id, status,
                  claim_strategy, claim_code_hash, claim_requested_at,
                  manual_approved_at`,
-      [
-        randomUUID(),
-        email,
-        phone,
-        input.nameHint ?? null,
-        courseId,
-        input.claimStrategy,
-        input.claimCodeHash ?? null,
-        input.source,
-        input.externalReference ?? null,
-      ],
+      [randomUUID(), email, phone, input.nameHint ?? null, courseId, input.claimStrategy, input.claimCodeHash ?? null, input.source, input.externalReference ?? null],
     );
 
     return { created: true, record: mapPreauthorization(result.rows[0]) };
@@ -108,8 +95,31 @@ export class PostgresAdminAccessRepository implements AdminAccessRepository {
        LIMIT $1`,
       [limit],
     );
-
     return result.rows.map(mapPreauthorization);
+  }
+
+  async updatePendingPreauthorization(preauthorizationId: string, input: UpdatePendingPreauthorizationInput): Promise<void> {
+    const result = await this.pool.query(
+      `UPDATE preauthorizations
+       SET name_hint = $2,
+           course_id = $3,
+           claim_strategy = $4,
+           claim_code_hash = $5,
+           claim_requested_at = NULL,
+           manual_approved_at = NULL,
+           updated_at = NOW()
+       WHERE id = $1 AND status = 'PREAUTHORIZED'`,
+      [preauthorizationId, input.nameHint ?? null, input.courseId ?? null, input.claimStrategy, input.claimCodeHash ?? null],
+    );
+    if (result.rowCount !== 1) throw new Error("Only an unclaimed pre-authorization can be edited.");
+  }
+
+  async cancelPendingPreauthorization(preauthorizationId: string): Promise<void> {
+    const result = await this.pool.query(
+      `DELETE FROM preauthorizations WHERE id = $1 AND status = 'PREAUTHORIZED'`,
+      [preauthorizationId],
+    );
+    if (result.rowCount !== 1) throw new Error("Only an unclaimed pre-authorization can be cancelled.");
   }
 
   async approveManualClaim(preauthorizationId: string): Promise<void> {
@@ -122,45 +132,24 @@ export class PostgresAdminAccessRepository implements AdminAccessRepository {
          AND claim_requested_at IS NOT NULL`,
       [preauthorizationId],
     );
-
-    if (result.rowCount !== 1) {
-      throw new Error("This manual claim request is not available for approval.");
-    }
+    if (result.rowCount !== 1) throw new Error("This manual claim request is not available for approval.");
   }
 
   async listStudents(limit = 100): Promise<AdminStudentSummary[]> {
     const result = await this.pool.query<{
-      id: string;
-      display_name: string;
-      email: string | null;
-      phone: string | null;
-      status: StudentAccessStatus;
-      created_at: Date;
+      id: string; display_name: string; email: string | null; phone: string | null;
+      status: StudentAccessStatus; created_at: Date;
     }>(
       `SELECT id, display_name, email, phone, status, created_at
-       FROM students
-       ORDER BY created_at DESC
-       LIMIT $1`,
+       FROM students ORDER BY created_at DESC LIMIT $1`,
       [limit],
     );
-
-    return result.rows.map((row) => ({
-      id: row.id,
-      displayName: row.display_name,
-      email: row.email,
-      phone: row.phone,
-      status: row.status,
-      createdAt: new Date(row.created_at),
-    }));
+    return result.rows.map((row) => ({ id: row.id, displayName: row.display_name, email: row.email, phone: row.phone, status: row.status, createdAt: new Date(row.created_at) }));
   }
 
   async replaceAccessCredential(
     studentId: string,
-    credential: {
-      hash: AccessCodeHash;
-      lookupHash: string;
-      prefix: string;
-    },
+    credential: { hash: AccessCodeHash; lookupHash: string; prefix: string },
   ): Promise<void> {
     const client = await this.pool.connect();
     try {
@@ -177,15 +166,7 @@ export class PostgresAdminAccessRepository implements AdminAccessRepository {
            credential_hash, credential_salt, credential_algorithm,
            credential_prefix, status
          ) VALUES ($1,$2,'access-code',$3,$4,$5,$6,$7,'ACTIVE')`,
-        [
-          randomUUID(),
-          studentId,
-          credential.lookupHash,
-          credential.hash.hash,
-          credential.hash.salt,
-          credential.hash.algorithm,
-          credential.prefix,
-        ],
+        [randomUUID(), studentId, credential.lookupHash, credential.hash.hash, credential.hash.salt, credential.hash.algorithm, credential.prefix],
       );
       await client.query("COMMIT");
     } catch (error) {
@@ -196,20 +177,11 @@ export class PostgresAdminAccessRepository implements AdminAccessRepository {
     }
   }
 
-  async setStudentStatus(
-    studentId: string,
-    status: StudentAccessStatus,
-  ): Promise<void> {
-    await this.pool.query(
-      `UPDATE students SET status = $2, updated_at = NOW() WHERE id = $1`,
-      [studentId, status],
-    );
-
+  async setStudentStatus(studentId: string, status: StudentAccessStatus): Promise<void> {
+    await this.pool.query(`UPDATE students SET status = $2, updated_at = NOW() WHERE id = $1`, [studentId, status]);
     if (status !== "ACTIVE") {
       await this.pool.query(
-        `UPDATE student_sessions
-         SET revoked_at = NOW()
-         WHERE student_id = $1 AND revoked_at IS NULL`,
+        `UPDATE student_sessions SET revoked_at = NOW() WHERE student_id = $1 AND revoked_at IS NULL`,
         [studentId],
       );
     }
