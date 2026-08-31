@@ -12,22 +12,37 @@ function sslOption() {
       : undefined;
 }
 
-function getCloudflareConnectionString(): string | null {
+function getCloudflareDatabaseConfig(): {
+  connectionString: string;
+  useHyperdrive: boolean;
+} | null {
   try {
     const context = getCloudflareContext();
     const env = context.env as unknown as {
       HYPERDRIVE?: { connectionString?: string };
     };
-    return env.HYPERDRIVE?.connectionString ?? process.env.DATABASE_URL ?? null;
+    if (env.HYPERDRIVE?.connectionString) {
+      return { connectionString: env.HYPERDRIVE.connectionString, useHyperdrive: true };
+    }
+    if (process.env.DATABASE_URL) {
+      return { connectionString: process.env.DATABASE_URL, useHyperdrive: false };
+    }
+    return null;
   } catch {
     return null;
   }
 }
 
-function createWorkerQueryable(connectionString: string): Pool {
+function createWorkerQueryable(config: {
+  connectionString: string;
+  useHyperdrive: boolean;
+}): Pool {
   const queryable = {
     async query(...args: unknown[]) {
-      const client = new Client({ connectionString, ssl: sslOption() });
+      const client = new Client({
+        connectionString: config.connectionString,
+        ...(config.useHyperdrive ? {} : { ssl: sslOption() }),
+      });
       await client.connect();
       try {
         return await (client.query as (...queryArgs: unknown[]) => Promise<unknown>)(...args);
@@ -40,9 +55,9 @@ function createWorkerQueryable(connectionString: string): Pool {
 }
 
 export function getPostgresPool(): Pool {
-  const cloudflareConnectionString = getCloudflareConnectionString();
-  if (cloudflareConnectionString) {
-    if (!workerQueryable) workerQueryable = createWorkerQueryable(cloudflareConnectionString);
+  const cloudflareDatabase = getCloudflareDatabaseConfig();
+  if (cloudflareDatabase) {
+    if (!workerQueryable) workerQueryable = createWorkerQueryable(cloudflareDatabase);
     return workerQueryable;
   }
 
