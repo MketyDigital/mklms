@@ -14,6 +14,9 @@ These variables apply whether the main MkLMS application runs on Cloudflare Work
 | `MKLMS_ADMIN_ACCESS_KEY` | Yes | Yes | Built-in administrator sign-in credential. Use a long random value. |
 | `MKLMS_ADMIN_SESSION_SECRET` | Yes in production | Yes | Signs administrator sessions. Use a different long random value from the access key. |
 | `MKLMS_ADMIN_SESSION_TTL_SECONDS` | Optional | No | Admin session lifetime. Code default is 28800 seconds (8 hours). |
+| `MKLMS_ACCESS_CODE_PREFIX` | Optional | No | Prefix for generated student access codes when no database setting overrides it. Code default is `ACCESS`. |
+| `MKLMS_CLAIM_VERIFICATION_STRATEGY` | Optional | No | Student first-claim verification fallback when platform settings do not override it. Code default is `preauth-only`. |
+| `MKLMS_STUDENT_SESSION_TTL_SECONDS` | Optional | No | Student session lifetime. Code default is 14 days. |
 | `MKLMS_MEDIA_DELIVERY_BASE_URL` | Required for protected private video | No | Base URL of the separate protected media-delivery service, for example the deployed `mklms-media-delivery` `workers.dev` URL or a custom media domain. Never set this to an R2 S3 endpoint. |
 | `MKLMS_MEDIA_SIGNING_SECRET` | Required for protected private video | Yes | HMAC secret shared by the main MkLMS app and the media-delivery Worker. Generate once and put the identical value in both secret stores. |
 
@@ -46,6 +49,16 @@ Current built-in admin limitations are intentional: it does not yet provide MFA,
 ### Students
 
 Student sign-in also does not depend on an external auth vendor. MkLMS already uses its own preauthorization, access-code credential, hashed credential lookup, server session, enrollment, suspension/revocation, and course authorization records. Student profile/course access therefore works with the application and PostgreSQL database as deployed.
+
+The optional student access/runtime fallbacks are:
+
+```text
+MKLMS_ACCESS_CODE_PREFIX=ACCESS
+MKLMS_CLAIM_VERIFICATION_STRATEGY=preauth-only
+MKLMS_STUDENT_SESSION_TTL_SECONDS=1209600
+```
+
+`1209600` seconds is 14 days. Database `platform_settings` can override the access-code prefix and claim verification strategy, so these environment variables are defaults rather than mandatory launch secrets.
 
 ## 3. Cloudflare main application Worker
 
@@ -102,7 +115,7 @@ Vercel runs MkLMS through the normal Node database path:
 - configure `DATABASE_URL`, `DATABASE_SSL`, and `DATABASE_POOL_MAX`;
 - configure `MKLMS_ADMIN_ACCESS_KEY` and `MKLMS_ADMIN_SESSION_SECRET`;
 - configure `MKLMS_MEDIA_DELIVERY_BASE_URL` and `MKLMS_MEDIA_SIGNING_SECRET` when protected video is enabled;
-- add optional integrations only when you actually use them.
+- add optional student/SMTP/Telegram/hosting/media-automation settings only when you want to override their defaults or enable those integrations.
 
 Vercel does not use `HYPERDRIVE_FRESH` or `HYPERDRIVE_CACHED`. A Vercel-hosted MkLMS installation can still use the same Cloudflare R2 bucket and separate Cloudflare media-delivery Worker.
 
@@ -241,6 +254,14 @@ MKLMS_MEDIA_DELIVERY_BASE_URL=<deployed media Worker URL>
 MKLMS_MEDIA_SIGNING_SECRET=<shared strong random secret>
 MKLMS_EMAIL_PROVIDER=none
 MKLMS_OCI_MEDIA_AUTOMATION_ENABLED=false
+```
+
+Optional student defaults if you want to set them explicitly rather than use code/database defaults:
+
+```text
+MKLMS_ACCESS_CODE_PREFIX=ACCESS
+MKLMS_CLAIM_VERIFICATION_STRATEGY=preauth-only
+MKLMS_STUDENT_SESSION_TTL_SECONDS=1209600
 ```
 
 On the Cloudflare main Worker, also keep the existing `HYPERDRIVE_FRESH` and `HYPERDRIVE_CACHED` bindings.
