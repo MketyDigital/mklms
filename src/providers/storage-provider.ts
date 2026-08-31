@@ -14,6 +14,24 @@ export interface StoredObjectContent {
   contentType: string;
 }
 
+export interface StoredObjectSummary {
+  assetId: string;
+  size?: number | null;
+  uploadedAt?: Date | null;
+}
+
+export interface ListStoredObjectsOptions {
+  prefix?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface ListStoredObjectsResult {
+  objects: StoredObjectSummary[];
+  truncated: boolean;
+  cursor?: string | null;
+}
+
 export interface ReadAuthorization {
   url: string;
   expiresAt: Date;
@@ -22,6 +40,7 @@ export interface ReadAuthorization {
 export interface StorageProvider {
   putObject(input: PutObjectInput): Promise<StoredObjectReference>;
   getObject?(assetId: string): Promise<StoredObjectContent>;
+  listObjects?(options?: ListStoredObjectsOptions): Promise<ListStoredObjectsResult>;
   createReadAuthorization?(
     assetId: string,
     options?: { ttlSeconds?: number },
