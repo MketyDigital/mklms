@@ -34,6 +34,17 @@ export interface ActiveSessionRecord {
   expiresAt: Date;
 }
 
+export interface CompleteVerifiedClaimRepositoryInput {
+  preauthorizationId: string;
+  student: CreateStudentInput;
+  courseId?: string | null;
+  credential: {
+    hash: AccessCodeHash;
+    lookupHash: string;
+    prefix: string;
+  };
+}
+
 export interface AccessRepository {
   findPreauthorization(
     identity: ClaimIdentityInput,
@@ -52,10 +63,13 @@ export interface AccessRepository {
       prefix: string;
     },
   ): Promise<void>;
+  activateEnrollment(studentId: string, courseId: string): Promise<void>;
+  completeVerifiedClaim(
+    input: CompleteVerifiedClaimRepositoryInput,
+  ): Promise<StudentRecord>;
   findActiveCredentialByLookupHash(
     lookupHash: string,
   ): Promise<ActiveCredentialRecord | null>;
-  activateEnrollment(studentId: string, courseId: string): Promise<void>;
   createSession(studentId: string, input: CreateSessionInput): Promise<void>;
   findActiveSessionByTokenHash(
     tokenHash: string,
