@@ -8,7 +8,8 @@ This file is the current operational source of truth for `MketyDigital/mklms`. R
 - Latest merged media-admin cleanup: `706714a8837029da6f9ffc84b6519c65047049c5` (2026-08-31), from PR `#29`.
 - Earlier integrated release merge: `caa4a9c116a4e11f10498e3f3a2f1a48974d8b0f` (2026-08-31).
 - The merged `main` media-admin cleanup passed domain tests, lint, Next.js production build, OpenNext build, main Worker dry-run, protected-media Worker dry-run, billing Worker dry-run, and CodeQL.
-- No application/database migration was added for the media-admin cleanup. Numbered migrations remain `001` through `011`.
+- Current production-readiness audit is on `fix/production-readiness-audit`, draft PR `#30`; it is not merged into `main` yet.
+- No application/database migration was added for the production-readiness audit. Numbered migrations remain `001` through `011`.
 - A prior Cloudflare production build had failed even though the same release code built successfully in preview/CI; if production deployment still fails after bindings/secrets are configured, treat that as a Cloudflare account/configuration/deploy gate and inspect the production build log rather than assuming an application compile regression.
 
 ## Product boundaries that must not regress
@@ -136,9 +137,10 @@ Historical migration 009 and old ingest records are preserved for migration-hist
 - Cloudflare installation: upload/write through the bound private R2 application/storage adapter.
 - Non-Cloudflare installation: use the configured S3-compatible storage adapter or another provider adapter.
 - Uploaded MP4s are stored under `media/...`, remain private, and are registered as `DIRECT` media assets using the storage object reference rather than a permanent public URL.
+- Existing private MP4/HLS objects can be browsed from the configured storage adapter and registered into the MkLMS media library without moving or re-uploading the object.
 - Existing media records and supported source types remain intact, including `DIRECT`, `HLS`, `YOUTUBE`, `EXTERNAL_EMBED`, and `CUSTOM`.
 - Protected playback still uses the separate media-delivery provider; never hand browsers direct private-origin credentials or permanent R2 URLs.
-- Operator-uploaded R2 objects remain valid and unchanged; they can continue to be registered by their private object key. The admin upload form is an additional convenience path.
+- Operator-uploaded R2 objects remain valid and unchanged; after registration, the same media record is available to both Courses and Live Classes.
 
 The older OCI ingest implementation and historical records remain in the repository for migration/history compatibility, but the OCI control panel and active ingest-state querying are no longer part of the active `/admin/media` production workflow. Do not remove or rewrite historical migration 009 as part of future cleanup.
 
@@ -189,13 +191,15 @@ Before calling a real environment production-ready:
 6. Keep R2 public access disabled.
 7. Run GitHub DB migrations with `MIGRATE`; require final status green.
 8. Redeploy `mklms`; require the Cloudflare production build/deploy to pass.
-9. Test admin login and student access-code flow.
-10. Test existing registered direct MP4 media and protected Range seeking. The new `/admin/media` direct-upload form can also be tested separately as a convenience path; existing operator-uploaded R2 videos do not need to be re-uploaded.
-11. Test a paid lesson authorization/refresh/progress path.
-12. Test a public live class before LIVE, during LIVE, and after ENDED.
-13. Test certificate object storage/download path.
-14. Test managed-hosting manual status controls.
-15. If automatic billing is enabled, run a deliberately small real payment and verify settlement only after the verified finished callback.
+9. Test Admin → Media: verify existing private R2 MP4s appear, register one, and confirm the same media record appears in Courses and Live Classes.
+10. Test student access end-to-end: preauth-only, one-time claim-code, manual-approval request/approve/retry, issued persistent access-code login, and course enrollment visibility.
+11. Test a paid lesson authorization/refresh/progress path and protected Range seeking.
+12. Test a public live class before LIVE, during LIVE, and after ENDED using registered private media.
+13. Test Messages unread behavior and admin/student reply synchronization.
+14. Test certificate-template upload, certificate issuance/private object storage/download, and public verification.
+15. Test Settings save plus database/storage/media health cards on the production Cloudflare bindings.
+16. Test managed-hosting manual status controls.
+17. If automatic billing is enabled, run a deliberately small real payment and verify settlement only after the verified finished callback.
 
 ## Cost/plan principle
 
@@ -212,6 +216,37 @@ The architecture should continue to use free-tier/free-included capabilities whe
 - Migrations added/run for this cleanup: none. Existing numbered migrations `001`–`011`, including historical migration 009, were not changed by the implementation.
 - Account-side action specific to this code change: none beyond the existing production requirement that `APP_STORAGE_BUCKET` (or the portable S3-compatible adapter) is configured and private.
 - Exact next safe starting point: run the one-click GitHub DB migration workflow with `MIGRATE`, require **Verify database is current** to pass, then begin the production test gate. Existing R2 videos do not need re-uploading.
+
+## Production-readiness audit handoff — PR #30
+
+- Branch: `fix/production-readiness-audit`.
+- Pull request: draft PR `#30` (`fix: production readiness audit`), open and not merged. Integration/merge remains an explicit user decision.
+- Production base for the audit: `3900c5add2818493be4bb2fb60c72da882185e06` on `main`.
+- Implementation head verified before this handoff-only update: `b4a7dd47e9dd0dd31715ef38f00a95d25d95905b`.
+- Primary production failures addressed:
+  - Cloudflare Hyperdrive adapter now supports dedicated transaction clients used by access-code credential creation/reset and live staged-chat replacement.
+  - Manual-approval claims record the request and allow the approved student to retry successfully.
+  - Student login uses the documented `MKLMS_STUDENT_SESSION_TTL_SECONDS` variable.
+  - Student onboarding uses saved claim settings and always permits a per-student one-time claim code when one was issued.
+  - Admin Access loads real Courses; single and bulk preauthorization validate course IDs so a typo cannot create a credential attached to a nonexistent course. Deliberate portal-only access remains supported.
+  - Admin Media can list compatible MP4/HLS files already present in private R2/S3-compatible storage and register them without moving/re-uploading. Registered records are shared by Courses and Live Classes.
+  - Active Media/Settings/Hosting UI no longer exposes OCI Media Flow or active OCI ingest accounting. Historical OCI code/migration 009 remain for history/checksum compatibility.
+  - Legacy saved `storage_provider=oci` / `media_provider=oci-media-flow` values are normalized when loading active Settings so old production rows do not block saves.
+  - Settings database health now recognizes the actual reachable Hyperdrive runtime instead of incorrectly requiring `DATABASE_URL` on Cloudflare.
+  - Live Class share URLs use saved `publicBaseUrl`.
+  - Admin Messages no longer mark every thread read when the page opens; conversations load lazily and only the opened thread is marked read.
+  - Hosting retains useful migration-recovery guidance but no free-deployment tutorial or OCI processing card.
+- Feature audit performed against the same production wiring:
+  - Admin Home/navigation; Access & Enrollments; Students; Courses; Media; Live Classes; Certificates; Certificate Templates; Messages; Hosting & Usage; Settings.
+  - Student claim/login/session/enrollment; paid course locking/progress/playback; public live state/playback; certificate issuance/delivery/verification; messaging; managed-hosting checkout/settlement; protected media Range delivery.
+- TDD evidence:
+  - initial production-readiness test commit failed Domain tests before implementation;
+  - later focused red runs caught per-student claim-code, unread-message, Settings/Hyperdrive, and course-assignment gaps before their fixes.
+- Verification evidence for implementation head `b4a7dd47e9dd0dd31715ef38f00a95d25d95905b`: GitHub Actions run `33432972943` passed Domain tests, lint, Next.js production build, Cloudflare OpenNext build, main Worker packaging dry-run, protected-media Worker packaging dry-run, and external billing Worker packaging dry-run.
+- A preceding run `33432486855` independently confirmed the R2 browser lint fix plus the same full build/three-Worker packaging chain.
+- Migrations added/changed: none. Numbered migrations remain `001`–`011`; migration 009 remains unchanged.
+- Account-side actions still required: after explicit merge approval, deploy/redeploy the main app and run the production smoke-test gate above against the real Cloudflare/PostgreSQL/R2 environment. Private browser interactions and a real NOWPayments settlement cannot be proven by CI alone.
+- Exact next safe starting point: require CI on the final PR head to be green, review PR `#30`, merge only with explicit user approval, deploy, then run the production smoke-test gate beginning with Admin → Media existing-R2 registration and the student claim/login/enrollment flow.
 
 ## Next project handoff
 
