@@ -30,7 +30,7 @@ export default async function AdminLiveClassesPage() {
     })),
   );
 
-  const publicBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
+  const publicBaseUrl = settings.publicBaseUrl.replace(/\/$/, "");
 
   return (
     <AppLayout
