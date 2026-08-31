@@ -1,6 +1,7 @@
 import { AppLayout } from "@/components/layout/app-layout";
 import { ManagedHostingPanel } from "@/features/hosting/components/managed-hosting-panel";
 import { PostgresManagedHostingRepository } from "@/features/hosting/repositories/postgres-managed-hosting.repository";
+import { getManagedHostingPolicy } from "@/features/hosting/server/managed-hosting-policy";
 import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
 
 export const dynamic = "force-dynamic";
@@ -8,11 +9,11 @@ export const dynamic = "force-dynamic";
 export default async function AdminHostingPage() {
   const hostingRepository = new PostgresManagedHostingRepository();
   const settingsRepository = new PostgresSettingsRepository();
-  const [hostingSettings, usage, platformSettings] = await Promise.all([
-    hostingRepository.getSettings(),
+  const [usage, platformSettings] = await Promise.all([
     hostingRepository.getCurrentMonthUsage(),
     settingsRepository.getPlatformSettings(),
   ]);
+  const policy = getManagedHostingPolicy();
 
   return (
     <AppLayout
@@ -28,11 +29,12 @@ export default async function AdminHostingPage() {
         <div className="mb-6">
           <h1 className="text-2xl font-semibold tracking-tight">Hosting & Usage</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Transparent usage signals, media-processing estimates and optional managed-hosting payment details.
+            Monthly measured/estimated usage and, when enabled for this deployment, the current managed-service amount.
           </p>
         </div>
         <ManagedHostingPanel
-          initialSettings={hostingSettings}
+          policy={policy}
+          monthStart={usage.monthStart}
           usage={{
             courseWatchMinutesMeasured: usage.courseWatchMinutesMeasured,
             liveAudienceMinutesEstimated: usage.liveAudienceMinutesEstimated,
