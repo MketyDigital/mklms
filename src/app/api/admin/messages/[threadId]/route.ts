@@ -7,6 +7,25 @@ import { PostgresSettingsRepository } from "@/features/settings/repositories/pos
 
 const sendSchema = z.object({ text: z.string().trim().min(1).max(5000) });
 
+export async function GET(
+  _request: Request,
+  context: { params: Promise<{ threadId: string }> },
+) {
+  if (!(await hasValidAdminSession())) {
+    return NextResponse.json({ ok: false, message: "Unauthorized." }, { status: 401 });
+  }
+
+  const { threadId } = await context.params;
+  const repository = new PostgresMessageRepository();
+  if (!(await repository.getStudentIdForThread(threadId))) {
+    return NextResponse.json({ ok: false, message: "Conversation not found." }, { status: 404 });
+  }
+
+  const messages = await repository.getThreadMessages(threadId);
+  await repository.markThreadRead(threadId);
+  return NextResponse.json({ ok: true, messages });
+}
+
 export async function POST(
   request: Request,
   context: { params: Promise<{ threadId: string }> },
