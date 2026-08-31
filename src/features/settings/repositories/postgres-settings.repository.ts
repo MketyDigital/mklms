@@ -13,7 +13,7 @@ function normalizeStorageProvider(value: PlatformSettings["storageProvider"]): P
 function normalizeMediaProvider(value: PlatformSettings["mediaProvider"]): PlatformSettings["mediaProvider"] {
   return value === "oci-media-flow" ? "custom" : value;
 }
-function normalizeAccessProvider(_value: PlatformSettings["accessProvider"]): PlatformSettings["accessProvider"] {
+function normalizeAccessProvider(): PlatformSettings["accessProvider"] {
   return "access-code";
 }
 function normalizeEmailProvider(value: PlatformSettings["emailProvider"]): PlatformSettings["emailProvider"] {
@@ -49,7 +49,7 @@ export class PostgresSettingsRepository implements SettingsRepository {
       organizationName: row.organization_name, productName: row.product_name, logoUrl: row.logo_url, faviconUrl: row.favicon_url,
       primaryColor: row.primary_color, secondaryColor: row.secondary_color, supportName: row.support_name, supportEmail: row.support_email,
       publicBaseUrl: row.public_base_url.replace(/\/$/, ""), timezone: row.timezone, locale: row.locale,
-      accessProvider: normalizeAccessProvider(row.access_provider),
+      accessProvider: normalizeAccessProvider(),
       claimVerificationStrategy: normalizeActiveClaimVerificationStrategy(row.claim_verification_strategy),
       storageProvider: normalizeStorageProvider(row.storage_provider), mediaProvider: normalizeMediaProvider(row.media_provider),
       emailProvider: normalizeEmailProvider(row.email_provider), notificationProvider: normalizeNotificationProvider(row.notification_provider),
