@@ -46,4 +46,28 @@ CREATE TABLE IF NOT EXISTS media_watch_credits (
 CREATE INDEX IF NOT EXISTS media_watch_credits_month_idx
   ON media_watch_credits (last_credited_at DESC);
 
+CREATE TABLE IF NOT EXISTS managed_hosting_settings (
+  id TEXT PRIMARY KEY DEFAULT 'default',
+  enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  minimum_monthly_fee_usd NUMERIC(10,2) NOT NULL DEFAULT 15,
+  maximum_monthly_fee_usd NUMERIC(10,2) NOT NULL DEFAULT 50,
+  current_monthly_fee_usd NUMERIC(10,2) NOT NULL DEFAULT 15,
+  payment_network TEXT NOT NULL DEFAULT 'TRC20',
+  wallet_address TEXT NOT NULL DEFAULT '',
+  payment_note TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT managed_hosting_fee_range_check CHECK (
+    minimum_monthly_fee_usd >= 0 AND
+    maximum_monthly_fee_usd >= minimum_monthly_fee_usd AND
+    current_monthly_fee_usd BETWEEN minimum_monthly_fee_usd AND maximum_monthly_fee_usd
+  ),
+  CONSTRAINT managed_hosting_network_check CHECK (
+    payment_network IN ('TRC20','TON','CUSTOM')
+  )
+);
+
+INSERT INTO managed_hosting_settings (id)
+VALUES ('default')
+ON CONFLICT (id) DO NOTHING;
+
 COMMIT;

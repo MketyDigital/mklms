@@ -4,6 +4,8 @@ import path from "node:path";
 import process from "node:process";
 import pg from "pg";
 
+import { ensureMigrationLedger } from "./migration-ledger.mjs";
+
 const { Client } = pg;
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -20,13 +22,7 @@ const checksum = (content) => createHash("sha256").update(content).digest("hex")
 
 await client.connect();
 try {
-  await client.query(`
-    CREATE TABLE IF NOT EXISTS _mklms_migrations (
-      filename TEXT PRIMARY KEY,
-      checksum_sha256 TEXT NOT NULL,
-      applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
+  await ensureMigrationLedger(client);
 
   const dir = path.join(process.cwd(), "db", "migrations");
   const files = (await readdir(dir)).filter((name) => name.endsWith(".sql")).sort();

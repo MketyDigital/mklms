@@ -4,6 +4,8 @@ import path from "node:path";
 import process from "node:process";
 import pg from "pg";
 
+import { ensureMigrationLedger } from "./migration-ledger.mjs";
+
 const { Client } = pg;
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -18,13 +20,7 @@ const client = new Client({
 
 await client.connect();
 try {
-  await client.query(`
-    CREATE TABLE IF NOT EXISTS _mklms_migrations (
-      name TEXT PRIMARY KEY,
-      checksum TEXT NOT NULL,
-      applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
+  await ensureMigrationLedger(client);
 
   const dir = path.join(process.cwd(), "db", "migrations");
   const files = (await readdir(dir)).filter((name) => name.endsWith(".sql")).sort();
@@ -35,12 +31,12 @@ try {
     const sql = await readFile(path.join(dir, file), "utf8");
     const checksum = createHash("sha256").update(sql).digest("hex");
     const existing = await client.query(
-      "SELECT checksum FROM _mklms_migrations WHERE name = $1 LIMIT 1",
+      "SELECT checksum_sha256 FROM _mklms_migrations WHERE filename = $1 LIMIT 1",
       [file],
     );
 
     if (existing.rows[0]) {
-      if (existing.rows[0].checksum !== checksum) {
+      if (existing.rows[0].checksum_sha256 !== checksum) {
         throw new Error(
           `Migration ${file} was already applied but its file contents changed. Create a new migration instead of editing an applied migration.`,
         );
@@ -53,7 +49,7 @@ try {
     process.stdout.write(`Applying ${file}... `);
     await client.query(sql);
     await client.query(
-      "INSERT INTO _mklms_migrations (name, checksum) VALUES ($1, $2)",
+      "INSERT INTO _mklms_migrations (filename, checksum_sha256) VALUES ($1, $2)",
       [file, checksum],
     );
     console.log("done");
