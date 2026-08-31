@@ -86,35 +86,31 @@ The exact same `MKLMS_MEDIA_SIGNING_SECRET` must be configured on the media Work
 
 ## Media: current production path
 
-The current recommended format is **direct H.264/AAC MP4 in private R2**, delivered through `mklms-media-delivery`.
+The standard media flow is now:
 
-For compatible Zoom MP4 recordings, transcoding is not required simply to store/play them in MkLMS. If browser-start optimization is needed, Fast Start can be applied without re-encoding:
+```text
+Admin -> Media Library -> Upload private MP4
+  -> configured private StorageProvider
+  -> media/uploads/YYYY/MM/...mp4
+  -> automatic DIRECT/READY Media Library registration
+  -> protected playback through mklms-media-delivery
+```
+
+On Cloudflare, the upload uses the existing native `APP_STORAGE_BUCKET` binding to private R2. On Vercel/OCI/VPS or another non-Cloudflare installation, the same admin workflow uses the configured S3-compatible storage adapter. Large videos are uploaded in multipart chunks rather than one giant application request.
+
+The current recommended format is **direct H.264/AAC MP4**. Compatible Zoom recordings do not need transcoding simply to store/play them in MkLMS. If browser-start optimization is needed, Fast Start can be applied without re-encoding:
 
 ```bash
 ffmpeg -i input.mp4 -c copy -movflags +faststart output.mp4
 ```
 
-Use opaque private object keys such as:
-
-```text
-media/transformation-program/module-01/lesson-01.mp4
-```
-
-and register that key as the media provider asset reference. Do not register a public R2 URL.
+The existing **Register media asset** form remains available for files already uploaded through the Cloudflare R2 dashboard and for YouTube/external/custom providers. For private storage media, register only the opaque private object key, never a public R2 URL.
 
 ### OCI Media Flow
 
-OCI Media Flow → R2 is now a **legacy/optional adapter path**, not a current production requirement. Keep:
+OCI Media Flow → R2 is retained only as a **legacy/optional adapter/reference path**. It is not required by the normal admin upload workflow and is not required for current production.
 
-```env
-MKLMS_OCI_MEDIA_AUTOMATION_ENABLED=false
-```
-
-unless a future installation deliberately chooses that workflow.
-
-Historical migration 009 and its ingest-job model remain intact for migration-history safety. The current admin Media page still contains older OCI ingest UI/guidance; replacing that with a portable admin upload/register experience is a follow-up project and does not block current protected direct-MP4 production testing.
-
-The future upload UI should remain provider-portable: Cloudflare deployments can use native bound R2 storage, while Vercel/OCI/VPS installations can use the existing S3-compatible storage adapter or another provider adapter.
+Historical migration 009 and legacy ingest tables/code remain intact for migration-history/backward-compatibility safety. Do not rewrite historical migrations merely because the active admin workflow no longer uses OCI ingest.
 
 ## Live classes
 
@@ -176,7 +172,7 @@ Leave `MKLMS_EMAIL_PROVIDER=none` when SMTP is not wanted.
 
 ### Portable S3-compatible application storage
 
-Cloudflare production now prefers the native `APP_STORAGE_BUCKET` binding for certificates/general private application objects. For Vercel/OCI/VPS or another non-Cloudflare host, the portable S3-compatible fallback remains:
+Cloudflare production prefers the native `APP_STORAGE_BUCKET` binding for admin media uploads, certificates and other private application objects. For Vercel/OCI/VPS or another non-Cloudflare host, the portable S3-compatible fallback remains:
 
 ```env
 MKLMS_STORAGE_BUCKET=
@@ -239,7 +235,7 @@ npm run deploy
 - `/admin` — operational dashboard
 - `/admin/access` — preauthorization/students/enrollments
 - `/admin/courses` — course/module/lesson management
-- `/admin/media` — reusable media library; current legacy OCI ingest panel is optional/deferred
+- `/admin/media` — private MP4 upload, manual provider registration, and reusable media library
 - `/admin/live-classes` — scheduled simulated-live sessions and attendee operations
 - `/admin/certificates` — certificate operations
 - `/admin/messages` — student conversations
@@ -250,6 +246,6 @@ npm run deploy
 
 ## Project continuity
 
-Read [`AGENTS.md`](AGENTS.md) first. It records the current release state, verified architecture, production setup gates, known account-side issue, media direction, and exact next project handoff.
+Read [`AGENTS.md`](AGENTS.md) first. It records the current release state, verified architecture, production setup gates, media direction, and exact next project handoff.
 
 `agentmklms.md` is retained as historical architecture/progress context, but `AGENTS.md` takes precedence where older decisions differ.

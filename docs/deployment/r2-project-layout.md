@@ -32,6 +32,11 @@ shared-media/
 
 Use strict prefixes and scoped operator credentials. Never rely on object names alone for authorization.
 
+For the current `spf-media` installation, both Cloudflare bindings point to the same private bucket for different roles:
+
+- main app `APP_STORAGE_BUCKET` — private admin uploads, certificates and application-managed objects;
+- media Worker `MEDIA_BUCKET` — protected viewer delivery.
+
 ## R2 roles
 
 R2 can store direct MP4 video, HLS packages, images, generated certificates, downloadable files, backups/exports and other application objects. Separate buckets/prefixes are an operational choice, not a technical limitation.
@@ -40,31 +45,34 @@ R2 stores and serves objects; it does not transcode source video.
 
 ## Recommended initial video path: direct MP4
 
-For the current Zoom recordings, H.264 video + AAC audio in MP4 is already browser-compatible and modest in size. The preferred initial production path is therefore:
+For the current Zoom recordings, H.264 video + AAC audio in MP4 is already browser-compatible and modest in size. The standard production path is now:
 
 ```text
-original Zoom H.264/AAC MP4
+Admin -> Media Library -> Upload private MP4
+        ↓ multipart 10 MiB chunks
+configured StorageProvider
         ↓
-rclone/operator upload
+Cloudflare: APP_STORAGE_BUCKET -> private R2
+Other hosts: S3-compatible private storage
         ↓
-private R2
+automatic DIRECT/READY media registration
         ↓
-short-lived MkLMS authorization
+short-lived MkLMS playback authorization
         ↓
 separate mklms-media-delivery Worker
         ↓
 browser MP4 playback with byte ranges
 ```
 
-Example R2 objects:
+The admin upload service generates keys under:
 
 ```text
-media/transformation-program/module-01/lesson-01.mp4
-media/transformation-program/module-01/lesson-02.mp4
-media/live/free-class-day-01.mp4
+media/uploads/YYYY/MM/<uuid>-<safe-file-name>.mp4
 ```
 
-MkLMS stores only the opaque object key, for example:
+The browser does not choose an arbitrary bucket prefix and never receives R2/S3 credentials or a public storage URL.
+
+The existing manual **Register media asset** form remains valid for files uploaded outside MkLMS, including MP4s uploaded directly through the Cloudflare R2 dashboard. In that case register only the opaque object key, for example:
 
 ```text
 media/transformation-program/module-01/lesson-01.mp4
@@ -73,6 +81,21 @@ media/transformation-program/module-01/lesson-01.mp4
 Do not store or return an R2 S3 HTTP URL as the student's playback reference.
 
 The separate media Worker is bound directly to the private R2 bucket through `MEDIA_BUCKET`. It validates the short-lived MkLMS HMAC authorization before every full, ranged, or HEAD request and supports `206 Partial Content` so browsers can seek/resume efficiently.
+
+## Portable admin uploads
+
+The admin upload experience is provider-neutral:
+
+- **Cloudflare main app:** `APP_STORAGE_BUCKET` uses the native R2 multipart API; no R2 access keys are required in the Worker.
+- **Vercel/OCI/VPS/Node:** the existing `MKLMS_STORAGE_*` configuration uses S3-compatible multipart commands.
+
+This preserves the same `/admin/media` workflow when the main application is hosted outside Cloudflare. The protected delivery adapter remains independently configured through `MKLMS_MEDIA_DELIVERY_BASE_URL`.
+
+## Legacy OCI Media Flow
+
+OCI Media Flow -> R2 is not part of the normal production upload path. Historical ingest tables/migration 009 and legacy adapter code remain for backward compatibility and migration checksum safety, but the active admin Media Library does not require OCI transcoding.
+
+A future installation may deliberately use OCI or another transcoder if adaptive HLS is needed; that remains an optional adapter choice.
 
 ## Paid-course security rule
 
@@ -96,7 +119,7 @@ The R2 S3 hostname below is operator/server configuration only and must not appe
 https://<ACCOUNT_ID>.r2.cloudflarestorage.com
 ```
 
-Operator tools such as rclone may use that endpoint with scoped R2 API credentials. The media-delivery Worker does not need those access-key credentials because it uses a direct Cloudflare R2 binding.
+Operator tools such as rclone/Cyberduck may use that endpoint with scoped R2 API credentials. Neither the media-delivery Worker nor the Cloudflare main app's native `APP_STORAGE_BUCKET` binding needs those access-key credentials.
 
 ## Future HLS option
 
@@ -115,20 +138,4 @@ media/course-01-lesson-01/
   720p/seg_000001.ts
 ```
 
-When HLS is used, protection must cover the **whole object graph**, not only the master playlist:
-
-```text
-signed MkLMS delivery URL
-        ↓
-master.m3u8
-        ↓
-quality playlists
-        ↓
-segments
-        ↓
-private R2 objects
-```
-
-A protected `master.m3u8` that references permanent public R2 child objects is not secure delivery.
-
-A viewer can necessarily see the short-lived URL their browser is currently using. The security goal is to keep that URL temporary and MkLMS-controlled while never exposing a reusable R2 origin/object URL. This is access control, not DRM; an authorized viewer can still screen-record content.
+When HLS is used, protection must cover the **whole object graph**, not only the master playlist. A viewer can necessarily see the short-lived URL their browser is currently using. The security goal is to keep that URL temporary and MkLMS-controlled while never exposing a reusable R2 origin/object URL. This is access control, not DRM; an authorized viewer can still screen-record content.
