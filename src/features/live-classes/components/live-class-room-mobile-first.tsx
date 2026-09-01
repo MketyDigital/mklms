@@ -213,7 +213,7 @@ export function LiveClassRoomMobileFirst({
       : null;
     if (!expectedSessionId || payload.sessionId !== expectedSessionId) {
       setStagedChat([]);
-      setChatFeedLoaded(true);
+      setChatFeedLoaded(false);
       return payload;
     }
 
