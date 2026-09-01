@@ -17,6 +17,7 @@ const schema = z.object({
   mediaProvider: z.enum(["generic-hls", "youtube", "external-embed", "custom"]),
   emailProvider: z.enum(["smtp", "none"]), notificationProvider: z.enum(["telegram", "none"]),
   accessCodePrefix: z.string().min(1).max(24), certificatePrefix: z.string().min(1).max(24),
+  completionCommunityUrl: z.string().url().nullable().optional(),
 });
 
 export async function GET() {
