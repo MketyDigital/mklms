@@ -18,6 +18,7 @@ import {
 } from "../domain/broadcast-position";
 import {
   getInitialTimelineMessages,
+  getNewTimelineMessages,
   isLiveCtaVisible,
 } from "../domain/live-timeline";
 
@@ -47,6 +48,14 @@ interface LiveRoomState {
 
 type StagedChatMessage = LiveRoomState["chat"]["staged"][number];
 
+type LiveChatStreamItem = {
+  id: string;
+  name: string;
+  message: string;
+  mine: boolean;
+  source: "staged" | "viewer";
+};
+
 interface PlaybackAuthorization {
   playbackType: "HLS" | "DIRECT" | "EMBED" | "CUSTOM";
   url: string;
@@ -62,6 +71,9 @@ interface PlaybackState {
 
 const SAFETY_STATE_REFRESH_MS = 5 * 60 * 1000;
 const CHAT_REFRESH_MS = 5 * 60 * 1000;
+const LIVE_CHAT_INITIAL_CONTEXT = 10;
+const LIVE_CHAT_MAX_RENDERED = 80;
+const LIVE_CHAT_BOTTOM_THRESHOLD_PX = 48;
 
 type DirectSlot = 0 | 1;
 
@@ -79,6 +91,26 @@ function formatCountdown(targetIso: string | null, nowMs: number): string {
     `${String(minutes).padStart(2, "0")}m`,
     `${String(seconds).padStart(2, "0")}s`,
   ].filter(Boolean).join(" : ");
+}
+
+function stagedStreamItem(item: StagedChatMessage): LiveChatStreamItem {
+  return {
+    id: `staged-${item.id}`,
+    name: item.displayName,
+    message: item.message,
+    mine: false,
+    source: "staged",
+  };
+}
+
+function viewerStreamItem(item: OwnLiveComment, fallbackName: string): LiveChatStreamItem {
+  return {
+    id: `viewer-${item.id}`,
+    name: item.displayName || fallbackName || "You",
+    message: item.message,
+    mine: true,
+    source: "viewer",
+  };
 }
 
 export function LiveClassRoomMobileFirst({
@@ -99,6 +131,9 @@ export function LiveClassRoomMobileFirst({
   const activeDirectSlotRef = useRef<DirectSlot>(0);
   const directSwapGenerationRef = useRef(0);
   const previousStorageKeyRef = useRef<string | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  const seenStagedMessageIdsRef = useRef<Set<string>>(new Set());
+  const liveChatSessionRef = useRef<string | null>(null);
 
   const [roomState, setRoomState] = useState<LiveRoomState | null>(null);
   const [playback, setPlayback] = useState<PlaybackState | null>(null);
@@ -114,6 +149,10 @@ export function LiveClassRoomMobileFirst({
   const [ownComments, setOwnComments] = useState<OwnLiveComment[]>([]);
   const [stagedChat, setStagedChat] = useState<StagedChatMessage[]>([]);
   const [chatFeedLoaded, setChatFeedLoaded] = useState(false);
+  const [liveChatStream, setLiveChatStream] = useState<LiveChatStreamItem[]>([]);
+  const [streamSeeded, setStreamSeeded] = useState(false);
+  const [isFollowingLiveChat, setIsFollowingLiveChat] = useState(true);
+  const [hasUnreadLiveChat, setHasUnreadLiveChat] = useState(false);
 
   const activeSessionId = roomState?.state === "LIVE" ? roomState.session?.id ?? null : null;
   const storageKey = useMemo(
@@ -318,8 +357,14 @@ export function LiveClassRoomMobileFirst({
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      liveChatSessionRef.current = activeSessionId;
+      seenStagedMessageIdsRef.current = new Set();
       setStagedChat([]);
       setChatFeedLoaded(false);
+      setLiveChatStream([]);
+      setStreamSeeded(false);
+      setIsFollowingLiveChat(true);
+      setHasUnreadLiveChat(false);
       if (activeSessionId) void fetchChat().catch(() => undefined);
     }, 0);
     return () => window.clearTimeout(timer);
@@ -372,6 +417,111 @@ export function LiveClassRoomMobileFirst({
       durationSeconds: roomState.session.durationSeconds,
     });
   }, [nowMs, roomState]);
+
+  const timelineSource = useMemo(() => {
+    if (!roomState || roomState.state !== "LIVE") return [];
+    return chatFeedLoaded ? stagedChat : roomState.chat.staged;
+  }, [chatFeedLoaded, roomState, stagedChat]);
+
+  useEffect(() => {
+    if (!activeSessionId || liveChatSessionRef.current !== activeSessionId || streamSeeded) return;
+    if (!chatFeedLoaded && timelineSource.length === 0) return;
+    const timer = window.setTimeout(() => {
+      const reached = getNewTimelineMessages(
+        timelineSource,
+        currentLiveOffsetSeconds,
+        new Set<string>(),
+      );
+      seenStagedMessageIdsRef.current = new Set(reached.map((item) => item.id));
+      const initial = getInitialTimelineMessages(
+        timelineSource,
+        currentLiveOffsetSeconds,
+        LIVE_CHAT_INITIAL_CONTEXT,
+      );
+      setLiveChatStream(initial.map(stagedStreamItem));
+      setStreamSeeded(true);
+      setIsFollowingLiveChat(true);
+      setHasUnreadLiveChat(false);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [
+    activeSessionId,
+    chatFeedLoaded,
+    currentLiveOffsetSeconds,
+    streamSeeded,
+    timelineSource,
+  ]);
+
+  useEffect(() => {
+    if (!activeSessionId || !streamSeeded) return;
+    const newlyReached = getNewTimelineMessages(
+      timelineSource,
+      currentLiveOffsetSeconds,
+      seenStagedMessageIdsRef.current,
+    );
+    if (newlyReached.length === 0) return;
+    newlyReached.forEach((item) => seenStagedMessageIdsRef.current.add(item.id));
+    const timer = window.setTimeout(() => {
+      setLiveChatStream((current) => [
+        ...current,
+        ...newlyReached.map(stagedStreamItem),
+      ].slice(-LIVE_CHAT_MAX_RENDERED));
+      if (!isFollowingLiveChat) setHasUnreadLiveChat(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [
+    activeSessionId,
+    currentLiveOffsetSeconds,
+    isFollowingLiveChat,
+    streamSeeded,
+    timelineSource,
+  ]);
+
+  useEffect(() => {
+    if (!streamSeeded || ownComments.length === 0) return;
+    const timer = window.setTimeout(() => {
+      setLiveChatStream((current) => {
+        const currentIds = new Set(current.map((item) => item.id));
+        const restored = ownComments
+          .map((item) => viewerStreamItem(item, displayName))
+          .filter((item) => !currentIds.has(item.id));
+        return restored.length
+          ? [...current, ...restored].slice(-LIVE_CHAT_MAX_RENDERED)
+          : current;
+      });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [displayName, ownComments, streamSeeded]);
+
+  const scrollChatToLive = useCallback((behavior: ScrollBehavior = "smooth") => {
+    const node = chatScrollRef.current;
+    if (!node) return;
+    node.scrollTo({
+      top: node.scrollHeight,
+      behavior,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isFollowingLiveChat || liveChatStream.length === 0) return;
+    const frame = window.requestAnimationFrame(() => scrollChatToLive("smooth"));
+    return () => window.cancelAnimationFrame(frame);
+  }, [isFollowingLiveChat, liveChatStream.length, scrollChatToLive]);
+
+  const handleChatScroll = useCallback(() => {
+    const node = chatScrollRef.current;
+    if (!node) return;
+    const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+    const following = distanceFromBottom <= LIVE_CHAT_BOTTOM_THRESHOLD_PX;
+    setIsFollowingLiveChat(following);
+    if (following) setHasUnreadLiveChat(false);
+  }, []);
+
+  const followLiveChat = useCallback(() => {
+    setIsFollowingLiveChat(true);
+    setHasUnreadLiveChat(false);
+    scrollChatToLive("smooth");
+  }, [scrollChatToLive]);
 
   const expectedPosition = useCallback(() => {
     const currentState = roomStateRef.current;
@@ -516,16 +666,6 @@ export function LiveClassRoomMobileFirst({
     return () => window.clearTimeout(timer);
   }, [roomState?.ended?.redirectUrl, roomState?.state]);
 
-  const visibleStagedChat = useMemo(() => {
-    if (!roomState || roomState.state !== "LIVE") return [];
-    const source = chatFeedLoaded ? stagedChat : roomState.chat.staged;
-    return getInitialTimelineMessages(
-      source,
-      currentLiveOffsetSeconds,
-      20,
-    );
-  }, [chatFeedLoaded, currentLiveOffsetSeconds, roomState, stagedChat]);
-
   const visibleCta = useMemo(() => {
     if (!roomState?.cta || roomState.state !== "LIVE") return null;
     return isLiveCtaVisible({
@@ -533,21 +673,6 @@ export function LiveClassRoomMobileFirst({
       revealOffsetSeconds: roomState.cta.revealOffsetSeconds,
     }) ? roomState.cta : null;
   }, [currentLiveOffsetSeconds, roomState]);
-
-  const combinedChat = useMemo(() => [
-    ...visibleStagedChat.map((item) => ({
-      id: `staged-${item.id}`,
-      name: item.displayName,
-      message: item.message,
-      mine: false,
-    })),
-    ...ownComments.map((item) => ({
-      id: `own-${item.id}`,
-      name: item.displayName || displayName || "You",
-      message: item.message,
-      mine: true,
-    })),
-  ], [displayName, ownComments, visibleStagedChat]);
 
   async function sendComment() {
     const text = comment.trim();
@@ -581,6 +706,12 @@ export function LiveClassRoomMobileFirst({
       }
       const next = appendOwnLiveComment(ownComments, payload.message);
       setOwnComments(next);
+      setLiveChatStream((current) => [
+        ...current.filter((item) => item.id !== `viewer-${payload.message.id}`),
+        viewerStreamItem(payload.message, displayName),
+      ].slice(-LIVE_CHAT_MAX_RENDERED));
+      setIsFollowingLiveChat(true);
+      setHasUnreadLiveChat(false);
       if (storageKey) window.localStorage.setItem(storageKey, JSON.stringify(next));
       setComment("");
     } catch (caught) {
@@ -826,14 +957,18 @@ export function LiveClassRoomMobileFirst({
             <div className="hidden lg:col-start-1 lg:row-start-2 lg:block" />
           )}
 
-          <aside className="flex min-h-[60dvh] flex-col overflow-hidden rounded-xl border border-white/10 bg-white/[0.04] lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:min-h-[520px] lg:max-h-[calc(100dvh-7rem)]">
+          <aside className="relative flex min-h-[60dvh] flex-col overflow-hidden rounded-xl border border-white/10 bg-white/[0.04] lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:min-h-[520px] lg:max-h-[calc(100dvh-7rem)]">
             <div className="border-b border-white/10 px-4 py-3">
               <div className="flex items-center gap-2 text-sm font-semibold">
                 <MessageCircle className="size-4" /> Live chat
               </div>
             </div>
-            <div className="flex-1 space-y-3 overflow-y-auto p-4">
-              {combinedChat.map((item) => (
+            <div
+              ref={chatScrollRef}
+              onScroll={handleChatScroll}
+              className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4"
+            >
+              {liveChatStream.map((item) => (
                 <div
                   key={item.id}
                   className={
@@ -850,12 +985,24 @@ export function LiveClassRoomMobileFirst({
                   </p>
                 </div>
               ))}
-              {combinedChat.length === 0 ? (
+              {liveChatStream.length === 0 ? (
                 <p className="py-8 text-center text-xs text-white/35">
                   Chat will appear here as the class progresses.
                 </p>
               ) : null}
             </div>
+            {hasUnreadLiveChat ? (
+              <div className="pointer-events-none absolute bottom-32 left-0 right-0 flex justify-center px-4">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="pointer-events-auto rounded-full shadow-lg"
+                  onClick={followLiveChat}
+                >
+                  New messages
+                </Button>
+              </div>
+            ) : null}
             <div className="space-y-2 border-t border-white/10 bg-neutral-950/60 p-3 backdrop-blur">
               <Input
                 value={displayName}
