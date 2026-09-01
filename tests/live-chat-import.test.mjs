@@ -56,6 +56,31 @@ test('Zoom wall-clock timestamps are rebased so imported messages appear during 
   assert.equal(result.errors.length, 0);
 });
 
+test('Zoom host and panelist recipient headers import as normal staged chat', () => {
+  const result = parseTimestampedLiveChat(`18:57:14 From Brooke Balthaser to Hosts and panelists:\n\tTuesday evenings work for our community.\n19:02:23 From Miles Hogan to Hosts and panelists:\n\tThank you.`);
+  assert.deepEqual(result.items.map(({ displayName, message }) => ({ displayName, message })), [
+    { displayName: 'Brooke Balthaser', message: 'Tuesday evenings work for our community.' },
+    { displayName: 'Miles Hogan', message: 'Thank you.' },
+  ]);
+  assert.equal(result.errors.length, 0);
+});
+
+test('older Zoom exports with timestamp on one line and From header on the next import correctly', () => {
+  const result = parseTimestampedLiveChat(`11:45:12\n From KOTSIDIS EFTHYMIOS : Ready for class\n11:45:32\n From TSANIS NIKOLAOS : Good morning`);
+  assert.deepEqual(result.items.map(({ displayName, message }) => ({ displayName, message })), [
+    { displayName: 'KOTSIDIS EFTHYMIOS', message: 'Ready for class' },
+    { displayName: 'TSANIS NIKOLAOS', message: 'Good morning' },
+  ]);
+  assert.equal(result.errors.length, 0);
+});
+
+test('wrapped long Zoom messages keep continuation lines until the next timestamped chat entry', () => {
+  const result = parseTimestampedLiveChat(`11:52:16 From Riley to Everyone: This is a long message that was copied from Zoom and wrapped\nonto a second line without another timestamp.\n11:52:24 From Riley to Everyone: Welcome to my meeting`);
+  assert.equal(result.items.length, 2);
+  assert.equal(result.items[0].message, 'This is a long message that was copied from Zoom and wrapped\nonto a second line without another timestamp.');
+  assert.equal(result.errors.length, 0);
+});
+
 test('invalid rows are reported without discarding valid imported chat', () => {
   const result = parseTimestampedLiveChat(`bad row\n00:00:05 Ada: Ready`);
   assert.equal(result.items.length, 1);
