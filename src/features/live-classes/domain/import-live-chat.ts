@@ -99,6 +99,11 @@ interface PendingZoomMessage {
   messageLines: string[];
 }
 
+interface PendingTimestamp {
+  line: number;
+  offsetSeconds: number;
+}
+
 function flushPendingZoomMessage(
   result: LiveChatImportResult,
   pending: PendingZoomMessage | null,
@@ -116,19 +121,53 @@ function flushPendingZoomMessage(
   });
 }
 
+function parseMessageHeader(value: string): { displayName: string; message: string } | null {
+  const remainder = value.trim();
+  if (!remainder) return null;
+
+  // Modern Zoom exports can target Everyone, Hosts and panelists, a host,
+  // or another visible recipient. The recipient does not affect staged-chat
+  // display; only the sender and message are retained.
+  const zoomRecipientMatch = remainder.match(/^From\s+(.+?)\s+to\s+.+?\s*:\s*(.*)$/i);
+  if (zoomRecipientMatch) {
+    return {
+      displayName: zoomRecipientMatch[1].trim(),
+      message: zoomRecipientMatch[2].trim(),
+    };
+  }
+
+  // Older Zoom meeting_saved_chat files can omit the recipient entirely.
+  const oldZoomMatch = remainder.match(/^From\s+(.+?)\s*:\s*(.*)$/i);
+  if (oldZoomMatch) {
+    return {
+      displayName: oldZoomMatch[1].trim(),
+      message: oldZoomMatch[2].trim(),
+    };
+  }
+
+  const genericMatch = remainder.match(/^(.+?)\s*:\s*(.*)$/);
+  if (!genericMatch) return null;
+  return {
+    displayName: genericMatch[1].trim(),
+    message: genericMatch[2].trim(),
+  };
+}
+
+export function looksLikeZoomChatExport(input: string): boolean {
+  return /(?:^|\n)\s*(?:\d{1,2}:\d{2}:\d{2}\s+)?From\s+.+?(?:\s+to\s+.+?)?\s*:/im.test(input);
+}
+
 function rebaseWallClockZoomTimestamps(
   result: LiveChatImportResult,
   input: string,
 ): LiveChatImportResult {
-  if (result.items.length === 0) return result;
-
-  const hasZoomEveryoneWrapper = /From\s+.+?\s+to\s+Everyone\s*:/i.test(input);
-  if (!hasZoomEveryoneWrapper) return result;
+  if (result.items.length === 0 || !looksLikeZoomChatExport(input)) return result;
 
   // Sessions are capped at 12 hours. A first Zoom timestamp at or beyond that
   // cannot be a valid in-video offset, so treat it as a wall-clock time and
-  // rebase the export to the first chat message. Relative Zoom exports such as
-  // 00:00:30 remain untouched.
+  // rebase the export to the first chat message. Session-aware calibration in
+  // AdminLiveClassService handles morning wall-clock exports and explicit
+  // operator placement when the first chat did not occur at video second 0.
   const firstOffset = result.items[0]?.offsetSeconds ?? 0;
   if (firstOffset < 12 * 60 * 60) return result;
 
@@ -147,73 +186,87 @@ export function parseTimestampedLiveChat(input: string): LiveChatImportResult {
   const result: LiveChatImportResult = { items: [], errors: [] };
   const normalizedInput = input.replace(/^\uFEFF/, "");
   const lines = normalizedInput.split(/\r?\n/);
-  let pending: PendingZoomMessage | null = null;
+  let pendingMessage: PendingZoomMessage | null = null;
+  let pendingTimestamp: PendingTimestamp | null = null;
+
+  const startMessage = (
+    line: number,
+    offsetSeconds: number,
+    header: { displayName: string; message: string },
+  ) => {
+    if (!header.displayName) {
+      result.errors.push({ line, message: "Missing display name." });
+      return;
+    }
+    flushPendingZoomMessage(result, pendingMessage);
+    pendingMessage = {
+      line,
+      offsetSeconds,
+      displayName: header.displayName,
+      messageLines: header.message ? [header.message] : [],
+    };
+  };
 
   for (let index = 0; index < lines.length; index += 1) {
     const rawLine = lines[index];
     const line = rawLine.trim();
     if (!line) continue;
 
-    const timestampMatch = line.match(/^(\d{1,2}):(\d{2}):(\d{2})\s+(.+)$/);
-    if (!timestampMatch) {
-      if (pending) {
-        pending.messageLines.push(line);
-      } else {
-        result.errors.push({ line: index + 1, message: "Expected HH:MM:SS Name: message." });
-      }
-      continue;
-    }
-
-    flushPendingZoomMessage(result, pending);
-    pending = null;
-
-    const [, hours, minutes, seconds, remainderRaw] = timestampMatch;
-    const numericMinutes = Number(minutes);
-    const numericSeconds = Number(seconds);
-    if (numericMinutes > 59 || numericSeconds > 59) {
-      result.errors.push({ line: index + 1, message: "Invalid timestamp." });
-      continue;
-    }
-
-    const offsetSeconds = timestampToSeconds(hours, minutes, seconds);
-    const remainder = remainderRaw.trim();
-    const zoomMatch = remainder.match(/^From\s+(.+?)\s+to\s+Everyone\s*:\s*(.*)$/i);
-    if (zoomMatch) {
-      const displayName = zoomMatch[1].trim();
-      const message = zoomMatch[2].trim();
-      if (!displayName) {
-        result.errors.push({ line: index + 1, message: "Missing display name or message." });
+    const timestampMatch = line.match(/^(\d{1,2}):(\d{2}):(\d{2})(?:\s+(.*))?$/);
+    if (timestampMatch) {
+      const [, hours, minutes, seconds, remainderRaw = ""] = timestampMatch;
+      const numericMinutes = Number(minutes);
+      const numericSeconds = Number(seconds);
+      if (numericMinutes > 59 || numericSeconds > 59) {
+        result.errors.push({ line: index + 1, message: "Invalid timestamp." });
         continue;
       }
-      if (message) {
-        result.items.push({ offsetSeconds, displayName, message });
-      } else {
-        pending = {
-          line: index + 1,
-          offsetSeconds,
-          displayName,
-          messageLines: [],
-        };
+
+      flushPendingZoomMessage(result, pendingMessage);
+      pendingMessage = null;
+      const offsetSeconds = timestampToSeconds(hours, minutes, seconds);
+      const remainder = remainderRaw.trim();
+
+      if (!remainder) {
+        pendingTimestamp = { line: index + 1, offsetSeconds };
+        continue;
       }
+
+      pendingTimestamp = null;
+      const header = parseMessageHeader(remainder);
+      if (!header) {
+        result.errors.push({ line: index + 1, message: "Expected HH:MM:SS Name: message." });
+        continue;
+      }
+      startMessage(index + 1, offsetSeconds, header);
       continue;
     }
 
-    const genericMatch = remainder.match(/^(.+?)\s*:\s*(.+)$/);
-    if (!genericMatch) {
-      result.errors.push({ line: index + 1, message: "Expected HH:MM:SS Name: message." });
+    if (pendingTimestamp) {
+      const header = parseMessageHeader(line);
+      if (header) {
+        startMessage(pendingTimestamp.line, pendingTimestamp.offsetSeconds, header);
+        pendingTimestamp = null;
+        continue;
+      }
+      result.errors.push({ line: pendingTimestamp.line, message: "Expected a chat message after timestamp." });
+      pendingTimestamp = null;
+    }
+
+    if (pendingMessage) {
+      // Any non-timestamp line following a recognized chat header is a message
+      // continuation. This preserves long/wrapped copied text exactly instead
+      // of silently discarding its second physical line.
+      pendingMessage.messageLines.push(line);
       continue;
     }
 
-    const displayName = genericMatch[1].trim();
-    const message = genericMatch[2].trim();
-    if (!displayName || !message) {
-      result.errors.push({ line: index + 1, message: "Missing display name or message." });
-      continue;
-    }
-
-    result.items.push({ offsetSeconds, displayName, message });
+    result.errors.push({ line: index + 1, message: "Expected HH:MM:SS Name: message." });
   }
 
-  flushPendingZoomMessage(result, pending);
+  if (pendingTimestamp) {
+    result.errors.push({ line: pendingTimestamp.line, message: "Expected a chat message after timestamp." });
+  }
+  flushPendingZoomMessage(result, pendingMessage);
   return rebaseWallClockZoomTimestamps(result, normalizedInput);
 }
