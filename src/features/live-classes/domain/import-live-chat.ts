@@ -116,9 +116,37 @@ function flushPendingZoomMessage(
   });
 }
 
+function rebaseWallClockZoomTimestamps(
+  result: LiveChatImportResult,
+  input: string,
+): LiveChatImportResult {
+  if (result.items.length === 0) return result;
+
+  const hasZoomEveryoneWrapper = /From\s+.+?\s+to\s+Everyone\s*:/i.test(input);
+  if (!hasZoomEveryoneWrapper) return result;
+
+  // Sessions are capped at 12 hours. A first Zoom timestamp at or beyond that
+  // cannot be a valid in-video offset, so treat it as a wall-clock time and
+  // rebase the export to the first chat message. Relative Zoom exports such as
+  // 00:00:30 remain untouched.
+  const firstOffset = result.items[0]?.offsetSeconds ?? 0;
+  if (firstOffset < 12 * 60 * 60) return result;
+
+  return {
+    ...result,
+    items: result.items.map((item) => ({
+      ...item,
+      offsetSeconds: item.offsetSeconds >= firstOffset
+        ? item.offsetSeconds - firstOffset
+        : item.offsetSeconds + 24 * 60 * 60 - firstOffset,
+    })),
+  };
+}
+
 export function parseTimestampedLiveChat(input: string): LiveChatImportResult {
   const result: LiveChatImportResult = { items: [], errors: [] };
-  const lines = input.replace(/^\uFEFF/, "").split(/\r?\n/);
+  const normalizedInput = input.replace(/^\uFEFF/, "");
+  const lines = normalizedInput.split(/\r?\n/);
   let pending: PendingZoomMessage | null = null;
 
   for (let index = 0; index < lines.length; index += 1) {
@@ -187,5 +215,5 @@ export function parseTimestampedLiveChat(input: string): LiveChatImportResult {
   }
 
   flushPendingZoomMessage(result, pending);
-  return result;
+  return rebaseWallClockZoomTimestamps(result, normalizedInput);
 }
