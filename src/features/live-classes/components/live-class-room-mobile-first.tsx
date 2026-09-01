@@ -704,11 +704,12 @@ export function LiveClassRoomMobileFirst({
             : "Comment could not be sent.",
         );
       }
-      const next = appendOwnLiveComment(ownComments, payload.message);
+      const sentMessage = payload.message;
+      const next = appendOwnLiveComment(ownComments, sentMessage);
       setOwnComments(next);
       setLiveChatStream((current) => [
-        ...current.filter((item) => item.id !== `viewer-${payload.message.id}`),
-        viewerStreamItem(payload.message, displayName),
+        ...current.filter((item) => item.id !== `viewer-${sentMessage.id}`),
+        viewerStreamItem(sentMessage, displayName),
       ].slice(-LIVE_CHAT_MAX_RENDERED));
       setIsFollowingLiveChat(true);
       setHasUnreadLiveChat(false);
