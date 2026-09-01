@@ -47,6 +47,15 @@ test('Zoom meeting_saved_chat multiline message rows import correctly', () => {
   assert.equal(result.errors.length, 0);
 });
 
+test('Zoom wall-clock timestamps are rebased so imported messages appear during normal video playback', () => {
+  const result = parseTimestampedLiveChat(`20:03:15 From Mary to Everyone: Good evening\n20:04:45 From Sam to Everyone: I can hear you`);
+  assert.deepEqual(result.items, [
+    { offsetSeconds: 0, displayName: 'Mary', message: 'Good evening' },
+    { offsetSeconds: 90, displayName: 'Sam', message: 'I can hear you' },
+  ]);
+  assert.equal(result.errors.length, 0);
+});
+
 test('invalid rows are reported without discarding valid imported chat', () => {
   const result = parseTimestampedLiveChat(`bad row\n00:00:05 Ada: Ready`);
   assert.equal(result.items.length, 1);
