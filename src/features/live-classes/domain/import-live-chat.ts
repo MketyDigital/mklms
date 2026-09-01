@@ -253,11 +253,12 @@ export function parseTimestampedLiveChat(input: string): LiveChatImportResult {
       pendingTimestamp = null;
     }
 
-    if (pendingMessage) {
+    const continuation = pendingMessage as PendingZoomMessage | null;
+    if (continuation) {
       // Any non-timestamp line following a recognized chat header is a message
       // continuation. This preserves long/wrapped copied text exactly instead
       // of silently discarding its second physical line.
-      pendingMessage.messageLines.push(line);
+      continuation.messageLines.push(line);
       continue;
     }
 
