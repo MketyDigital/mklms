@@ -60,6 +60,8 @@ interface PlaybackState {
 
 const SAFETY_STATE_REFRESH_MS = 5 * 60 * 1000;
 
+type DirectSlot = 0 | 1;
+
 function formatCountdown(targetIso: string | null, nowMs: number): string {
   if (!targetIso) return "Waiting for the next session";
   const remaining = Math.max(0, new Date(targetIso).getTime() - nowMs);
@@ -83,21 +85,47 @@ export function LiveClassRoomMobileFirst({
   slug: string;
   organizationName: string;
 }) {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const directVideoARef = useRef<HTMLVideoElement | null>(null);
+  const directVideoBRef = useRef<HTMLVideoElement | null>(null);
+  const hlsVideoRef = useRef<HTMLVideoElement | null>(null);
   const playbackRef = useRef<PlaybackState | null>(null);
   const roomStateRef = useRef<LiveRoomState | null>(null);
+  const loadedMediaSessionRef = useRef<string | null>(null);
+  const loadedMediaTypeRef = useRef<PlaybackAuthorization["playbackType"] | null>(null);
+  const loadedAuthorizationUrlRef = useRef<string | null>(null);
+  const activeDirectSlotRef = useRef<DirectSlot>(0);
+  const directSwapGenerationRef = useRef(0);
+
   const [roomState, setRoomState] = useState<LiveRoomState | null>(null);
   const [playback, setPlayback] = useState<PlaybackState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(0);
   const [muted, setMuted] = useState(true);
+  const [activeDirectSlot, setActiveDirectSlot] = useState<DirectSlot>(0);
   const [displayName, setDisplayName] = useState("");
   const [comment, setComment] = useState("");
   const [sending, setSending] = useState(false);
   const [ownComments, setOwnComments] = useState<OwnLiveComment[]>([]);
 
   const storageKey = useMemo(() => ownLiveCommentStorageKey(slug), [slug]);
+
+  const setDirectSlot = useCallback((slot: DirectSlot) => {
+    activeDirectSlotRef.current = slot;
+    setActiveDirectSlot(slot);
+  }, []);
+
+  const directVideoForSlot = useCallback((slot: DirectSlot) => (
+    slot === 0 ? directVideoARef.current : directVideoBRef.current
+  ), []);
+
+  const currentAudioVideo = useCallback(() => {
+    const authorization = playbackRef.current?.authorization;
+    if (authorization?.playbackType === "DIRECT") {
+      return directVideoForSlot(activeDirectSlotRef.current);
+    }
+    return hlsVideoRef.current;
+  }, [directVideoForSlot]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -106,6 +134,25 @@ export function LiveClassRoomMobileFirst({
     return () => window.clearTimeout(timer);
   }, [storageKey]);
 
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const syncViewportHeight = () => {
+      document.documentElement.style.setProperty(
+        "--live-visual-viewport-height",
+        `${Math.round(viewport.height)}px`,
+      );
+    };
+    syncViewportHeight();
+    viewport.addEventListener("resize", syncViewportHeight);
+    viewport.addEventListener("scroll", syncViewportHeight);
+    return () => {
+      viewport.removeEventListener("resize", syncViewportHeight);
+      viewport.removeEventListener("scroll", syncViewportHeight);
+      document.documentElement.style.removeProperty("--live-visual-viewport-height");
+    };
+  }, []);
+
   const fetchState = useCallback(async () => {
     const response = await fetch(`/api/live/${encodeURIComponent(slug)}/state`, {
       cache: "default",
@@ -113,7 +160,11 @@ export function LiveClassRoomMobileFirst({
     });
     const payload = (await response.json()) as LiveRoomState | { ok: false; message?: string };
     if (!response.ok || !payload.ok) {
-      throw new Error("message" in payload ? payload.message ?? "This live class is unavailable." : "This live class is unavailable.");
+      throw new Error(
+        "message" in payload
+          ? payload.message ?? "This live class is unavailable."
+          : "This live class is unavailable.",
+      );
     }
     roomStateRef.current = payload;
     setRoomState(payload);
@@ -156,16 +207,23 @@ export function LiveClassRoomMobileFirst({
     const initialFetch = window.setTimeout(() => {
       void fetchState()
         .catch((caught) => {
-          if (active) setError(caught instanceof Error ? caught.message : "This live class is unavailable.");
+          if (active) {
+            setError(caught instanceof Error ? caught.message : "This live class is unavailable.");
+          }
         })
         .finally(() => {
           if (active) setLoading(false);
         });
     }, 0);
     const clock = window.setInterval(() => setNowMs(Date.now()), 1_000);
-    const safetyRefresh = window.setInterval(() => void fetchState().catch(() => undefined), SAFETY_STATE_REFRESH_MS);
+    const safetyRefresh = window.setInterval(
+      () => void fetchState().catch(() => undefined),
+      SAFETY_STATE_REFRESH_MS,
+    );
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") void fetchState().catch(() => undefined);
+      if (document.visibilityState === "visible") {
+        void fetchState().catch(() => undefined);
+      }
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
@@ -180,14 +238,22 @@ export function LiveClassRoomMobileFirst({
   useEffect(() => {
     if (!roomState) return;
     let transitionAtMs: number | null = null;
-    if ((roomState.state === "UPCOMING" || roomState.state === "BETWEEN_SESSIONS") && roomState.nextStartsAt) {
+    if (
+      (roomState.state === "UPCOMING" || roomState.state === "BETWEEN_SESSIONS") &&
+      roomState.nextStartsAt
+    ) {
       transitionAtMs = new Date(roomState.nextStartsAt).getTime();
     } else if (roomState.state === "LIVE" && roomState.session) {
-      transitionAtMs = new Date(roomState.session.startsAt).getTime() + roomState.session.durationSeconds * 1000;
+      transitionAtMs =
+        new Date(roomState.session.startsAt).getTime() +
+        roomState.session.durationSeconds * 1000;
     }
     if (transitionAtMs === null || !Number.isFinite(transitionAtMs)) return;
     const delay = Math.max(500, transitionAtMs - Date.now() + 1_000);
-    const timer = window.setTimeout(() => void fetchState().catch(() => undefined), delay);
+    const timer = window.setTimeout(
+      () => void fetchState().catch(() => undefined),
+      delay,
+    );
     return () => window.clearTimeout(timer);
   }, [fetchState, roomState]);
 
@@ -197,7 +263,9 @@ export function LiveClassRoomMobileFirst({
     if (roomState?.state !== "LIVE" || !roomSessionId) return;
     if (playbackRef.current?.sessionId === roomSessionId) return;
     const timer = window.setTimeout(() => {
-      void requestPlayback().catch((caught) => setError(caught instanceof Error ? caught.message : "Live playback unavailable."));
+      void requestPlayback().catch((caught) =>
+        setError(caught instanceof Error ? caught.message : "Live playback unavailable."),
+      );
     }, 0);
     return () => window.clearTimeout(timer);
   }, [requestPlayback, roomSessionId, roomState?.state]);
@@ -205,13 +273,23 @@ export function LiveClassRoomMobileFirst({
   useEffect(() => {
     const expiry = playback?.authorization?.expiresAt;
     if (!expiry || roomState?.state !== "LIVE") return;
-    const refreshIn = Math.max(5_000, new Date(expiry).getTime() - Date.now() - 30_000);
-    const timer = window.setTimeout(() => void requestPlayback().catch(() => undefined), refreshIn);
+    const refreshIn = Math.max(
+      5_000,
+      new Date(expiry).getTime() - Date.now() - 30_000,
+    );
+    const timer = window.setTimeout(
+      () => void requestPlayback().catch(() => undefined),
+      refreshIn,
+    );
     return () => window.clearTimeout(timer);
   }, [playback?.authorization?.expiresAt, requestPlayback, roomState?.state]);
 
   const currentLiveOffsetSeconds = useMemo(() => {
-    if (!roomState?.session || roomState.liveOffsetSeconds === null || roomState.state !== "LIVE") return 0;
+    if (
+      !roomState?.session ||
+      roomState.liveOffsetSeconds === null ||
+      roomState.state !== "LIVE"
+    ) return 0;
     return resolveBroadcastPosition({
       liveOffsetSeconds: roomState.liveOffsetSeconds,
       serverNow: new Date(roomState.serverNow),
@@ -222,7 +300,9 @@ export function LiveClassRoomMobileFirst({
 
   const expectedPosition = useCallback(() => {
     const currentState = roomStateRef.current;
-    if (!currentState?.session || currentState.liveOffsetSeconds === null) return playbackRef.current?.startAtSeconds ?? 0;
+    if (!currentState?.session || currentState.liveOffsetSeconds === null) {
+      return playbackRef.current?.startAtSeconds ?? 0;
+    }
     return resolveBroadcastPosition({
       liveOffsetSeconds: currentState.liveOffsetSeconds,
       serverNow: new Date(currentState.serverNow),
@@ -231,52 +311,121 @@ export function LiveClassRoomMobileFirst({
     });
   }, []);
 
+  const correctPosition = useCallback((video: HTMLVideoElement) => {
+    const target = expectedPosition();
+    video.currentTime = Number.isFinite(video.duration)
+      ? Math.min(target, Math.max(0, video.duration - 0.1))
+      : target;
+  }, [expectedPosition]);
+
   useEffect(() => {
-    const video = videoRef.current;
     const authorization = playback?.authorization;
-    if (!video || !authorization || roomState?.state !== "LIVE" || authorization.playbackType === "EMBED") return;
+    if (
+      !authorization ||
+      !playback ||
+      roomState?.state !== "LIVE" ||
+      authorization.playbackType === "EMBED"
+    ) return;
+
+    const sameLoadedMedia =
+      loadedMediaSessionRef.current === playback.sessionId &&
+      loadedMediaTypeRef.current === authorization.playbackType;
+    const sameAuthorization = loadedAuthorizationUrlRef.current === authorization.url;
+    if (sameLoadedMedia && sameAuthorization) return;
+
+    if (authorization.playbackType === "DIRECT") {
+      const currentSlot = activeDirectSlotRef.current;
+      const targetSlot: DirectSlot = sameLoadedMedia ? (currentSlot === 0 ? 1 : 0) : currentSlot;
+      const targetVideo = directVideoForSlot(targetSlot);
+      const currentVideo = directVideoForSlot(currentSlot);
+      if (!targetVideo) return;
+
+      const generation = ++directSwapGenerationRef.current;
+      targetVideo.muted = true;
+      targetVideo.preload = "auto";
+
+      const promote = async () => {
+        if (generation !== directSwapGenerationRef.current) return;
+        correctPosition(targetVideo);
+        try {
+          await targetVideo.play();
+        } catch {
+          return;
+        }
+        if (generation !== directSwapGenerationRef.current) return;
+
+        if (!sameLoadedMedia || targetSlot === currentSlot) {
+          targetVideo.muted = muted;
+          setDirectSlot(targetSlot);
+        } else {
+          targetVideo.muted = muted;
+          if (currentVideo) currentVideo.muted = true;
+          setDirectSlot(targetSlot);
+          window.setTimeout(() => {
+            if (generation !== directSwapGenerationRef.current || !currentVideo) return;
+            currentVideo.pause();
+            currentVideo.removeAttribute("src");
+            currentVideo.load();
+          }, 350);
+        }
+
+        loadedMediaSessionRef.current = playback.sessionId;
+        loadedMediaTypeRef.current = authorization.playbackType;
+        loadedAuthorizationUrlRef.current = authorization.url;
+      };
+
+      targetVideo.addEventListener("loadedmetadata", () => void promote(), { once: true });
+      targetVideo.src = authorization.url;
+      targetVideo.load();
+      return;
+    }
+
+    const video = hlsVideoRef.current;
+    if (!video || authorization.playbackType !== "HLS") return;
     let destroyed = false;
     let destroyHls: (() => void) | undefined;
 
     const positionAtLiveEdge = () => {
-      const target = expectedPosition();
-      video.currentTime = Number.isFinite(video.duration)
-        ? Math.min(target, Math.max(0, video.duration - 0.1))
-        : target;
+      correctPosition(video);
       void video.play().catch(() => undefined);
+      loadedMediaSessionRef.current = playback.sessionId;
+      loadedMediaTypeRef.current = authorization.playbackType;
+      loadedAuthorizationUrlRef.current = authorization.url;
     };
 
-    if (authorization.playbackType === "HLS") {
-      if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        video.src = authorization.url;
-        video.addEventListener("loadedmetadata", positionAtLiveEdge, { once: true });
-      } else {
-        void import("hls.js").then(({ default: Hls }) => {
-          if (destroyed) return;
-          if (!Hls.isSupported()) {
-            setError("This browser cannot play the live stream.");
-            return;
-          }
-          const hls = new Hls({ enableWorker: true });
-          destroyHls = () => hls.destroy();
-          hls.loadSource(authorization.url);
-          hls.attachMedia(video);
-          hls.on(Hls.Events.MANIFEST_PARSED, positionAtLiveEdge);
-          hls.on(Hls.Events.ERROR, (_event, data) => {
-            if (data.fatal) setError("The live stream could not be loaded.");
-          });
-        });
-      }
-    } else if (authorization.playbackType === "DIRECT") {
+    if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = authorization.url;
       video.addEventListener("loadedmetadata", positionAtLiveEdge, { once: true });
+    } else {
+      void import("hls.js").then(({ default: Hls }) => {
+        if (destroyed) return;
+        if (!Hls.isSupported()) {
+          setError("This browser cannot play the live stream.");
+          return;
+        }
+        const hls = new Hls({ enableWorker: true });
+        destroyHls = () => hls.destroy();
+        hls.loadSource(authorization.url);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, positionAtLiveEdge);
+        hls.on(Hls.Events.ERROR, (_event, data) => {
+          if (data.fatal) setError("The live stream could not be loaded.");
+        });
+      });
     }
 
     return () => {
       destroyed = true;
       destroyHls?.();
     };
-  }, [expectedPosition, playback?.authorization, roomState?.state]);
+  }, [
+    correctPosition,
+    directVideoForSlot,
+    muted,
+    playback,
+    roomState?.state,
+    setDirectSlot,
+  ]);
 
   useEffect(() => {
     const redirectUrl = roomState?.ended?.redirectUrl;
@@ -287,7 +436,11 @@ export function LiveClassRoomMobileFirst({
 
   const visibleStagedChat = useMemo(() => {
     if (!roomState || roomState.state !== "LIVE") return [];
-    return getInitialTimelineMessages(roomState.chat.staged, currentLiveOffsetSeconds, 20);
+    return getInitialTimelineMessages(
+      roomState.chat.staged,
+      currentLiveOffsetSeconds,
+      20,
+    );
   }, [currentLiveOffsetSeconds, roomState]);
 
   const visibleCta = useMemo(() => {
@@ -322,22 +475,51 @@ export function LiveClassRoomMobileFirst({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ displayName: displayName.trim() || undefined, message: text }),
+        body: JSON.stringify({
+          displayName: displayName.trim() || undefined,
+          message: text,
+        }),
       });
-      const payload = (await response.json()) as { ok?: boolean; message?: OwnLiveComment | string };
-      if (!response.ok || !payload.ok || !payload.message || typeof payload.message === "string") {
-        throw new Error(typeof payload.message === "string" ? payload.message : "Comment could not be sent.");
+      const payload = (await response.json()) as {
+        ok?: boolean;
+        message?: OwnLiveComment | string;
+      };
+      if (
+        !response.ok ||
+        !payload.ok ||
+        !payload.message ||
+        typeof payload.message === "string"
+      ) {
+        throw new Error(
+          typeof payload.message === "string"
+            ? payload.message
+            : "Comment could not be sent.",
+        );
       }
       const next = appendOwnLiveComment(ownComments, payload.message);
       setOwnComments(next);
       window.localStorage.setItem(storageKey, JSON.stringify(next));
       setComment("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Comment could not be sent.");
+      setError(
+        caught instanceof Error ? caught.message : "Comment could not be sent.",
+      );
     } finally {
       setSending(false);
     }
   }
+
+  const handleSeeking = (video: HTMLVideoElement) => {
+    const target = expectedPosition();
+    if (
+      shouldCorrectBroadcastPosition({
+        currentSeconds: video.currentTime,
+        expectedSeconds: target,
+      })
+    ) {
+      video.currentTime = target;
+    }
+  };
 
   if (loading) {
     return (
@@ -362,21 +544,31 @@ export function LiveClassRoomMobileFirst({
       <main className="flex min-h-dvh items-center justify-center bg-neutral-950 px-5 text-white">
         <div className="w-full max-w-2xl text-center">
           <p className="mb-4 text-sm font-medium text-white/50">{organizationName}</p>
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-5xl">{roomState.batch.title}</h1>
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-5xl">
+            {roomState.batch.title}
+          </h1>
           {ended ? (
             <>
-              <p className="mx-auto mt-5 max-w-xl text-white/65">{roomState.ended?.message ?? "This live class has ended."}</p>
-              {roomState.ended?.redirectUrl ? <p className="mt-4 text-sm text-white/40">Redirecting…</p> : null}
+              <p className="mx-auto mt-5 max-w-xl text-white/65">
+                {roomState.ended?.message ?? "This live class has ended."}
+              </p>
+              {roomState.ended?.redirectUrl ? (
+                <p className="mt-4 text-sm text-white/40">Redirecting…</p>
+              ) : null}
             </>
           ) : (
             <>
               <p className="mt-5 text-sm uppercase tracking-[0.2em] text-white/40">
-                {roomState.state === "BETWEEN_SESSIONS" ? "Next session starts in" : "Class starts in"}
+                {roomState.state === "BETWEEN_SESSIONS"
+                  ? "Next session starts in"
+                  : "Class starts in"}
               </p>
               <div className="mt-4 font-mono text-3xl font-semibold sm:text-5xl">
                 {formatCountdown(roomState.nextStartsAt, nowMs)}
               </div>
-              <p className="mt-6 text-sm text-white/45">Keep this page open. The room will switch to LIVE automatically.</p>
+              <p className="mt-6 text-sm text-white/45">
+                Keep this page open. The room will switch to LIVE automatically.
+              </p>
             </>
           )}
         </div>
@@ -397,31 +589,69 @@ export function LiveClassRoomMobileFirst({
               {roomState.batch.title} · {roomState.session?.title}
             </h1>
           </div>
-          <span className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1.5 text-xs text-white/80 sm:px-3">
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1.5 text-xs text-white/80 sm:px-3">
             <Eye className="size-3.5" /> {roomState.displayViewerCount.toLocaleString()}
           </span>
         </header>
 
         {error ? (
-          <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">{error}</div>
+          <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+            {error}
+          </div>
         ) : null}
 
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px] lg:grid-rows-[auto_auto] lg:gap-4">
-          <div className="sticky top-0 z-30 -mx-4 bg-neutral-950 px-4 pb-2 pt-1 sm:-mx-6 sm:px-6 lg:static lg:col-start-1 lg:row-start-1 lg:mx-0 lg:bg-transparent lg:p-0">
+          <div
+            data-live-player
+            className="sticky top-0 z-30 -mx-4 shrink-0 bg-neutral-950 px-4 pb-2 pt-1 sm:-mx-6 sm:px-6 lg:static lg:col-start-1 lg:row-start-1 lg:mx-0 lg:bg-transparent lg:p-0"
+          >
             <div className="relative aspect-video overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-white/10">
               {isTestMode ? (
                 <div className="flex h-full flex-col items-center justify-center px-6 text-center sm:px-8">
-                  <div className="rounded-full bg-blue-500/15 p-3 sm:p-4"><TestTube2 className="size-7 text-blue-300 sm:size-8" /></div>
-                  <h2 className="mt-3 text-lg font-semibold sm:mt-4 sm:text-xl">Live room test mode</h2>
+                  <div className="rounded-full bg-blue-500/15 p-3 sm:p-4">
+                    <TestTube2 className="size-7 text-blue-300 sm:size-8" />
+                  </div>
+                  <h2 className="mt-3 text-lg font-semibold sm:mt-4 sm:text-xl">
+                    Live room test mode
+                  </h2>
                   <p className="mt-2 max-w-lg text-xs leading-relaxed text-white/55 sm:text-sm">
-                    No video is attached. LIVE timing, viewer count, synchronized chat, private comments and CTA timing are running normally.
+                    No video is attached. LIVE timing, viewer count, synchronized chat and CTA timing are running normally.
                   </p>
                 </div>
               ) : authorization?.playbackType === "EMBED" ? (
-                <iframe title="Live broadcast" src={authorization.url} className="h-full w-full" allow="autoplay; fullscreen" />
-              ) : authorization ? (
+                <iframe
+                  title="Live broadcast"
+                  src={authorization.url}
+                  className="h-full w-full"
+                  allow="autoplay; fullscreen"
+                />
+              ) : authorization?.playbackType === "DIRECT" ? (
+                <>
+                  {[0, 1].map((slotValue) => {
+                    const slot = slotValue as DirectSlot;
+                    return (
+                      <video
+                        key={slot}
+                        ref={slot === 0 ? directVideoARef : directVideoBRef}
+                        className={`absolute inset-0 h-full w-full object-contain transition-opacity duration-200 ${
+                          activeDirectSlot === slot ? "opacity-100" : "pointer-events-none opacity-0"
+                        }`}
+                        autoPlay
+                        muted={muted || activeDirectSlot !== slot}
+                        playsInline
+                        preload="auto"
+                        controls={false}
+                        controlsList="nodownload noremoteplayback nofullscreen"
+                        disablePictureInPicture
+                        onSeeking={(event) => handleSeeking(event.currentTarget)}
+                        onContextMenu={(event) => event.preventDefault()}
+                      />
+                    );
+                  })}
+                </>
+              ) : authorization?.playbackType === "HLS" ? (
                 <video
-                  ref={videoRef}
+                  ref={hlsVideoRef}
                   className="h-full w-full object-contain"
                   autoPlay
                   muted={muted}
@@ -429,15 +659,13 @@ export function LiveClassRoomMobileFirst({
                   controls={false}
                   controlsList="nodownload noremoteplayback nofullscreen"
                   disablePictureInPicture
-                  onSeeking={(event) => {
-                    const video = event.currentTarget;
-                    const target = expectedPosition();
-                    if (shouldCorrectBroadcastPosition({ currentSeconds: video.currentTime, expectedSeconds: target })) {
-                      video.currentTime = target;
-                    }
-                  }}
+                  onSeeking={(event) => handleSeeking(event.currentTarget)}
                   onContextMenu={(event) => event.preventDefault()}
                 />
+              ) : authorization ? (
+                <div className="flex h-full items-center justify-center text-sm text-white/45">
+                  Unsupported live media type.
+                </div>
               ) : (
                 <div className="flex h-full items-center justify-center text-sm text-white/45">
                   <Loader2 className="mr-2 size-4 animate-spin" /> Preparing live broadcast…
@@ -454,7 +682,7 @@ export function LiveClassRoomMobileFirst({
                   className="absolute inset-0 flex items-center justify-center bg-black/15"
                   onClick={() => {
                     setMuted(false);
-                    const video = videoRef.current;
+                    const video = currentAudioVideo();
                     if (video) {
                       video.muted = false;
                       void video.play().catch(() => undefined);
@@ -480,24 +708,38 @@ export function LiveClassRoomMobileFirst({
                 {visibleCta.text}
               </a>
             </div>
-          ) : <div className="hidden lg:col-start-1 lg:row-start-2 lg:block" />}
+          ) : (
+            <div className="hidden lg:col-start-1 lg:row-start-2 lg:block" />
+          )}
 
           <aside className="flex min-h-[60dvh] flex-col overflow-hidden rounded-xl border border-white/10 bg-white/[0.04] lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:min-h-[520px] lg:max-h-[calc(100dvh-7rem)]">
             <div className="border-b border-white/10 px-4 py-3">
-              <div className="flex items-center gap-2 text-sm font-semibold"><MessageCircle className="size-4" /> Live chat</div>
-              <p className="mt-1 text-xs text-white/40">
-                You see synchronized class chat and only your own messages. Your messages go privately to the host.
-              </p>
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <MessageCircle className="size-4" /> Live chat
+              </div>
             </div>
             <div className="flex-1 space-y-3 overflow-y-auto p-4">
               {combinedChat.map((item) => (
-                <div key={item.id} className={item.mine ? "ml-8 rounded-lg bg-blue-500/15 p-3" : "rounded-lg bg-white/[0.05] p-3"}>
-                  <p className="text-xs font-semibold text-white/65">{item.mine ? "You" : item.name}</p>
-                  <p className="mt-1 text-sm leading-relaxed text-white/90">{item.message}</p>
+                <div
+                  key={item.id}
+                  className={
+                    item.mine
+                      ? "ml-8 rounded-lg bg-blue-500/15 p-3"
+                      : "rounded-lg bg-white/[0.05] p-3"
+                  }
+                >
+                  <p className="text-xs font-semibold text-white/65">
+                    {item.mine ? "You" : item.name}
+                  </p>
+                  <p className="mt-1 text-sm leading-relaxed text-white/90">
+                    {item.message}
+                  </p>
                 </div>
               ))}
               {combinedChat.length === 0 ? (
-                <p className="py-8 text-center text-xs text-white/35">Chat will appear here as the class progresses.</p>
+                <p className="py-8 text-center text-xs text-white/35">
+                  Chat will appear here as the class progresses.
+                </p>
               ) : null}
             </div>
             <div className="space-y-2 border-t border-white/10 bg-neutral-950/60 p-3 backdrop-blur">
@@ -512,10 +754,14 @@ export function LiveClassRoomMobileFirst({
                   value={comment}
                   onChange={(event) => setComment(event.target.value)}
                   rows={2}
-                  placeholder="Send a private comment to the host…"
+                  placeholder="Write a comment…"
                   className="min-h-16 resize-none border-white/10 bg-white/[0.06] text-white placeholder:text-white/30"
                 />
-                <Button size="icon" disabled={!comment.trim() || sending} onClick={() => void sendComment()}>
+                <Button
+                  size="icon"
+                  disabled={!comment.trim() || sending}
+                  onClick={() => void sendComment()}
+                >
                   <Send className="size-4" />
                 </Button>
               </div>
