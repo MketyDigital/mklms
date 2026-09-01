@@ -65,7 +65,7 @@ export function AdminCertificateTemplateManager({
         <CardHeader>
           <CardTitle className="text-base">Upload certificate template</CardTitle>
           <CardDescription>
-            Use an existing signed PDF, PNG, or JPEG. Coordinates are PDF points measured from the bottom-left; leave them blank to use sensible defaults.
+            Upload the finished certificate artwork as PDF, PNG, or JPEG. MkLMS preserves that artwork and overlays three portal fields: student name, completion date, and certificate ID. Leave blank spaces for those values in your design. The portal does not read or remove text such as “NAME HERE” from the artwork automatically, so remove placeholder words from the final artwork before uploading. Coordinates are measured from the bottom-left; leave them blank to use the defaults.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -88,8 +88,9 @@ export function AdminCertificateTemplateManager({
               </select>
             </label>
             <label className="space-y-1.5 text-sm md:col-span-2">
-              <span className="font-medium">Template file</span>
+              <span className="font-medium">Template artwork</span>
               <Input name="file" type="file" accept="application/pdf,image/png,image/jpeg" required />
+              <span className="block text-xs text-muted-foreground">Accepted: PDF, PNG, JPEG. Use the final artwork with blank spaces where dynamic values should appear.</span>
             </label>
             <label className="space-y-1.5 text-sm">
               <span className="font-medium">Certificate ID prefix</span>
@@ -98,17 +99,18 @@ export function AdminCertificateTemplateManager({
             <div className="hidden md:block" />
 
             <div className="md:col-span-2">
-              <p className="mb-2 text-sm font-medium">Optional placement</p>
+              <p className="mb-1 text-sm font-medium">Dynamic field placement</p>
+              <p className="mb-3 text-xs text-muted-foreground">X moves a field left/right. Y moves it up/down. Font size controls the overlaid portal text.</p>
               <div className="grid gap-3 sm:grid-cols-3">
-                <Input name="nameX" type="number" step="0.1" placeholder="Name X" />
-                <Input name="nameY" type="number" step="0.1" placeholder="Name Y" />
-                <Input name="nameFontSize" type="number" step="0.1" placeholder="Name size" />
-                <Input name="dateX" type="number" step="0.1" placeholder="Date X" />
-                <Input name="dateY" type="number" step="0.1" placeholder="Date Y" />
-                <Input name="dateFontSize" type="number" step="0.1" placeholder="Date size" />
-                <Input name="idX" type="number" step="0.1" placeholder="ID X" />
-                <Input name="idY" type="number" step="0.1" placeholder="ID Y" />
-                <Input name="idFontSize" type="number" step="0.1" placeholder="ID size" />
+                <label className="space-y-1 text-xs"><span>Student name X</span><Input name="nameX" type="number" step="0.1" placeholder="Auto" /></label>
+                <label className="space-y-1 text-xs"><span>Student name Y</span><Input name="nameY" type="number" step="0.1" placeholder="Auto" /></label>
+                <label className="space-y-1 text-xs"><span>Student name size</span><Input name="nameFontSize" type="number" step="0.1" placeholder="28" /></label>
+                <label className="space-y-1 text-xs"><span>Completion date X</span><Input name="dateX" type="number" step="0.1" placeholder="Auto" /></label>
+                <label className="space-y-1 text-xs"><span>Completion date Y</span><Input name="dateY" type="number" step="0.1" placeholder="Auto" /></label>
+                <label className="space-y-1 text-xs"><span>Completion date size</span><Input name="dateFontSize" type="number" step="0.1" placeholder="11" /></label>
+                <label className="space-y-1 text-xs"><span>Certificate ID X</span><Input name="idX" type="number" step="0.1" placeholder="Auto" /></label>
+                <label className="space-y-1 text-xs"><span>Certificate ID Y</span><Input name="idY" type="number" step="0.1" placeholder="Auto" /></label>
+                <label className="space-y-1 text-xs"><span>Certificate ID size</span><Input name="idFontSize" type="number" step="0.1" placeholder="9" /></label>
               </div>
             </div>
 

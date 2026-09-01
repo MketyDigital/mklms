@@ -127,6 +127,9 @@
 
 @media (max-width: 1023px) {
   [data-live-mobile-viewport] {
+    position: fixed;
+    inset: 0;
+    width: 100%;
     height: var(--live-visual-viewport-height, 100dvh);
     max-height: 100dvh;
     overflow: hidden;

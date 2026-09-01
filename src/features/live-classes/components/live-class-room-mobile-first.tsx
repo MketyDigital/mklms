@@ -45,6 +45,8 @@ interface LiveRoomState {
   ended: { message: string; redirectUrl: string | null } | null;
 }
 
+type StagedChatMessage = LiveRoomState["chat"]["staged"][number];
+
 interface PlaybackAuthorization {
   playbackType: "HLS" | "DIRECT" | "EMBED" | "CUSTOM";
   url: string;
@@ -59,6 +61,7 @@ interface PlaybackState {
 }
 
 const SAFETY_STATE_REFRESH_MS = 5 * 60 * 1000;
+const CHAT_REFRESH_MS = 5 * 60 * 1000;
 
 type DirectSlot = 0 | 1;
 
@@ -95,6 +98,7 @@ export function LiveClassRoomMobileFirst({
   const loadedAuthorizationUrlRef = useRef<string | null>(null);
   const activeDirectSlotRef = useRef<DirectSlot>(0);
   const directSwapGenerationRef = useRef(0);
+  const previousStorageKeyRef = useRef<string | null>(null);
 
   const [roomState, setRoomState] = useState<LiveRoomState | null>(null);
   const [playback, setPlayback] = useState<PlaybackState | null>(null);
@@ -102,13 +106,20 @@ export function LiveClassRoomMobileFirst({
   const [error, setError] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(0);
   const [muted, setMuted] = useState(true);
+  const [needsPlaybackGesture, setNeedsPlaybackGesture] = useState(false);
   const [activeDirectSlot, setActiveDirectSlot] = useState<DirectSlot>(0);
   const [displayName, setDisplayName] = useState("");
   const [comment, setComment] = useState("");
   const [sending, setSending] = useState(false);
   const [ownComments, setOwnComments] = useState<OwnLiveComment[]>([]);
+  const [stagedChat, setStagedChat] = useState<StagedChatMessage[]>([]);
+  const [chatFeedLoaded, setChatFeedLoaded] = useState(false);
 
-  const storageKey = useMemo(() => ownLiveCommentStorageKey(slug), [slug]);
+  const activeSessionId = roomState?.state === "LIVE" ? roomState.session?.id ?? null : null;
+  const storageKey = useMemo(
+    () => activeSessionId ? ownLiveCommentStorageKey(slug, activeSessionId) : null,
+    [activeSessionId, slug],
+  );
 
   const setDirectSlot = useCallback((slot: DirectSlot) => {
     activeDirectSlotRef.current = slot;
@@ -128,6 +139,13 @@ export function LiveClassRoomMobileFirst({
   }, [directVideoForSlot]);
 
   useEffect(() => {
+    const previousKey = previousStorageKeyRef.current;
+    if (previousKey && previousKey !== storageKey) {
+      window.localStorage.removeItem(previousKey);
+    }
+    previousStorageKeyRef.current = storageKey;
+    setOwnComments([]);
+    if (!storageKey) return;
     const timer = window.setTimeout(() => {
       setOwnComments(parseOwnLiveComments(window.localStorage.getItem(storageKey)));
     }, 0);
@@ -170,6 +188,37 @@ export function LiveClassRoomMobileFirst({
     setRoomState(payload);
     setNowMs(new Date(payload.serverNow).getTime());
     setError(null);
+    return payload;
+  }, [slug]);
+
+  const fetchChat = useCallback(async () => {
+    const response = await fetch(`/api/live/${encodeURIComponent(slug)}/chat`, {
+      cache: "no-store",
+      credentials: "same-origin",
+    });
+    const payload = (await response.json()) as {
+      ok?: boolean;
+      sessionId?: string | null;
+      count?: number;
+      messages?: StagedChatMessage[];
+      message?: string;
+    };
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.message ?? "Live chat is temporarily unavailable.");
+    }
+
+    const currentState = roomStateRef.current;
+    const expectedSessionId = currentState?.state === "LIVE"
+      ? currentState.session?.id ?? null
+      : null;
+    if (!expectedSessionId || payload.sessionId !== expectedSessionId) {
+      setStagedChat([]);
+      setChatFeedLoaded(false);
+      return payload;
+    }
+
+    setStagedChat(Array.isArray(payload.messages) ? payload.messages : []);
+    setChatFeedLoaded(true);
     return payload;
   }, [slug]);
 
@@ -220,20 +269,28 @@ export function LiveClassRoomMobileFirst({
       () => void fetchState().catch(() => undefined),
       SAFETY_STATE_REFRESH_MS,
     );
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        void fetchState().catch(() => undefined);
+    const refreshVisiblePlayback = () => {
+      void fetchState().catch(() => undefined);
+      void fetchChat().catch(() => undefined);
+      if (roomStateRef.current?.state === "LIVE") {
+        void requestPlayback().catch(() => setNeedsPlaybackGesture(true));
       }
     };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") refreshVisiblePlayback();
+    };
+    const onPageShow = () => refreshVisiblePlayback();
     document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("pageshow", onPageShow);
     return () => {
       active = false;
       window.clearTimeout(initialFetch);
       window.clearInterval(clock);
       window.clearInterval(safetyRefresh);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("pageshow", onPageShow);
     };
-  }, [fetchState]);
+  }, [fetchChat, fetchState, requestPlayback]);
 
   useEffect(() => {
     if (!roomState) return;
@@ -257,7 +314,25 @@ export function LiveClassRoomMobileFirst({
     return () => window.clearTimeout(timer);
   }, [fetchState, roomState]);
 
-  const roomSessionId = roomState?.session?.id ?? null;
+  const roomSessionId = activeSessionId;
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setStagedChat([]);
+      setChatFeedLoaded(false);
+      if (activeSessionId) void fetchChat().catch(() => undefined);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeSessionId, fetchChat]);
+
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const timer = window.setInterval(
+      () => void fetchChat().catch(() => undefined),
+      CHAT_REFRESH_MS,
+    );
+    return () => window.clearInterval(timer);
+  }, [activeSessionId, fetchChat]);
 
   useEffect(() => {
     if (roomState?.state !== "LIVE" || !roomSessionId) return;
@@ -350,10 +425,12 @@ export function LiveClassRoomMobileFirst({
         try {
           await targetVideo.play();
         } catch {
+          setNeedsPlaybackGesture(true);
           return;
         }
         if (generation !== directSwapGenerationRef.current) return;
 
+        setNeedsPlaybackGesture(false);
         if (!sameLoadedMedia || targetSlot === currentSlot) {
           targetVideo.muted = muted;
           setDirectSlot(targetSlot);
@@ -387,7 +464,9 @@ export function LiveClassRoomMobileFirst({
 
     const positionAtLiveEdge = () => {
       correctPosition(video);
-      void video.play().catch(() => undefined);
+      void video.play()
+        .then(() => setNeedsPlaybackGesture(false))
+        .catch(() => setNeedsPlaybackGesture(true));
       loadedMediaSessionRef.current = playback.sessionId;
       loadedMediaTypeRef.current = authorization.playbackType;
       loadedAuthorizationUrlRef.current = authorization.url;
@@ -409,7 +488,10 @@ export function LiveClassRoomMobileFirst({
         hls.attachMedia(video);
         hls.on(Hls.Events.MANIFEST_PARSED, positionAtLiveEdge);
         hls.on(Hls.Events.ERROR, (_event, data) => {
-          if (data.fatal) setError("The live stream could not be loaded.");
+          if (data.fatal) {
+            setNeedsPlaybackGesture(true);
+            setError("The live stream could not be loaded.");
+          }
         });
       });
     }
@@ -436,12 +518,13 @@ export function LiveClassRoomMobileFirst({
 
   const visibleStagedChat = useMemo(() => {
     if (!roomState || roomState.state !== "LIVE") return [];
+    const source = chatFeedLoaded ? stagedChat : roomState.chat.staged;
     return getInitialTimelineMessages(
-      roomState.chat.staged,
+      source,
       currentLiveOffsetSeconds,
       20,
     );
-  }, [currentLiveOffsetSeconds, roomState]);
+  }, [chatFeedLoaded, currentLiveOffsetSeconds, roomState, stagedChat]);
 
   const visibleCta = useMemo(() => {
     if (!roomState?.cta || roomState.state !== "LIVE") return null;
@@ -468,7 +551,7 @@ export function LiveClassRoomMobileFirst({
 
   async function sendComment() {
     const text = comment.trim();
-    if (!text || sending) return;
+    if (!text || sending || !activeSessionId) return;
     setSending(true);
     try {
       const response = await fetch(`/api/live/${encodeURIComponent(slug)}/messages`, {
@@ -498,7 +581,7 @@ export function LiveClassRoomMobileFirst({
       }
       const next = appendOwnLiveComment(ownComments, payload.message);
       setOwnComments(next);
-      window.localStorage.setItem(storageKey, JSON.stringify(next));
+      if (storageKey) window.localStorage.setItem(storageKey, JSON.stringify(next));
       setComment("");
     } catch (caught) {
       setError(
@@ -519,6 +602,38 @@ export function LiveClassRoomMobileFirst({
     ) {
       video.currentTime = target;
     }
+  };
+
+  const handlePlaybackPaused = (video: HTMLVideoElement) => {
+    if (
+      document.visibilityState === "visible" &&
+      video === currentAudioVideo() &&
+      !video.ended
+    ) {
+      setNeedsPlaybackGesture(true);
+    }
+  };
+
+  const handlePlaybackError = (video: HTMLVideoElement) => {
+    if (video !== currentAudioVideo()) return;
+    setNeedsPlaybackGesture(true);
+    void requestPlayback().catch(() => undefined);
+  };
+
+  const resumePlayback = () => {
+    setMuted(false);
+    setNeedsPlaybackGesture(false);
+    const video = currentAudioVideo();
+    if (!video) {
+      void requestPlayback().catch(() => setNeedsPlaybackGesture(true));
+      return;
+    }
+    video.muted = false;
+    correctPosition(video);
+    void video.play().catch(() => {
+      setNeedsPlaybackGesture(true);
+      void requestPlayback().catch(() => setNeedsPlaybackGesture(true));
+    });
   };
 
   if (loading) {
@@ -644,6 +759,9 @@ export function LiveClassRoomMobileFirst({
                         controlsList="nodownload noremoteplayback nofullscreen"
                         disablePictureInPicture
                         onSeeking={(event) => handleSeeking(event.currentTarget)}
+                        onPause={(event) => handlePlaybackPaused(event.currentTarget)}
+                        onPlaying={() => setNeedsPlaybackGesture(false)}
+                        onError={(event) => handlePlaybackError(event.currentTarget)}
                         onContextMenu={(event) => event.preventDefault()}
                       />
                     );
@@ -660,6 +778,9 @@ export function LiveClassRoomMobileFirst({
                   controlsList="nodownload noremoteplayback nofullscreen"
                   disablePictureInPicture
                   onSeeking={(event) => handleSeeking(event.currentTarget)}
+                  onPause={(event) => handlePlaybackPaused(event.currentTarget)}
+                  onPlaying={() => setNeedsPlaybackGesture(false)}
+                  onError={(event) => handlePlaybackError(event.currentTarget)}
                   onContextMenu={(event) => event.preventDefault()}
                 />
               ) : authorization ? (
@@ -676,21 +797,14 @@ export function LiveClassRoomMobileFirst({
                 <Radio className="size-3" /> LIVE
               </div>
 
-              {muted && authorization && authorization.playbackType !== "EMBED" ? (
+              {(muted || needsPlaybackGesture) && authorization && authorization.playbackType !== "EMBED" ? (
                 <button
                   type="button"
                   className="absolute inset-0 flex items-center justify-center bg-black/15"
-                  onClick={() => {
-                    setMuted(false);
-                    const video = currentAudioVideo();
-                    if (video) {
-                      video.muted = false;
-                      void video.play().catch(() => undefined);
-                    }
-                  }}
+                  onClick={resumePlayback}
                 >
                   <span className="flex items-center gap-2 rounded-full bg-black/75 px-5 py-3 text-sm font-medium backdrop-blur">
-                    <Volume2 className="size-4" /> Tap to hear audio
+                    <Volume2 className="size-4" /> {needsPlaybackGesture ? "Tap to resume" : "Tap to hear audio"}
                   </span>
                 </button>
               ) : null}
@@ -731,7 +845,7 @@ export function LiveClassRoomMobileFirst({
                   <p className="text-xs font-semibold text-white/65">
                     {item.mine ? "You" : item.name}
                   </p>
-                  <p className="mt-1 text-sm leading-relaxed text-white/90">
+                  <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-white/90">
                     {item.message}
                   </p>
                 </div>

@@ -32,6 +32,8 @@ export interface AdminLiveSessionItem {
   endedMessage?: string | null;
   endedRedirectUrl?: string | null;
   timelineCount?: number;
+  timelineFirstOffsetSeconds?: number | null;
+  timelineLastOffsetSeconds?: number | null;
 }
 
 export interface AdminLiveBatchItem {
@@ -61,6 +63,12 @@ interface ActionResult {
   ok?: boolean;
   message?: string;
   imported?: number;
+  stored?: number;
+  summary?: {
+    count: number;
+    firstOffsetSeconds: number | null;
+    lastOffsetSeconds: number | null;
+  };
   errors?: Array<{ line: number; message: string }>;
 }
 
@@ -95,6 +103,15 @@ function toDateTimeLocal(value: string): string {
   if (Number.isNaN(date.getTime())) return "";
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 16);
+}
+
+function formatOffset(value?: number | null): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  const seconds = Math.max(0, Math.floor(value));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remaining = seconds % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(remaining).padStart(2, "0")}`;
 }
 
 function Field({
@@ -299,16 +316,23 @@ export function AdminLiveClassManager({
     setMessage(null);
     try {
       const format = String(formData.get("timelineFormat") ?? "text") === "csv" ? "csv" : "text";
+      const firstMessageAtMinutesRaw = String(formData.get("firstMessageAtMinutes") ?? "").trim();
+      const firstMessageAtSeconds = firstMessageAtMinutesRaw
+        ? Math.round(Number(firstMessageAtMinutesRaw) * 60)
+        : null;
       const result = await postAction({
         action: "importTimeline",
         sessionId,
         format,
         content: String(formData.get("timeline") ?? ""),
+        firstMessageAtSeconds,
       });
       setMessage(
-        `Imported ${result.imported ?? 0} synchronized chat message(s)${
-          result.errors?.length ? ` with ${result.errors.length} warning(s)` : ""
-        }.`,
+        `Parsed ${result.imported ?? 0} synchronized chat message(s). Confirmed stored ${result.stored ?? 0} in the database${
+          result.summary?.count
+            ? ` from ${formatOffset(result.summary.firstOffsetSeconds)} to ${formatOffset(result.summary.lastOffsetSeconds)}`
+            : ""
+        }${result.errors?.length ? ` with ${result.errors.length} warning(s)` : ""}.`,
       );
       router.refresh();
     } catch (error) {
@@ -544,17 +568,53 @@ export function AdminLiveClassManager({
                         <MessageSquareText className="size-4" /> Synchronized chat
                       </div>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Paste a Zoom meeting_saved_chat.txt export or timestamped chat. Imported messages appear according to their video offset.
+                        Select the original Zoom meeting_saved_chat.txt file when possible. Copy/paste remains available as a fallback. Long or wrapped messages are preserved.
                       </p>
-                      <form action={(formData) => importTimeline(session.id, formData)} className="mt-3 space-y-2">
+                      <p className="mt-2 rounded-md bg-muted/40 px-3 py-2 text-xs">
+                        <strong>Confirmed stored:</strong> {session.timelineCount ?? 0} message(s) · first {formatOffset(session.timelineFirstOffsetSeconds)} · last {formatOffset(session.timelineLastOffsetSeconds)}
+                      </p>
+                      <form action={(formData) => importTimeline(session.id, formData)} className="mt-3 space-y-3">
+                        <Field label="Upload Zoom TXT / CSV">
+                          <Input
+                            type="file"
+                            accept=".txt,text/plain,.csv,text/csv"
+                            onChange={(event) => {
+                              const file = event.currentTarget.files?.[0];
+                              if (!file) return;
+                              void file.text().then((content) => {
+                                if (content.length > 2_000_000) {
+                                  setMessage("Chat file is too large. Maximum supported text size is 2,000,000 characters.");
+                                  return;
+                                }
+                                const textarea = document.getElementById(`timeline-${session.id}`) as HTMLTextAreaElement | null;
+                                if (textarea) textarea.value = content;
+                                const format = document.getElementById(`timeline-format-${session.id}`) as HTMLSelectElement | null;
+                                if (format) format.value = file.name.toLowerCase().endsWith(".csv") ? "csv" : "text";
+                                setMessage(`Loaded ${file.name}. Review the optional sync calibration, then click Import chat.`);
+                              }).catch(() => setMessage("The selected chat file could not be read."));
+                            }}
+                          />
+                        </Field>
                         <Field label="Chat import format">
-                          <select name="timelineFormat" defaultValue="text" className="h-9 w-full rounded-md border bg-background px-3 text-sm">
+                          <select id={`timeline-format-${session.id}`} name="timelineFormat" defaultValue="text" className="h-9 w-full rounded-md border bg-background px-3 text-sm">
                             <option value="text">Zoom / timestamped text</option>
                             <option value="csv">CSV</option>
                           </select>
                         </Field>
+                        <Field label="First imported message appears at video minute (optional)">
+                          <Input
+                            name="firstMessageAtMinutes"
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            placeholder="0"
+                          />
+                        </Field>
+                        <p className="text-xs text-muted-foreground">
+                          For wall-clock Zoom timestamps, enter where the first chat message occurs in the video if it is not at the beginning. Example: 10 means the first imported chat appears at 10:00 in the video while all later message gaps stay synchronized.
+                        </p>
                         <Field label="Chat export / timeline text">
-                          <Textarea name="timeline" rows={5} placeholder="00:00:10 From Ada to Everyone: Good evening" />
+                          <Textarea id={`timeline-${session.id}`} name="timeline" rows={8} placeholder="00:00:10 From Ada to Everyone: Good evening" />
                         </Field>
                         <Button type="submit" size="sm" variant="outline" disabled={busy}>
                           <Upload className="mr-1 size-4" /> Import chat

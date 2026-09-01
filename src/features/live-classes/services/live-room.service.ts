@@ -31,7 +31,7 @@ export interface LiveRoomRepository {
     sessionId?: string | null;
     activeSince: Date;
   }): Promise<number>;
-  listViewerMessages(viewerId: string): Promise<LiveAttendeeMessageRecord[]>;
+  listViewerMessages(viewerId: string, sessionId: string): Promise<LiveAttendeeMessageRecord[]>;
   listAdminAttendeeMessages(input: {
     batchId: string;
     sessionId?: string | null;
@@ -105,6 +105,7 @@ export class LiveRoomService {
 
   async getPublicChat(input: {
     viewerId: string;
+    sessionId: string;
     liveOffsetSeconds: number;
     stagedMessages: readonly LiveTimelineMessage[];
     recentStagedLimit?: number;
@@ -113,7 +114,7 @@ export class LiveRoomService {
     own: LiveAttendeeMessageRecord[];
   }> {
     const [own, staged] = await Promise.all([
-      this.repository.listViewerMessages(input.viewerId),
+      this.repository.listViewerMessages(input.viewerId, input.sessionId),
       Promise.resolve(
         getInitialTimelineMessages(
           input.stagedMessages,

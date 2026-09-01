@@ -274,7 +274,7 @@ export class PostgresLiveClassRepository implements LiveRoomRepository {
     };
   }
 
-  async listViewerMessages(viewerId: string): Promise<LiveAttendeeMessageRecord[]> {
+  async listViewerMessages(viewerId: string, sessionId: string): Promise<LiveAttendeeMessageRecord[]> {
     const result = await this.pool.query<{
       id: string;
       session_id: string;
@@ -284,9 +284,9 @@ export class PostgresLiveClassRepository implements LiveRoomRepository {
     }>(
       `SELECT id, session_id, display_name_snapshot, message, created_at
        FROM live_attendee_messages
-       WHERE viewer_id = $1
+       WHERE viewer_id = $1 AND session_id = $2
        ORDER BY created_at ASC`,
-      [viewerId],
+      [viewerId, sessionId],
     );
     return result.rows.map((row) => ({
       id: row.id,

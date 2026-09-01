@@ -39,6 +39,6 @@ export function appendOwnLiveComment(
   return [...existing, comment].slice(-MAX_LOCAL_OWN_COMMENTS);
 }
 
-export function ownLiveCommentStorageKey(slug: string): string {
-  return `mklms:live:${slug}:own-comments:v1`;
+export function ownLiveCommentStorageKey(slug: string, sessionId: string): string {
+  return `mklms:live:${slug}:session:${sessionId}:own-comments:v2`;
 }
