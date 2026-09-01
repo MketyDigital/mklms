@@ -5,6 +5,11 @@ import { ACTIVE_CLAIM_VERIFICATION_STRATEGIES } from "@/features/access/domain/c
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
 import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
 
+const httpsUrl = z.string().url().refine(
+  (value) => value.toLowerCase().startsWith("https://"),
+  "Graduate community URL must use HTTPS.",
+);
+
 const schema = z.object({
   organizationName: z.string().min(1).max(160), productName: z.string().min(1).max(160),
   logoUrl: z.string().url().nullable().optional(), faviconUrl: z.string().url().nullable().optional(),
@@ -17,7 +22,7 @@ const schema = z.object({
   mediaProvider: z.enum(["generic-hls", "youtube", "external-embed", "custom"]),
   emailProvider: z.enum(["smtp", "none"]), notificationProvider: z.enum(["telegram", "none"]),
   accessCodePrefix: z.string().min(1).max(24), certificatePrefix: z.string().min(1).max(24),
-  completionCommunityUrl: z.string().url().nullable().optional(),
+  completionCommunityUrl: httpsUrl.nullable().optional(),
 });
 
 export async function GET() {
