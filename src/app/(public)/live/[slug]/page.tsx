@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { LiveClassRoomMobileFirst } from "@/features/live-classes/components/live-class-room-mobile-first";
+import { LiveMobileViewportAnchor } from "@/features/live-classes/components/live-mobile-viewport-anchor";
 import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
 import { getCachedPostgresPool } from "@/lib/postgres";
 
@@ -30,6 +31,7 @@ export default async function PublicLiveClassPage({
 
   return (
     <div data-live-mobile-viewport className="bg-zinc-950 text-white">
+      <LiveMobileViewportAnchor />
       <LiveClassRoomMobileFirst
         slug={slug}
         organizationName={settings.organizationName || "Live Class"}
