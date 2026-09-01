@@ -24,7 +24,8 @@ test('live chat follows the newest message unless the viewer intentionally scrol
   const room = await source('src/features/live-classes/components/live-class-room-mobile-first.tsx');
   assert.match(room, /chatScrollRef/);
   assert.match(room, /isFollowingLiveChat/);
-  assert.match(room, /scrollTo\(\{[^}]*scrollHeight[^}]*behavior:\s*"smooth"/s);
+  assert.match(room, /scrollTo\(\{[^}]*scrollHeight[^}]*behavior/s);
+  assert.match(room, /scrollChatToLive\("smooth"\)/);
   assert.match(room, /New messages/);
   assert.match(room, /onScroll/);
 });
