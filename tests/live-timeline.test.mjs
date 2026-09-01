@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   getInitialTimelineMessages,
+  getNewTimelineMessages,
   getTimelineMessagesAfter,
   isLiveCtaVisible,
 } from '../src/features/live-classes/domain/live-timeline.ts';
@@ -23,6 +24,26 @@ test('late join receives only recent staged context up to the current live offse
 test('messages after a cursor appear only when their timeline offset has been reached', () => {
   const result = getTimelineMessagesAfter(messages, { afterOffsetSeconds: 60, liveOffsetSeconds: 179 });
   assert.deepEqual(result.map((item) => item.id), ['m4']);
+});
+
+test('live stream appends a staged message only when its exact video offset is reached', () => {
+  const seen = new Set(['m1']);
+  assert.deepEqual(getNewTimelineMessages(messages, 29, seen).map((item) => item.id), []);
+  assert.deepEqual(getNewTimelineMessages(messages, 30, seen).map((item) => item.id), ['m2']);
+});
+
+test('live stream never appends the same staged message twice', () => {
+  const seen = new Set(['m1', 'm2', 'm3']);
+  assert.deepEqual(getNewTimelineMessages(messages, 120, seen).map((item) => item.id), ['m4']);
+});
+
+test('same-second live messages append in explicit saved position order', () => {
+  const sameSecond = [
+    { id: 'b', offsetSeconds: 45, displayName: 'B', message: 'B', position: 2 },
+    { id: 'a', offsetSeconds: 45, displayName: 'A', message: 'A', position: 1 },
+    { id: 'c', offsetSeconds: 46, displayName: 'C', message: 'C', position: 3 },
+  ];
+  assert.deepEqual(getNewTimelineMessages(sameSecond, 45, new Set()).map((item) => item.id), ['a', 'b']);
 });
 
 test('timeline ordering is stable by offset then explicit position', () => {
