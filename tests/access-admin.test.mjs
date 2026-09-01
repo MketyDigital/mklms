@@ -11,6 +11,11 @@ class InMemoryAdminRepository {
   }
 
   async createPreauthorization(input) {
+    const existing = this.preauthorizations.find((row) =>
+      row.courseId === input.courseId &&
+      ((row.email && input.email && row.email === input.email) || (row.phone && input.phone && row.phone === input.phone))
+    );
+    if (existing) return { record: existing, created: false };
     const row = { id: `pre-${this.preauthorizations.length + 1}`, ...input, status: 'PREAUTHORIZED' };
     this.preauthorizations.push(row);
     return { record: row, created: true };
@@ -41,6 +46,41 @@ test('admin can preauthorize a paid student without a payment-provider dependenc
   assert.equal(result.phone, '2348030000000');
   assert.equal(result.status, 'PREAUTHORIZED');
   assert.equal(result.created, true);
+});
+
+test('bulk import uses explicitly selected admin course instead of conflicting CSV course', async () => {
+  const repo = new InMemoryAdminRepository();
+  const service = new AccessAdminService(repo, {
+    accessCodePrefix: 'LEARN',
+    claimCodePrefix: 'CLAIM',
+    validCourseIds: new Set(['course-selected', 'course-csv']),
+  });
+
+  const result = await service.bulkPreauthorize({
+    mode: 'csv',
+    content: 'name,email,course\nAda,ada@example.com,course-csv',
+    courseId: 'course-selected',
+    claimStrategy: 'claim-code',
+  });
+
+  assert.equal(repo.preauthorizations[0].courseId, 'course-selected');
+  assert.equal(result.created[0].courseId, 'course-selected');
+  assert.equal(result.created[0].name, 'Ada');
+  assert.match(result.created[0].claimCode, /^CLAIM-/);
+});
+
+test('duplicate bulk rows do not issue a second claim code', async () => {
+  const repo = new InMemoryAdminRepository();
+  const service = new AccessAdminService(repo, { accessCodePrefix: 'LEARN', claimCodePrefix: 'CLAIM' });
+  const result = await service.bulkPreauthorize({
+    mode: 'csv',
+    content: 'name,email\nAda,ada@example.com\nAda Again,ADA@example.com',
+    claimStrategy: 'claim-code',
+  });
+
+  assert.equal(result.createdCount, 1);
+  assert.equal(result.created.length, 1);
+  assert.equal(repo.preauthorizations.length, 1);
 });
 
 test('admin reset issues a new access code while persisting only secure credential material', async () => {
