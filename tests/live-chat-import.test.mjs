@@ -81,6 +81,21 @@ test('wrapped long Zoom messages keep continuation lines until the next timestam
   assert.equal(result.errors.length, 0);
 });
 
+test('large Zoom exports are parsed without silently truncating messages', () => {
+  const rows = Array.from({ length: 1500 }, (_, index) => {
+    const totalSeconds = index;
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    const timestamp = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    return `${timestamp} From Viewer ${index + 1} to Everyone: Message ${index + 1}`;
+  });
+  const result = parseTimestampedLiveChat(rows.join('\n'));
+  assert.equal(result.items.length, 1500);
+  assert.equal(result.errors.length, 0);
+  assert.equal(result.items[1499].message, 'Message 1500');
+});
+
 test('invalid rows are reported without discarding valid imported chat', () => {
   const result = parseTimestampedLiveChat(`bad row\n00:00:05 Ada: Ready`);
   assert.equal(result.items.length, 1);
