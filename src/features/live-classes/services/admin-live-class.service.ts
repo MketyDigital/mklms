@@ -1,6 +1,7 @@
 import { normalizeSafeExternalUrl } from "../../../lib/security/external-url.ts";
 import type { ViewerDisplayMode } from "../domain/live-session.ts";
 import {
+  looksLikeZoomChatExport,
   parseLiveChatCsv,
   parseTimestampedLiveChat,
   type ImportedLiveChatItem,
@@ -38,6 +39,12 @@ export interface AdminLiveSessionRecord {
   endedRedirectUrl?: string | null;
 }
 
+export interface LiveTimelineSummary {
+  count: number;
+  firstOffsetSeconds: number | null;
+  lastOffsetSeconds: number | null;
+}
+
 export interface AdminLiveClassRepository {
   createBatch(input: Omit<AdminLiveBatchRecord, "id">): Promise<AdminLiveBatchRecord>;
   updateBatch(batchId: string, input: Omit<AdminLiveBatchRecord, "id" | "status">): Promise<void>;
@@ -47,6 +54,7 @@ export interface AdminLiveClassRepository {
   deleteSession(sessionId: string): Promise<void>;
   findSessionById?(sessionId: string): Promise<AdminLiveSessionRecord | null>;
   replaceTimelineMessages(sessionId: string, items: ImportedLiveChatItem[]): Promise<unknown>;
+  getTimelineSummary(sessionId: string): Promise<LiveTimelineSummary>;
   setBatchStatus(batchId: string, status: LiveBatchAdminStatus): Promise<void>;
 }
 
@@ -110,6 +118,18 @@ function rebaseZoomClockItems(items: ImportedLiveChatItem[]): ImportedLiveChatIt
   }));
 }
 
+function calibrateFirstMessage(
+  items: ImportedLiveChatItem[],
+  firstMessageAtSeconds: number,
+): ImportedLiveChatItem[] {
+  const firstOffset = items[0]?.offsetSeconds ?? 0;
+  const delta = firstMessageAtSeconds - firstOffset;
+  return items.map((item) => ({
+    ...item,
+    offsetSeconds: item.offsetSeconds + delta,
+  }));
+}
+
 export class AdminLiveClassService {
   private readonly repository: AdminLiveClassRepository;
 
@@ -146,7 +166,16 @@ export class AdminLiveClassService {
     return { batch: { ...batch, status: "ACTIVE" as const }, session };
   }
 
-  async importTimeline(sessionId: string, input: { format: "csv" | "text"; content: string }): Promise<{ imported: number; errors: LiveChatImportError[] }> {
+  async importTimeline(sessionId: string, input: {
+    format: "csv" | "text";
+    content: string;
+    firstMessageAtSeconds?: number | null;
+  }): Promise<{
+    imported: number;
+    stored: number;
+    summary: LiveTimelineSummary;
+    errors: LiveChatImportError[];
+  }> {
     const parsed = input.format === "csv" ? parseLiveChatCsv(input.content) : parseTimestampedLiveChat(input.content);
     let items = parsed.items;
     const errors = [...parsed.errors];
@@ -155,8 +184,7 @@ export class AdminLiveClassService {
     if (session && items.length > 0) {
       const maxOffset = Math.max(...items.map((item) => item.offsetSeconds));
       if (maxOffset > session.durationSeconds) {
-        const isZoomEveryoneExport = input.format === "text" && /From\s+.+?\s+to\s+Everyone\s*:/i.test(input.content);
-        if (isZoomEveryoneExport) {
+        if (input.format === "text" && looksLikeZoomChatExport(input.content)) {
           const rebased = rebaseZoomClockItems(items);
           const rebasedMax = Math.max(...rebased.map((item) => item.offsetSeconds));
           if (rebasedMax <= session.durationSeconds) {
@@ -172,8 +200,36 @@ export class AdminLiveClassService {
       }
     }
 
-    if (items.length > 0) await this.repository.replaceTimelineMessages(sessionId, items);
-    return { imported: items.length, errors };
+    if (items.length > 0 && input.firstMessageAtSeconds != null) {
+      const firstMessageAtSeconds = Math.floor(input.firstMessageAtSeconds);
+      if (!Number.isFinite(firstMessageAtSeconds) || firstMessageAtSeconds < 0) {
+        items = [];
+        errors.push({ line: 0, message: "First chat video time must be zero or greater." });
+      } else {
+        items = calibrateFirstMessage(items, firstMessageAtSeconds);
+      }
+    }
+
+    if (session && items.length > 0) {
+      const minOffset = Math.min(...items.map((item) => item.offsetSeconds));
+      const maxOffset = Math.max(...items.map((item) => item.offsetSeconds));
+      if (minOffset < 0 || maxOffset > session.durationSeconds) {
+        items = [];
+        errors.push({ line: 0, message: "Calibrated chat falls outside the selected session duration. Adjust the first-chat video time." });
+      }
+    }
+
+    if (items.length > 0) {
+      await this.repository.replaceTimelineMessages(sessionId, items);
+      const summary = await this.repository.getTimelineSummary(sessionId);
+      if (summary.count !== items.length) {
+        throw new Error("Chat import storage verification failed. The database did not confirm every parsed message.");
+      }
+      return { imported: items.length, stored: summary.count, summary, errors };
+    }
+
+    const summary = await this.repository.getTimelineSummary(sessionId);
+    return { imported: 0, stored: summary.count, summary, errors };
   }
 
   setBatchStatus(batchId: string, status: LiveBatchAdminStatus): Promise<void> { return this.repository.setBatchStatus(batchId, status); }
