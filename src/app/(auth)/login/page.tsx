@@ -2,13 +2,16 @@ import Link from "next/link";
 
 import { AccessCodeForm } from "@/features/access/components/access-code-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { BrandMark } from "@/features/settings/components/branding-provider";
 
 export default function LoginPage() {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-background px-4 py-12">
       <div className="w-full max-w-md">
         <div className="text-center">
-          <Link href="/" className="text-2xl font-semibold tracking-tight">MkLMS</Link>
+          <Link href="/" className="inline-flex">
+            <BrandMark className="text-2xl font-semibold tracking-tight" logoClassName="size-9" />
+          </Link>
           <p className="mt-2 text-sm text-muted-foreground">Student portal</p>
         </div>
         <Card className="mt-8">
