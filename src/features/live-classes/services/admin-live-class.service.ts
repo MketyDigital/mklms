@@ -45,6 +45,7 @@ export interface AdminLiveClassRepository {
   createSession(batchId: string, input: Omit<AdminLiveSessionRecord, "id" | "batchId">): Promise<AdminLiveSessionRecord>;
   updateSession(sessionId: string, input: Omit<AdminLiveSessionRecord, "id" | "batchId" | "status">): Promise<void>;
   deleteSession(sessionId: string): Promise<void>;
+  findSessionById?(sessionId: string): Promise<AdminLiveSessionRecord | null>;
   replaceTimelineMessages(sessionId: string, items: ImportedLiveChatItem[]): Promise<unknown>;
   setBatchStatus(batchId: string, status: LiveBatchAdminStatus): Promise<void>;
 }
@@ -99,6 +100,16 @@ function normalizeSessionInput(input: {
   };
 }
 
+function rebaseZoomClockItems(items: ImportedLiveChatItem[]): ImportedLiveChatItem[] {
+  const firstOffset = items[0]?.offsetSeconds ?? 0;
+  return items.map((item) => ({
+    ...item,
+    offsetSeconds: item.offsetSeconds >= firstOffset
+      ? item.offsetSeconds - firstOffset
+      : item.offsetSeconds + 24 * 60 * 60 - firstOffset,
+  }));
+}
+
 export class AdminLiveClassService {
   private readonly repository: AdminLiveClassRepository;
 
@@ -137,8 +148,32 @@ export class AdminLiveClassService {
 
   async importTimeline(sessionId: string, input: { format: "csv" | "text"; content: string }): Promise<{ imported: number; errors: LiveChatImportError[] }> {
     const parsed = input.format === "csv" ? parseLiveChatCsv(input.content) : parseTimestampedLiveChat(input.content);
-    if (parsed.items.length > 0) await this.repository.replaceTimelineMessages(sessionId, parsed.items);
-    return { imported: parsed.items.length, errors: parsed.errors };
+    let items = parsed.items;
+    const errors = [...parsed.errors];
+    const session = await this.repository.findSessionById?.(sessionId);
+
+    if (session && items.length > 0) {
+      const maxOffset = Math.max(...items.map((item) => item.offsetSeconds));
+      if (maxOffset > session.durationSeconds) {
+        const isZoomEveryoneExport = input.format === "text" && /From\s+.+?\s+to\s+Everyone\s*:/i.test(input.content);
+        if (isZoomEveryoneExport) {
+          const rebased = rebaseZoomClockItems(items);
+          const rebasedMax = Math.max(...rebased.map((item) => item.offsetSeconds));
+          if (rebasedMax <= session.durationSeconds) {
+            items = rebased;
+          } else {
+            items = [];
+            errors.push({ line: 0, message: "Imported Zoom chat still exceeds the selected session duration after clock-time rebasing." });
+          }
+        } else {
+          items = [];
+          errors.push({ line: 0, message: "Imported chat offset exceeds the selected session duration. Check that the file belongs to this session and uses video-relative offsets." });
+        }
+      }
+    }
+
+    if (items.length > 0) await this.repository.replaceTimelineMessages(sessionId, items);
+    return { imported: items.length, errors };
   }
 
   setBatchStatus(batchId: string, status: LiveBatchAdminStatus): Promise<void> { return this.repository.setBatchStatus(batchId, status); }
