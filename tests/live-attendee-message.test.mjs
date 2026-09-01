@@ -6,7 +6,7 @@ import { LiveAttendeeMessageService } from '../src/features/live-classes/service
 class FakeRepository {
   constructor() { this.created = []; }
   async createAttendeeMessage(input) {
-    const record = { id: 'message-1', displayName: input.displayName, message: input.message, createdAt: new Date() };
+    const record = { id: 'message-1', sessionId: input.sessionId, displayName: input.displayName, message: input.message, createdAt: new Date() };
     this.created.push(record);
     return record;
   }
@@ -20,7 +20,7 @@ class FakeNotifier {
   }
 }
 
-test('attendee comment is persisted before optional notification is dispatched', async () => {
+test('attendee comment is persisted with its live session before optional notification is dispatched', async () => {
   const repository = new FakeRepository();
   const notifier = new FakeNotifier();
   const service = new LiveAttendeeMessageService(repository, notifier);
@@ -31,6 +31,7 @@ test('attendee comment is persisted before optional notification is dispatched',
   });
 
   assert.equal(result.ok, true);
+  assert.equal(result.message.sessionId, 'session-1');
   assert.equal(result.notificationDelivered, true);
   assert.equal(repository.created.length, 1);
   assert.equal(notifier.sent.length, 1);
@@ -51,6 +52,7 @@ test('notification failure never rolls back or hides a successfully persisted at
   assert.equal(result.ok, true);
   assert.equal(result.notificationDelivered, false);
   assert.equal(result.message.id, 'message-1');
+  assert.equal(result.message.sessionId, 'session-1');
   assert.equal(repository.created.length, 1);
 });
 
