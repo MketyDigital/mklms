@@ -23,6 +23,17 @@ export function getInitialTimelineMessages(
   return reached.slice(-Math.max(0, Math.floor(recentLimit)));
 }
 
+export function getNewTimelineMessages(
+  messages: readonly LiveTimelineMessage[],
+  liveOffsetSeconds: number,
+  seenIds: ReadonlySet<string>,
+): LiveTimelineMessage[] {
+  const live = Math.max(0, liveOffsetSeconds);
+  return ordered(messages).filter(
+    (item) => item.offsetSeconds <= live && !seenIds.has(item.id),
+  );
+}
+
 export function getTimelineMessagesAfter(
   messages: readonly LiveTimelineMessage[],
   input: { afterOffsetSeconds: number; liveOffsetSeconds: number },
