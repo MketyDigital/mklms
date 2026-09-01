@@ -34,6 +34,13 @@ test('admin synchronized chat accepts direct TXT or CSV file selection and shows
   assert.match(adminPage, /listTimelineMessages/);
 });
 
+test('large imported chat is inserted in bounded SQL batches instead of one database round-trip per message', async () => {
+  const repository = await source('src/features/live-classes/repositories/postgres-admin-live-class.repository.ts');
+  assert.match(repository, /TIMELINE_INSERT_BATCH_SIZE/);
+  assert.match(repository, /insertTimelineBatch/);
+  assert.doesNotMatch(repository, /for\s*\([^)]*items\.length[^)]*\)\s*await\s+this\.insertTimeline/);
+});
+
 test('main worker keeps live chat on the application worker and protected media worker remains media-only', async () => {
   const mainWrangler = await source('wrangler.jsonc');
   const mediaWrangler = await source('workers/media-delivery/wrangler.jsonc');
