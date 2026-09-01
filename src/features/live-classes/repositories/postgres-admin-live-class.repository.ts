@@ -23,6 +23,9 @@ type SessionRow = {
   cta_reveal_offset_seconds: number | null; ended_message: string | null; ended_redirect_url: string | null;
 };
 
+const SESSION_SELECT = `SELECT id,batch_id,title,position,starts_at,duration_seconds,media_asset_id,status,
+               cta_text,cta_url,cta_reveal_offset_seconds,ended_message,ended_redirect_url`;
+
 export class PostgresAdminLiveClassRepository implements AdminLiveClassRepository {
   private readonly pool: Pool;
   constructor(pool: Pool = getPostgresPool()) { this.pool = pool; }
@@ -69,10 +72,15 @@ export class PostgresAdminLiveClassRepository implements AdminLiveClassRepositor
   }
 
   async listSessions(batchId: string): Promise<AdminLiveSessionRecord[]> {
-    const result = await this.pool.query<SessionRow>(`SELECT id,batch_id,title,position,starts_at,duration_seconds,media_asset_id,status,
-               cta_text,cta_url,cta_reveal_offset_seconds,ended_message,ended_redirect_url
+    const result = await this.pool.query<SessionRow>(`${SESSION_SELECT}
         FROM live_sessions WHERE batch_id=$1 ORDER BY position ASC`, [batchId]);
     return result.rows.map((row) => this.mapSession(row));
+  }
+
+  async findSessionById(sessionId: string): Promise<AdminLiveSessionRecord | null> {
+    const result = await this.pool.query<SessionRow>(`${SESSION_SELECT}
+        FROM live_sessions WHERE id=$1 LIMIT 1`, [sessionId]);
+    return result.rows[0] ? this.mapSession(result.rows[0]) : null;
   }
 
   async createSession(batchId: string, input: Omit<AdminLiveSessionRecord, "id" | "batchId">): Promise<AdminLiveSessionRecord> {
