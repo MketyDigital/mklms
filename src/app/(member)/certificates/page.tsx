@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Award, Download, ExternalLink, ShieldCheck, ShieldX } from "lucide-react";
+import { Award, Download, ExternalLink, ShieldCheck, ShieldX, Users } from "lucide-react";
 import { redirect } from "next/navigation";
 
 import { AppLayout } from "@/components/layout/app-layout";
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { getCurrentStudentSession } from "@/features/access/server/current-student";
 import { PostgresCertificateRepository } from "@/features/certificates/repositories/postgres-certificate.repository";
+import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
 
 export const dynamic = "force-dynamic";
 
@@ -20,8 +21,12 @@ export default async function CertificatesPage() {
   const session = await getCurrentStudentSession();
   if (!session) redirect("/login");
 
-  const certificates = await new PostgresCertificateRepository().listForStudent(
-    session.studentId,
+  const [certificates, settings] = await Promise.all([
+    new PostgresCertificateRepository().listForStudent(session.studentId),
+    new PostgresSettingsRepository().getPlatformSettings(),
+  ]);
+  const hasActiveCertificate = certificates.some(
+    (certificate) => certificate.status === "ISSUED" && !certificate.revokedAt,
   );
 
   return (
@@ -109,6 +114,22 @@ export default async function CertificatesPage() {
             })}
           </div>
         )}
+
+        {hasActiveCertificate && settings.completionCommunityUrl ? (
+          <Card className="mt-6 border-primary/30 bg-primary/5">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base"><Users className="size-4" /> Graduate community</CardTitle>
+              <CardDescription>Your completed course qualifies you for the graduate community.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild>
+                <a href={settings.completionCommunityUrl} target="_blank" rel="noreferrer noopener">
+                  Join graduate community <ExternalLink className="ml-1.5 size-4" />
+                </a>
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
     </AppLayout>
   );
