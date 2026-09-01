@@ -22,6 +22,13 @@ test('public live room has a dedicated active-session chat feed independent of c
   assert.match(room, /CHAT_REFRESH_MS/);
 });
 
+test('a briefly cached chat response from another session cannot suppress the live-state fallback timeline', async () => {
+  const room = await source('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+  const mismatchBranch = room.match(/if \(!expectedSessionId \|\| payload\.sessionId !== expectedSessionId\) \{([\s\S]*?)\n    \}/)?.[1] ?? '';
+  assert.match(mismatchBranch, /setChatFeedLoaded\(false\)/);
+  assert.doesNotMatch(mismatchBranch, /setChatFeedLoaded\(true\)/);
+});
+
 test('admin synchronized chat accepts direct TXT or CSV file selection and shows confirmed stored timeline metadata', async () => {
   const manager = await source('src/features/live-classes/components/admin-live-class-manager.tsx');
   const adminPage = await source('src/app/(admin)/admin/live-classes/page.tsx');
