@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ClaimAccessForm } from "@/features/access/components/claim-access-form";
+import { BrandMark } from "@/features/settings/components/branding-provider";
 import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +14,9 @@ export default async function OnboardingPage() {
     <div className="flex min-h-dvh items-center justify-center bg-background px-4 py-12">
       <div className="mx-auto w-full max-w-xl">
         <div className="text-center">
-          <Link href="/" className="text-2xl font-semibold tracking-tight">{settings.productName}</Link>
+          <Link href="/" className="inline-flex">
+            <BrandMark className="text-2xl font-semibold tracking-tight" logoClassName="size-9" />
+          </Link>
           <p className="mt-2 text-sm text-muted-foreground">First-time student access</p>
         </div>
         <Card className="mt-8">
