@@ -7,6 +7,7 @@ class FakeRepository {
   constructor() { this.batches = []; this.sessions = []; this.timeline = []; }
   async createBatch(input) { const record = { id: `batch-${this.batches.length + 1}`, ...input }; this.batches.push(record); return record; }
   async createSession(batchId, input) { const record = { id: `session-${this.sessions.length + 1}`, batchId, ...input }; this.sessions.push(record); return record; }
+  async findSessionById(sessionId) { return this.sessions.find((item) => item.id === sessionId) ?? null; }
   async replaceTimelineMessages(sessionId, items) { this.timeline = items.map((item, index) => ({ id: `chat-${index + 1}`, sessionId, position: index + 1, ...item })); return this.timeline; }
   async setBatchStatus(id, status) { const batch = this.batches.find((item) => item.id === id); if (batch) batch.status = status; }
 }
@@ -38,6 +39,7 @@ test('viewer baseline cannot be negative and session duration must be positive',
 
 test('admin imports normalized staged chat and invalid input reports errors instead of replacing good timeline', async () => {
   const repository = new FakeRepository();
+  repository.sessions.push({ id: 'session-1', batchId: 'batch-1', durationSeconds: 3600 });
   const service = new AdminLiveClassService(repository);
   const good = await service.importTimeline('session-1', { format: 'csv', content: 'offset_seconds,display_name,message\n5,Ada,Welcome\n30,John,Ready' });
   assert.equal(good.imported, 2);
@@ -46,6 +48,32 @@ test('admin imports normalized staged chat and invalid input reports errors inst
   assert.equal(bad.imported, 0);
   assert.equal(bad.errors.length, 1);
   assert.equal(repository.timeline.length, 2);
+});
+
+test('Zoom wall-clock chat is rebased against the selected session even for morning classes', async () => {
+  const repository = new FakeRepository();
+  repository.sessions.push({ id: 'session-1', batchId: 'batch-1', durationSeconds: 3600 });
+  const service = new AdminLiveClassService(repository);
+  const result = await service.importTimeline('session-1', {
+    format: 'text',
+    content: '08:03:15 From Mary to Everyone: Good morning\n08:08:15 From Sam to Everyone: I can hear you',
+  });
+  assert.equal(result.imported, 2);
+  assert.deepEqual(repository.timeline.map((item) => item.offsetSeconds), [0, 300]);
+  assert.equal(result.errors.length, 0);
+});
+
+test('impossible non-Zoom offsets are rejected instead of silently importing invisible chat', async () => {
+  const repository = new FakeRepository();
+  repository.sessions.push({ id: 'session-1', batchId: 'batch-1', durationSeconds: 3600 });
+  const service = new AdminLiveClassService(repository);
+  const result = await service.importTimeline('session-1', {
+    format: 'csv',
+    content: 'offset_seconds,display_name,message\n7200,Ada,Too late',
+  });
+  assert.equal(result.imported, 0);
+  assert.match(result.errors[0].message, /session duration/i);
+  assert.equal(repository.timeline.length, 0);
 });
 
 test('activating a batch is explicit and independent of any registration or payment system', async () => {
