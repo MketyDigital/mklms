@@ -29,11 +29,11 @@ export default async function PublicLiveClassPage({
   ).getPlatformSettings();
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
+    <div data-live-mobile-viewport className="bg-zinc-950 text-white">
       <LiveClassRoomMobileFirst
         slug={slug}
         organizationName={settings.organizationName || "Live Class"}
       />
-    </main>
+    </div>
   );
 }
