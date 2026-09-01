@@ -45,6 +45,8 @@ interface LiveRoomState {
   ended: { message: string; redirectUrl: string | null } | null;
 }
 
+type StagedChatMessage = LiveRoomState["chat"]["staged"][number];
+
 interface PlaybackAuthorization {
   playbackType: "HLS" | "DIRECT" | "EMBED" | "CUSTOM";
   url: string;
@@ -59,6 +61,7 @@ interface PlaybackState {
 }
 
 const SAFETY_STATE_REFRESH_MS = 5 * 60 * 1000;
+const CHAT_REFRESH_MS = 5 * 60 * 1000;
 
 type DirectSlot = 0 | 1;
 
@@ -109,6 +112,8 @@ export function LiveClassRoomMobileFirst({
   const [comment, setComment] = useState("");
   const [sending, setSending] = useState(false);
   const [ownComments, setOwnComments] = useState<OwnLiveComment[]>([]);
+  const [stagedChat, setStagedChat] = useState<StagedChatMessage[]>([]);
+  const [chatFeedLoaded, setChatFeedLoaded] = useState(false);
 
   const activeSessionId = roomState?.state === "LIVE" ? roomState.session?.id ?? null : null;
   const storageKey = useMemo(
@@ -186,6 +191,37 @@ export function LiveClassRoomMobileFirst({
     return payload;
   }, [slug]);
 
+  const fetchChat = useCallback(async () => {
+    const response = await fetch(`/api/live/${encodeURIComponent(slug)}/chat`, {
+      cache: "no-store",
+      credentials: "same-origin",
+    });
+    const payload = (await response.json()) as {
+      ok?: boolean;
+      sessionId?: string | null;
+      count?: number;
+      messages?: StagedChatMessage[];
+      message?: string;
+    };
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.message ?? "Live chat is temporarily unavailable.");
+    }
+
+    const currentState = roomStateRef.current;
+    const expectedSessionId = currentState?.state === "LIVE"
+      ? currentState.session?.id ?? null
+      : null;
+    if (!expectedSessionId || payload.sessionId !== expectedSessionId) {
+      setStagedChat([]);
+      setChatFeedLoaded(true);
+      return payload;
+    }
+
+    setStagedChat(Array.isArray(payload.messages) ? payload.messages : []);
+    setChatFeedLoaded(true);
+    return payload;
+  }, [slug]);
+
   const requestPlayback = useCallback(async () => {
     const response = await fetch(`/api/live/${encodeURIComponent(slug)}/playback`, {
       method: "POST",
@@ -235,6 +271,7 @@ export function LiveClassRoomMobileFirst({
     );
     const refreshVisiblePlayback = () => {
       void fetchState().catch(() => undefined);
+      void fetchChat().catch(() => undefined);
       if (roomStateRef.current?.state === "LIVE") {
         void requestPlayback().catch(() => setNeedsPlaybackGesture(true));
       }
@@ -253,7 +290,7 @@ export function LiveClassRoomMobileFirst({
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("pageshow", onPageShow);
     };
-  }, [fetchState, requestPlayback]);
+  }, [fetchChat, fetchState, requestPlayback]);
 
   useEffect(() => {
     if (!roomState) return;
@@ -278,6 +315,24 @@ export function LiveClassRoomMobileFirst({
   }, [fetchState, roomState]);
 
   const roomSessionId = activeSessionId;
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setStagedChat([]);
+      setChatFeedLoaded(false);
+      if (activeSessionId) void fetchChat().catch(() => undefined);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeSessionId, fetchChat]);
+
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const timer = window.setInterval(
+      () => void fetchChat().catch(() => undefined),
+      CHAT_REFRESH_MS,
+    );
+    return () => window.clearInterval(timer);
+  }, [activeSessionId, fetchChat]);
 
   useEffect(() => {
     if (roomState?.state !== "LIVE" || !roomSessionId) return;
@@ -463,12 +518,13 @@ export function LiveClassRoomMobileFirst({
 
   const visibleStagedChat = useMemo(() => {
     if (!roomState || roomState.state !== "LIVE") return [];
+    const source = chatFeedLoaded ? stagedChat : roomState.chat.staged;
     return getInitialTimelineMessages(
-      roomState.chat.staged,
+      source,
       currentLiveOffsetSeconds,
       20,
     );
-  }, [currentLiveOffsetSeconds, roomState]);
+  }, [chatFeedLoaded, currentLiveOffsetSeconds, roomState, stagedChat]);
 
   const visibleCta = useMemo(() => {
     if (!roomState?.cta || roomState.state !== "LIVE") return null;
@@ -789,7 +845,7 @@ export function LiveClassRoomMobileFirst({
                   <p className="text-xs font-semibold text-white/65">
                     {item.mine ? "You" : item.name}
                   </p>
-                  <p className="mt-1 text-sm leading-relaxed text-white/90">
+                  <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-white/90">
                     {item.message}
                   </p>
                 </div>
