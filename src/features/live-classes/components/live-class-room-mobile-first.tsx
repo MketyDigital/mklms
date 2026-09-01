@@ -102,6 +102,7 @@ export function LiveClassRoomMobileFirst({
   const [error, setError] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(0);
   const [muted, setMuted] = useState(true);
+  const [needsPlaybackGesture, setNeedsPlaybackGesture] = useState(false);
   const [activeDirectSlot, setActiveDirectSlot] = useState<DirectSlot>(0);
   const [displayName, setDisplayName] = useState("");
   const [comment, setComment] = useState("");
@@ -220,20 +221,27 @@ export function LiveClassRoomMobileFirst({
       () => void fetchState().catch(() => undefined),
       SAFETY_STATE_REFRESH_MS,
     );
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        void fetchState().catch(() => undefined);
+    const refreshVisiblePlayback = () => {
+      void fetchState().catch(() => undefined);
+      if (roomStateRef.current?.state === "LIVE") {
+        void requestPlayback().catch(() => setNeedsPlaybackGesture(true));
       }
     };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") refreshVisiblePlayback();
+    };
+    const onPageShow = () => refreshVisiblePlayback();
     document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("pageshow", onPageShow);
     return () => {
       active = false;
       window.clearTimeout(initialFetch);
       window.clearInterval(clock);
       window.clearInterval(safetyRefresh);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("pageshow", onPageShow);
     };
-  }, [fetchState]);
+  }, [fetchState, requestPlayback]);
 
   useEffect(() => {
     if (!roomState) return;
@@ -350,10 +358,12 @@ export function LiveClassRoomMobileFirst({
         try {
           await targetVideo.play();
         } catch {
+          setNeedsPlaybackGesture(true);
           return;
         }
         if (generation !== directSwapGenerationRef.current) return;
 
+        setNeedsPlaybackGesture(false);
         if (!sameLoadedMedia || targetSlot === currentSlot) {
           targetVideo.muted = muted;
           setDirectSlot(targetSlot);
@@ -387,7 +397,9 @@ export function LiveClassRoomMobileFirst({
 
     const positionAtLiveEdge = () => {
       correctPosition(video);
-      void video.play().catch(() => undefined);
+      void video.play()
+        .then(() => setNeedsPlaybackGesture(false))
+        .catch(() => setNeedsPlaybackGesture(true));
       loadedMediaSessionRef.current = playback.sessionId;
       loadedMediaTypeRef.current = authorization.playbackType;
       loadedAuthorizationUrlRef.current = authorization.url;
@@ -409,7 +421,10 @@ export function LiveClassRoomMobileFirst({
         hls.attachMedia(video);
         hls.on(Hls.Events.MANIFEST_PARSED, positionAtLiveEdge);
         hls.on(Hls.Events.ERROR, (_event, data) => {
-          if (data.fatal) setError("The live stream could not be loaded.");
+          if (data.fatal) {
+            setNeedsPlaybackGesture(true);
+            setError("The live stream could not be loaded.");
+          }
         });
       });
     }
@@ -519,6 +534,38 @@ export function LiveClassRoomMobileFirst({
     ) {
       video.currentTime = target;
     }
+  };
+
+  const handlePlaybackPaused = (video: HTMLVideoElement) => {
+    if (
+      document.visibilityState === "visible" &&
+      video === currentAudioVideo() &&
+      !video.ended
+    ) {
+      setNeedsPlaybackGesture(true);
+    }
+  };
+
+  const handlePlaybackError = (video: HTMLVideoElement) => {
+    if (video !== currentAudioVideo()) return;
+    setNeedsPlaybackGesture(true);
+    void requestPlayback().catch(() => undefined);
+  };
+
+  const resumePlayback = () => {
+    setMuted(false);
+    setNeedsPlaybackGesture(false);
+    const video = currentAudioVideo();
+    if (!video) {
+      void requestPlayback().catch(() => setNeedsPlaybackGesture(true));
+      return;
+    }
+    video.muted = false;
+    correctPosition(video);
+    void video.play().catch(() => {
+      setNeedsPlaybackGesture(true);
+      void requestPlayback().catch(() => setNeedsPlaybackGesture(true));
+    });
   };
 
   if (loading) {
@@ -644,6 +691,9 @@ export function LiveClassRoomMobileFirst({
                         controlsList="nodownload noremoteplayback nofullscreen"
                         disablePictureInPicture
                         onSeeking={(event) => handleSeeking(event.currentTarget)}
+                        onPause={(event) => handlePlaybackPaused(event.currentTarget)}
+                        onPlaying={() => setNeedsPlaybackGesture(false)}
+                        onError={(event) => handlePlaybackError(event.currentTarget)}
                         onContextMenu={(event) => event.preventDefault()}
                       />
                     );
@@ -660,6 +710,9 @@ export function LiveClassRoomMobileFirst({
                   controlsList="nodownload noremoteplayback nofullscreen"
                   disablePictureInPicture
                   onSeeking={(event) => handleSeeking(event.currentTarget)}
+                  onPause={(event) => handlePlaybackPaused(event.currentTarget)}
+                  onPlaying={() => setNeedsPlaybackGesture(false)}
+                  onError={(event) => handlePlaybackError(event.currentTarget)}
                   onContextMenu={(event) => event.preventDefault()}
                 />
               ) : authorization ? (
@@ -676,21 +729,14 @@ export function LiveClassRoomMobileFirst({
                 <Radio className="size-3" /> LIVE
               </div>
 
-              {muted && authorization && authorization.playbackType !== "EMBED" ? (
+              {(muted || needsPlaybackGesture) && authorization && authorization.playbackType !== "EMBED" ? (
                 <button
                   type="button"
                   className="absolute inset-0 flex items-center justify-center bg-black/15"
-                  onClick={() => {
-                    setMuted(false);
-                    const video = currentAudioVideo();
-                    if (video) {
-                      video.muted = false;
-                      void video.play().catch(() => undefined);
-                    }
-                  }}
+                  onClick={resumePlayback}
                 >
                   <span className="flex items-center gap-2 rounded-full bg-black/75 px-5 py-3 text-sm font-medium backdrop-blur">
-                    <Volume2 className="size-4" /> Tap to hear audio
+                    <Volume2 className="size-4" /> {needsPlaybackGesture ? "Tap to resume" : "Tap to hear audio"}
                   </span>
                 </button>
               ) : null}
