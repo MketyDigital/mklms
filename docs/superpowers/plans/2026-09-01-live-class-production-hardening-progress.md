@@ -27,7 +27,7 @@ Draft PR: `#34 fix: harden production live classes and completion flows`
 - Preauthorization import already normalized identities and de-duplicated within one import, but Google Forms header aliases and selected-course precedence needed stronger coverage.
 - No platform setting existed for a post-completion community URL.
 
-## Implemented changes pending final CI gate
+## Implemented changes
 
 - Zoom chat parser now accepts existing formats plus common Zoom same-line, tab-delimited and multiline `From <name> to Everyone:` exports while preserving video-offset synchronization.
 - Public live chat disclosure text is removed; comment UI now uses neutral `Write a comment…` wording while backend viewer isolation remains unchanged.
@@ -41,23 +41,44 @@ Draft PR: `#34 fix: harden production live classes and completion flows`
 - Phone normalization remains country-neutral to avoid an unsafe migration of existing production identities; admins should use one consistent phone representation in source forms.
 - Added migration `012_add_completion_community_url.sql`, admin setting `Graduate community URL`, and certificate-gated `Join graduate community` CTA. Only students with at least one non-revoked `ISSUED` certificate see it.
 - Added static boundary tests confirming paid lesson playback remains student/course/lesson scoped and separate from public live playback.
+- Settings reads are backward-compatible with the pre-012 schema so app deployment before migration does not take the portal down; the community CTA remains unavailable until migration 012 exists.
+- Graduate community URLs are restricted to HTTPS.
 
 ## Verification log
 
 - 2026-09-01: isolated branch created from `main`.
 - 2026-09-01: implementation plan committed (`5353f36c9b33c129e23dd092cce17f1b99ea5774`).
-- Container cannot reach GitHub network directly in this environment, so test/build evidence is captured through GitHub PR CI runs rather than local clone execution.
-- CI is configured to run Domain tests, lint, Next.js production build, Cloudflare OpenNext build, main Worker packaging dry run, protected-media Worker packaging dry run, and external-billing Worker packaging dry run.
-- Draft PR remains unmerged while the final gate is running.
+- Red test evidence captured for Zoom multiline `meeting_saved_chat.txt`: the new regression test failed before the parser fix and passed after it.
+- Final branch head `c073a00ce782cb75588ce3fc897b0e98825cd27e` completed MkLMS CI successfully.
+- Final CI passed Domain tests, lint, Next.js production build, Cloudflare OpenNext build, main Worker packaging dry run, protected-media Worker packaging dry run, and external-billing Worker packaging dry run.
+- The unrelated Vercel private-org/Hobby-plan status is not part of MkLMS deployment verification.
+
+## Database migration rollout
+
+- Migration `012_add_completion_community_url.sql` has **not** been applied to production from this development session.
+- It is included in the repository migration ledger flow and is ready for the existing one-click/manual GitHub Action: `Run MkLMS DB migrations`.
+- After this PR is merged to `main`, open GitHub Actions → `Run MkLMS DB migrations` → `Run workflow` on `main` → type `MIGRATE`.
+- The workflow runs `db:status`, applies all pending migrations once through `db:migrate`, then runs `db:status` again to verify the database is current.
+- Required GitHub Environment secret for `database-migrations`: `MKLMS_DATABASE_URL`.
+- Optional GitHub Environment secret: `MKLMS_DATABASE_SSL`; if absent the workflow uses `require`.
+- These are GitHub migration secrets, not Cloudflare Worker environment variables.
+
+## Environment/configuration impact
+
+- No new environment variable is required on the main Cloudflare Worker.
+- No new environment variable is required on the protected-media Worker.
+- No new environment variable is required on the external-billing Worker.
+- After migration 012 is applied, configure the graduate community destination in MkLMS Admin → Platform Settings → `Graduate community URL` using an HTTPS URL.
+- Existing media, Telegram, database, authentication and billing environment variables remain unchanged.
 
 ## Task status
 
-- [x] Task 1 Zoom chat import/synchronization — implemented; final CI pending.
-- [x] Task 2 Public chat copy + admin attendee visibility — implemented; final CI pending.
-- [x] Task 3 Full live-class/session edit forms + labels — implemented; final CI pending.
-- [x] Task 4 Delete cleanup regression coverage — implemented; final CI pending.
-- [x] Task 5 Mobile keyboard stability + player flicker — implemented for production DIRECT MP4; final CI pending. HLS retains its existing refresh path.
-- [x] Task 6 Free-vs-paid live boundary copy/contract — implemented; final CI pending.
-- [x] Task 7 Google Forms/bulk preauthorization hardening — implemented; final CI pending.
-- [x] Task 8 Certificate-gated community link — implemented; final CI pending.
-- [ ] Task 9 Full paid-course/production regression gate — running in GitHub Actions.
+- [x] Task 1 Zoom chat import/synchronization.
+- [x] Task 2 Public chat copy + admin attendee visibility.
+- [x] Task 3 Full live-class/session edit forms + labels.
+- [x] Task 4 Delete cleanup regression coverage.
+- [x] Task 5 Mobile keyboard stability + player flicker for production DIRECT MP4. HLS retains its existing playback path.
+- [x] Task 6 Free-vs-paid live boundary copy/contract.
+- [x] Task 7 Google Forms/bulk preauthorization hardening.
+- [x] Task 8 Certificate-gated community link.
+- [x] Task 9 Full paid-course/production regression gate.
