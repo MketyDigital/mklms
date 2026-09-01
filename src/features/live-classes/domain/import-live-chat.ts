@@ -92,39 +92,100 @@ function timestampToSeconds(hours: string, minutes: string, seconds: string): nu
   return Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds);
 }
 
+interface PendingZoomMessage {
+  line: number;
+  offsetSeconds: number;
+  displayName: string;
+  messageLines: string[];
+}
+
+function flushPendingZoomMessage(
+  result: LiveChatImportResult,
+  pending: PendingZoomMessage | null,
+): void {
+  if (!pending) return;
+  const message = pending.messageLines.join("\n").trim();
+  if (!message) {
+    result.errors.push({ line: pending.line, message: "Missing chat message." });
+    return;
+  }
+  result.items.push({
+    offsetSeconds: pending.offsetSeconds,
+    displayName: pending.displayName,
+    message,
+  });
+}
+
 export function parseTimestampedLiveChat(input: string): LiveChatImportResult {
   const result: LiveChatImportResult = { items: [], errors: [] };
-  input.split(/\r?\n/).forEach((rawLine, index) => {
-    const line = rawLine.trim();
-    if (!line) return;
+  const lines = input.replace(/^\uFEFF/, "").split(/\r?\n/);
+  let pending: PendingZoomMessage | null = null;
 
-    const match = line.match(/^(\d{1,2}):(\d{2}):(\d{2})\s+(.+?)\s*:\s*(.+)$/);
-    if (!match) {
-      result.errors.push({ line: index + 1, message: "Expected HH:MM:SS Name: message." });
-      return;
+  for (let index = 0; index < lines.length; index += 1) {
+    const rawLine = lines[index];
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    const timestampMatch = line.match(/^(\d{1,2}):(\d{2}):(\d{2})\s+(.+)$/);
+    if (!timestampMatch) {
+      if (pending) {
+        pending.messageLines.push(line);
+      } else {
+        result.errors.push({ line: index + 1, message: "Expected HH:MM:SS Name: message." });
+      }
+      continue;
     }
 
-    const [, hours, minutes, seconds, rawName, rawMessage] = match;
+    flushPendingZoomMessage(result, pending);
+    pending = null;
+
+    const [, hours, minutes, seconds, remainderRaw] = timestampMatch;
     const numericMinutes = Number(minutes);
     const numericSeconds = Number(seconds);
     if (numericMinutes > 59 || numericSeconds > 59) {
       result.errors.push({ line: index + 1, message: "Invalid timestamp." });
-      return;
+      continue;
     }
 
-    const zoomNameMatch = rawName.match(/^From\s+(.+?)\s+to\s+Everyone\s*$/i);
-    const displayName = (zoomNameMatch?.[1] ?? rawName).trim();
-    const message = rawMessage.trim();
+    const offsetSeconds = timestampToSeconds(hours, minutes, seconds);
+    const remainder = remainderRaw.trim();
+    const zoomMatch = remainder.match(/^From\s+(.+?)\s+to\s+Everyone\s*:\s*(.*)$/i);
+    if (zoomMatch) {
+      const displayName = zoomMatch[1].trim();
+      const message = zoomMatch[2].trim();
+      if (!displayName) {
+        result.errors.push({ line: index + 1, message: "Missing display name or message." });
+        continue;
+      }
+      if (message) {
+        result.items.push({ offsetSeconds, displayName, message });
+      } else {
+        pending = {
+          line: index + 1,
+          offsetSeconds,
+          displayName,
+          messageLines: [],
+        };
+      }
+      continue;
+    }
+
+    const genericMatch = remainder.match(/^(.+?)\s*:\s*(.+)$/);
+    if (!genericMatch) {
+      result.errors.push({ line: index + 1, message: "Expected HH:MM:SS Name: message." });
+      continue;
+    }
+
+    const displayName = genericMatch[1].trim();
+    const message = genericMatch[2].trim();
     if (!displayName || !message) {
       result.errors.push({ line: index + 1, message: "Missing display name or message." });
-      return;
+      continue;
     }
 
-    result.items.push({
-      offsetSeconds: timestampToSeconds(hours, minutes, seconds),
-      displayName,
-      message,
-    });
-  });
+    result.items.push({ offsetSeconds, displayName, message });
+  }
+
+  flushPendingZoomMessage(result, pending);
   return result;
 }
