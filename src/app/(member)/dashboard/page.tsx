@@ -108,9 +108,9 @@ export default async function DashboardPage() {
 
         <Card className="mt-8">
           <CardHeader>
-            <CardTitle className="text-base">Live classes</CardTitle>
+            <CardTitle className="text-base">Member live sessions</CardTitle>
             <CardDescription>
-              Scheduled live-class access will appear here when the live-class module is configured.
+              Paid-student live sessions will appear here only when a member live-session module is configured. Public free classes use a separate external live-class page and are not connected to this dashboard.
             </CardDescription>
           </CardHeader>
         </Card>
