@@ -17,17 +17,30 @@ export default async function AdminLiveClassesPage() {
   ]);
 
   const batches = await Promise.all(
-    batchRecords.map(async (batch) => ({
-      ...batch,
-      sessions: (await repository.listSessions(batch.id)).map((session) => ({
-        ...session,
-        startsAt: session.startsAt.toISOString(),
-      })),
-      attendeeMessages: (await runtimeRepository.listAdminAttendeeMessages({ batchId: batch.id })).map((item) => ({
-        ...item,
-        createdAt: item.createdAt.toISOString(),
-      })),
-    })),
+    batchRecords.map(async (batch) => {
+      const sessionRecords = await repository.listSessions(batch.id);
+      const sessions = await Promise.all(
+        sessionRecords.map(async (session) => {
+          const timeline = await runtimeRepository.listTimelineMessages(session.id);
+          return {
+            ...session,
+            startsAt: session.startsAt.toISOString(),
+            timelineCount: timeline.length,
+            timelineFirstOffsetSeconds: timeline[0]?.offsetSeconds ?? null,
+            timelineLastOffsetSeconds: timeline.at(-1)?.offsetSeconds ?? null,
+          };
+        }),
+      );
+
+      return {
+        ...batch,
+        sessions,
+        attendeeMessages: (await runtimeRepository.listAdminAttendeeMessages({ batchId: batch.id })).map((item) => ({
+          ...item,
+          createdAt: item.createdAt.toISOString(),
+        })),
+      };
+    }),
   );
 
   const publicBaseUrl = settings.publicBaseUrl.replace(/\/$/, "");
