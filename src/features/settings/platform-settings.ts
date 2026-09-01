@@ -59,6 +59,7 @@ export interface PlatformSettings {
   notificationProvider: NotificationProviderType;
   accessCodePrefix: string;
   certificatePrefix: string;
+  completionCommunityUrl?: string | null;
 }
 
 export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
@@ -75,4 +76,5 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   notificationProvider: "none",
   accessCodePrefix: "ACCESS",
   certificatePrefix: "CERT",
+  completionCommunityUrl: null,
 };

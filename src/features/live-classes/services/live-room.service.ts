@@ -9,6 +9,7 @@ import {
 
 export interface LiveAttendeeMessageRecord {
   id: string;
+  sessionId?: string | null;
   displayName?: string | null;
   message: string;
   createdAt: Date;

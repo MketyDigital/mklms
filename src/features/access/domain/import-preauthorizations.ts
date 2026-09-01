@@ -115,19 +115,29 @@ function splitCsvLine(line: string): string[] {
   return fields;
 }
 
+function normalizedHeader(header: string): string {
+  return header.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+}
+
+function headerIndex(headers: string[], aliases: string[]): number {
+  return headers.findIndex((header) => aliases.includes(header));
+}
+
 export function parsePreauthorizationCsv(
   input: string,
 ): PreauthorizationImportResult {
   const result: PreauthorizationImportResult = { rows: [], errors: [] };
-  const lines = input.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  const lines = input.replace(/^\uFEFF/, "").split(/\r?\n/).filter((line) => line.trim().length > 0);
   if (lines.length === 0) return result;
 
-  const headers = splitCsvLine(lines[0]).map((header) => header.trim().toLowerCase());
+  const headers = splitCsvLine(lines[0]).map(normalizedHeader);
   const indexes = {
-    name: headers.findIndex((header) => ["name", "full name", "fullname"].includes(header)),
-    email: headers.indexOf("email"),
-    phone: headers.findIndex((header) => ["phone", "phone number", "phonenumber"].includes(header)),
-    courseId: headers.findIndex((header) => ["courseid", "course id", "course"].includes(header)),
+    name: headerIndex(headers, ["name", "full name", "fullname", "your name", "student name"]),
+    email: headerIndex(headers, ["email", "email address", "e mail", "e mail address"]),
+    phone: headerIndex(headers, [
+      "phone", "phone number", "phonenumber", "mobile", "mobile number", "telephone", "telephone number", "whatsapp", "whatsapp number",
+    ]),
+    courseId: headerIndex(headers, ["courseid", "course id", "course", "course name"]),
   };
   const seen = new Set<string>();
 

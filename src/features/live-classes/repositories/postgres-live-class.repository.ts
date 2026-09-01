@@ -245,6 +245,7 @@ export class PostgresLiveClassRepository implements LiveRoomRepository {
   }): Promise<LiveAttendeeMessageRecord> {
     const result = await this.pool.query<{
       id: string;
+      session_id: string;
       display_name_snapshot: string | null;
       message: string;
       created_at: Date;
@@ -253,7 +254,7 @@ export class PostgresLiveClassRepository implements LiveRoomRepository {
          id, batch_id, session_id, viewer_id,
          display_name_snapshot, message, created_at
        ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
-       RETURNING id, display_name_snapshot, message, created_at`,
+       RETURNING id, session_id, display_name_snapshot, message, created_at`,
       [
         randomUUID(),
         input.batchId,
@@ -266,6 +267,7 @@ export class PostgresLiveClassRepository implements LiveRoomRepository {
     const row = result.rows[0];
     return {
       id: row.id,
+      sessionId: row.session_id,
       displayName: row.display_name_snapshot,
       message: row.message,
       createdAt: row.created_at,
@@ -275,11 +277,12 @@ export class PostgresLiveClassRepository implements LiveRoomRepository {
   async listViewerMessages(viewerId: string): Promise<LiveAttendeeMessageRecord[]> {
     const result = await this.pool.query<{
       id: string;
+      session_id: string;
       display_name_snapshot: string | null;
       message: string;
       created_at: Date;
     }>(
-      `SELECT id, display_name_snapshot, message, created_at
+      `SELECT id, session_id, display_name_snapshot, message, created_at
        FROM live_attendee_messages
        WHERE viewer_id = $1
        ORDER BY created_at ASC`,
@@ -287,6 +290,7 @@ export class PostgresLiveClassRepository implements LiveRoomRepository {
     );
     return result.rows.map((row) => ({
       id: row.id,
+      sessionId: row.session_id,
       displayName: row.display_name_snapshot,
       message: row.message,
       createdAt: row.created_at,
@@ -299,11 +303,12 @@ export class PostgresLiveClassRepository implements LiveRoomRepository {
   }): Promise<LiveAttendeeMessageRecord[]> {
     const result = await this.pool.query<{
       id: string;
+      session_id: string;
       display_name_snapshot: string | null;
       message: string;
       created_at: Date;
     }>(
-      `SELECT id, display_name_snapshot, message, created_at
+      `SELECT id, session_id, display_name_snapshot, message, created_at
        FROM live_attendee_messages
        WHERE batch_id = $1
          AND ($2::text IS NULL OR session_id = $2)
@@ -312,6 +317,7 @@ export class PostgresLiveClassRepository implements LiveRoomRepository {
     );
     return result.rows.map((row) => ({
       id: row.id,
+      sessionId: row.session_id,
       displayName: row.display_name_snapshot,
       message: row.message,
       createdAt: row.created_at,

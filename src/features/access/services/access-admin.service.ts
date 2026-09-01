@@ -95,15 +95,19 @@ export class AccessAdminService {
 
     const created: Array<{
       id: string;
+      name?: string | null;
       email?: string | null;
       phone?: string | null;
+      courseId?: string | null;
       claimCode?: string;
     }> = [];
     let skippedDuplicates = 0;
     const errors = [...imported.errors];
+    const selectedCourseId = input.courseId?.trim() || null;
 
     for (let index = 0; index < imported.rows.length; index += 1) {
       const row = imported.rows[index];
+      const courseId = selectedCourseId ?? row.courseId?.trim() ?? null;
       const claimCode =
         input.claimStrategy === "claim-code"
           ? generateAccessCode({
@@ -117,7 +121,7 @@ export class AccessAdminService {
           email: row.email,
           phone: row.phone,
           nameHint: row.name,
-          courseId: row.courseId ?? input.courseId,
+          courseId,
           claimStrategy: input.claimStrategy,
           claimCode,
           source:
@@ -132,8 +136,10 @@ export class AccessAdminService {
 
         created.push({
           id: result.id,
+          name: result.nameHint ?? row.name ?? null,
           email: result.email,
           phone: result.phone,
+          courseId: result.courseId ?? courseId,
           ...(claimCode ? { claimCode } : {}),
         });
       } catch (error) {

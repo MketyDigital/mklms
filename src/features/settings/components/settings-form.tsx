@@ -51,6 +51,8 @@ export function SettingsForm({ settings }: { settings: PlatformSettings }) {
       <SelectField label="Default claim verification" value={form.claimVerificationStrategy} onChange={(value) => update("claimVerificationStrategy", value as PlatformSettings["claimVerificationStrategy"])} options={["preauth-only", "claim-code", "manual-approval"]} />
       <Field label="Access code prefix"><Input value={form.accessCodePrefix} onChange={(e) => update("accessCodePrefix", e.target.value.toUpperCase())} /></Field>
       <Field label="Certificate ID prefix"><Input value={form.certificatePrefix} onChange={(e) => update("certificatePrefix", e.target.value.toUpperCase())} /></Field>
+      <Field label="Graduate community URL"><Input type="url" value={form.completionCommunityUrl ?? ""} onChange={(e) => update("completionCommunityUrl", e.target.value || null)} placeholder="https://t.me/... or https://chat.whatsapp.com/..." /></Field>
+      <div className="self-end text-xs text-muted-foreground">Shown only to students who have at least one valid issued certificate.</div>
     </CardContent></Card>
 
     <Card><CardHeader><CardTitle className="text-base">Communication integrations</CardTitle><CardDescription>SMTP and Telegram are the installed communication adapters. Their secret credentials remain in Worker environment variables, not this form.</CardDescription></CardHeader><CardContent className="grid gap-5 sm:grid-cols-2">

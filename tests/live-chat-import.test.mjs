@@ -29,6 +29,24 @@ test('Zoom-style relative timestamp lines remove From/to Everyone wrapper', () =
   ]);
 });
 
+test('Zoom meeting_saved_chat tab-delimited rows import correctly', () => {
+  const result = parseTimestampedLiveChat(`\uFEFF00:00:30\tFrom Mary Jane to Everyone:\tI can hear you\r\n00:02:00\tFrom Sam K. to Everyone:\tPlease repeat that`);
+  assert.deepEqual(result.items, [
+    { offsetSeconds: 30, displayName: 'Mary Jane', message: 'I can hear you' },
+    { offsetSeconds: 120, displayName: 'Sam K.', message: 'Please repeat that' },
+  ]);
+  assert.equal(result.errors.length, 0);
+});
+
+test('Zoom meeting_saved_chat multiline message rows import correctly', () => {
+  const result = parseTimestampedLiveChat(`00:00:30 From Mary Jane to Everyone:\n\tI can hear you\n00:02:00 From Sam K. to Everyone:\n\tPlease repeat that`);
+  assert.deepEqual(result.items, [
+    { offsetSeconds: 30, displayName: 'Mary Jane', message: 'I can hear you' },
+    { offsetSeconds: 120, displayName: 'Sam K.', message: 'Please repeat that' },
+  ]);
+  assert.equal(result.errors.length, 0);
+});
+
 test('invalid rows are reported without discarding valid imported chat', () => {
   const result = parseTimestampedLiveChat(`bad row\n00:00:05 Ada: Ready`);
   assert.equal(result.items.length, 1);
