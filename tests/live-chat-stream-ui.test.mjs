@@ -17,7 +17,8 @@ test('live room maintains an append-only session chat stream instead of static r
 test('viewer comments append immediately into the same live stream', async () => {
   const room = await source('src/features/live-classes/components/live-class-room-mobile-first.tsx');
   assert.match(room, /source:\s*"viewer"/);
-  assert.match(room, /setLiveChatStream\(\(current\).*payload\.message/s);
+  assert.match(room, /const sentMessage = payload\.message/);
+  assert.match(room, /setLiveChatStream\(\(current\).*sentMessage/s);
 });
 
 test('live chat follows the newest message unless the viewer intentionally scrolls away', async () => {
