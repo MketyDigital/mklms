@@ -38,7 +38,8 @@ test('admin synchronized chat accepts direct TXT or CSV file selection and shows
   assert.match(manager, /file\.text\(\)/);
   assert.match(manager, /Confirmed stored/);
   assert.match(manager, /timelineCount/);
-  assert.match(adminPage, /listTimelineMessages/);
+  assert.match(adminPage, /getTimelineSummary/);
+  assert.doesNotMatch(adminPage, /listTimelineMessages\(session\.id\)/);
 });
 
 test('large imported chat is inserted in bounded SQL batches instead of one database round-trip per message', async () => {
