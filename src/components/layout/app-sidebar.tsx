@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut, Menu, User } from "lucide-react";
@@ -16,6 +18,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { adminNav, memberNav, type NavItem } from "@/config/navigation";
+import { usePlatformBranding } from "@/features/settings/components/branding-provider";
 import { cn } from "@/lib/utils";
 
 interface SidebarUser {
@@ -42,11 +45,21 @@ function NavLink({ item, onClick }: { item: NavItem; onClick?: () => void }) {
   );
 }
 
+function BrandHeader({ href, compact = false }: { href: string; compact?: boolean }) {
+  const { organizationName, logoUrl } = usePlatformBranding();
+  return (
+    <Link href={href} className="inline-flex min-w-0 items-center gap-2 font-semibold tracking-tight">
+      {logoUrl ? <img src={logoUrl} alt="" className={compact ? "size-7 shrink-0 object-contain" : "size-8 shrink-0 object-contain"} /> : null}
+      <span className="truncate">{organizationName}</span>
+    </Link>
+  );
+}
+
 function SidebarContent({ isAdmin, user, navItems, onNavClick, onSignOut }: { isAdmin?: boolean; user: SidebarUser; navItems: NavItem[]; onNavClick?: () => void; onSignOut: () => void }) {
   return (
     <div className="flex h-full flex-col">
       <div className="px-4 py-5">
-        <Link href={isAdmin ? "/admin" : "/dashboard"} className="text-lg font-semibold tracking-tight">MkLMS</Link>
+        <BrandHeader href={isAdmin ? "/admin" : "/dashboard"} />
       </div>
       <nav className="flex-1 space-y-1 px-3">
         {navItems.map((item) => <NavLink key={item.href} item={item} onClick={onNavClick} />)}
@@ -84,7 +97,7 @@ export function AppSidebar({ isAdmin, user, unreadMessages }: AppSidebarProps) {
       <aside className="hidden w-60 shrink-0 border-r bg-background lg:block"><div className="sticky top-0 h-dvh overflow-y-auto"><SidebarContent isAdmin={isAdmin} user={user} navItems={navItems} onSignOut={() => void signOut()} /></div></aside>
       <div className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur-sm lg:hidden">
         <Sheet><SheetTrigger asChild><Button variant="ghost" size="icon"><Menu className="size-5" /><span className="sr-only">Open menu</span></Button></SheetTrigger><SheetContent side="left" className="w-60 p-0" showCloseButton={false}><SheetTitle className="sr-only">Navigation</SheetTitle><SidebarContent isAdmin={isAdmin} user={user} navItems={navItems} onNavClick={() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))} onSignOut={() => void signOut()} /></SheetContent></Sheet>
-        <Link href={isAdmin ? "/admin" : "/dashboard"} className="text-base font-semibold tracking-tight">MkLMS</Link>
+        <BrandHeader href={isAdmin ? "/admin" : "/dashboard"} compact />
       </div>
     </>
   );
