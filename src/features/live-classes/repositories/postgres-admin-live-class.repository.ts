@@ -26,6 +26,7 @@ type SessionRow = {
 
 const SESSION_SELECT = `SELECT id,batch_id,title,position,starts_at,duration_seconds,media_asset_id,status,
                cta_text,cta_url,cta_reveal_offset_seconds,ended_message,ended_redirect_url`;
+const TIMELINE_INSERT_BATCH_SIZE = 250;
 
 export class PostgresAdminLiveClassRepository implements AdminLiveClassRepository {
   private readonly pool: Pool;
@@ -116,7 +117,14 @@ export class PostgresAdminLiveClassRepository implements AdminLiveClassRepositor
     try {
       await client.query("BEGIN");
       await client.query(`DELETE FROM live_timeline_messages WHERE session_id=$1`, [sessionId]);
-      for (let index = 0; index < items.length; index += 1) await this.insertTimeline(client, sessionId, items[index], index + 1);
+      for (let index = 0; index < items.length; index += TIMELINE_INSERT_BATCH_SIZE) {
+        await this.insertTimelineBatch(
+          client,
+          sessionId,
+          items.slice(index, index + TIMELINE_INSERT_BATCH_SIZE),
+          index + 1,
+        );
+      }
       await client.query("COMMIT");
     } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
   }
@@ -149,9 +157,32 @@ export class PostgresAdminLiveClassRepository implements AdminLiveClassRepositor
     if (result.rowCount !== 1) throw new Error("Live session not found.");
   }
 
-  private insertTimeline(client: PoolClient, sessionId: string, item: ImportedLiveChatItem, position: number) {
-    return client.query(`INSERT INTO live_timeline_messages (id,session_id,offset_seconds,display_name,message,position,created_at,updated_at)
-      VALUES ($1,$2,$3,$4,$5,$6,NOW(),NOW())`, [randomUUID(), sessionId, item.offsetSeconds, item.displayName, item.message, position]);
+  private insertTimelineBatch(
+    client: PoolClient,
+    sessionId: string,
+    items: ImportedLiveChatItem[],
+    startingPosition: number,
+  ) {
+    if (items.length === 0) return Promise.resolve();
+    const parameters: Array<string | number> = [];
+    const rows = items.map((item, index) => {
+      const base = parameters.length;
+      parameters.push(
+        randomUUID(),
+        sessionId,
+        item.offsetSeconds,
+        item.displayName,
+        item.message,
+        startingPosition + index,
+      );
+      return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6},NOW(),NOW())`;
+    });
+    return client.query(
+      `INSERT INTO live_timeline_messages (
+         id,session_id,offset_seconds,display_name,message,position,created_at,updated_at
+       ) VALUES ${rows.join(",")}`,
+      parameters,
+    );
   }
 
   private mapSession(row: SessionRow): AdminLiveSessionRecord {
