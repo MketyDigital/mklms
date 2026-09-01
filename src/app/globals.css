@@ -127,7 +127,8 @@
 
 @media (max-width: 1023px) {
   [data-live-mobile-viewport] {
-    height: 100dvh;
+    height: var(--live-visual-viewport-height, 100dvh);
+    max-height: 100dvh;
     overflow: hidden;
   }
 
@@ -157,6 +158,13 @@
     overflow: hidden;
   }
 
+  [data-live-mobile-viewport] [data-live-player] {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    flex: none;
+  }
+
   [data-live-mobile-viewport] > main > div > .grid > aside {
     min-height: 0;
     flex: 1 1 0%;
@@ -166,5 +174,10 @@
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
+  }
+
+  [data-live-mobile-viewport] textarea:focus,
+  [data-live-mobile-viewport] input:focus {
+    scroll-margin-top: 0;
   }
 }
