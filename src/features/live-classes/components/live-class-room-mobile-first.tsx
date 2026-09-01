@@ -95,6 +95,7 @@ export function LiveClassRoomMobileFirst({
   const loadedAuthorizationUrlRef = useRef<string | null>(null);
   const activeDirectSlotRef = useRef<DirectSlot>(0);
   const directSwapGenerationRef = useRef(0);
+  const previousStorageKeyRef = useRef<string | null>(null);
 
   const [roomState, setRoomState] = useState<LiveRoomState | null>(null);
   const [playback, setPlayback] = useState<PlaybackState | null>(null);
@@ -109,7 +110,11 @@ export function LiveClassRoomMobileFirst({
   const [sending, setSending] = useState(false);
   const [ownComments, setOwnComments] = useState<OwnLiveComment[]>([]);
 
-  const storageKey = useMemo(() => ownLiveCommentStorageKey(slug), [slug]);
+  const activeSessionId = roomState?.state === "LIVE" ? roomState.session?.id ?? null : null;
+  const storageKey = useMemo(
+    () => activeSessionId ? ownLiveCommentStorageKey(slug, activeSessionId) : null,
+    [activeSessionId, slug],
+  );
 
   const setDirectSlot = useCallback((slot: DirectSlot) => {
     activeDirectSlotRef.current = slot;
@@ -129,6 +134,13 @@ export function LiveClassRoomMobileFirst({
   }, [directVideoForSlot]);
 
   useEffect(() => {
+    const previousKey = previousStorageKeyRef.current;
+    if (previousKey && previousKey !== storageKey) {
+      window.localStorage.removeItem(previousKey);
+    }
+    previousStorageKeyRef.current = storageKey;
+    setOwnComments([]);
+    if (!storageKey) return;
     const timer = window.setTimeout(() => {
       setOwnComments(parseOwnLiveComments(window.localStorage.getItem(storageKey)));
     }, 0);
@@ -265,7 +277,7 @@ export function LiveClassRoomMobileFirst({
     return () => window.clearTimeout(timer);
   }, [fetchState, roomState]);
 
-  const roomSessionId = roomState?.session?.id ?? null;
+  const roomSessionId = activeSessionId;
 
   useEffect(() => {
     if (roomState?.state !== "LIVE" || !roomSessionId) return;
@@ -483,7 +495,7 @@ export function LiveClassRoomMobileFirst({
 
   async function sendComment() {
     const text = comment.trim();
-    if (!text || sending) return;
+    if (!text || sending || !activeSessionId) return;
     setSending(true);
     try {
       const response = await fetch(`/api/live/${encodeURIComponent(slug)}/messages`, {
@@ -513,7 +525,7 @@ export function LiveClassRoomMobileFirst({
       }
       const next = appendOwnLiveComment(ownComments, payload.message);
       setOwnComments(next);
-      window.localStorage.setItem(storageKey, JSON.stringify(next));
+      if (storageKey) window.localStorage.setItem(storageKey, JSON.stringify(next));
       setComment("");
     } catch (caught) {
       setError(
