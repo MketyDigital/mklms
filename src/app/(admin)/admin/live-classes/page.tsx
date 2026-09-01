@@ -21,13 +21,13 @@ export default async function AdminLiveClassesPage() {
       const sessionRecords = await repository.listSessions(batch.id);
       const sessions = await Promise.all(
         sessionRecords.map(async (session) => {
-          const timeline = await runtimeRepository.listTimelineMessages(session.id);
+          const timelineSummary = await repository.getTimelineSummary(session.id);
           return {
             ...session,
             startsAt: session.startsAt.toISOString(),
-            timelineCount: timeline.length,
-            timelineFirstOffsetSeconds: timeline[0]?.offsetSeconds ?? null,
-            timelineLastOffsetSeconds: timeline.at(-1)?.offsetSeconds ?? null,
+            timelineCount: timelineSummary.count,
+            timelineFirstOffsetSeconds: timelineSummary.firstOffsetSeconds,
+            timelineLastOffsetSeconds: timelineSummary.lastOffsetSeconds,
           };
         }),
       );
