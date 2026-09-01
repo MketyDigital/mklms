@@ -9,6 +9,7 @@ import type {
   AdminLiveClassRepository,
   AdminLiveSessionRecord,
   LiveBatchAdminStatus,
+  LiveTimelineSummary,
 } from "../services/admin-live-class.service";
 
 type BatchRow = {
@@ -118,6 +119,24 @@ export class PostgresAdminLiveClassRepository implements AdminLiveClassRepositor
       for (let index = 0; index < items.length; index += 1) await this.insertTimeline(client, sessionId, items[index], index + 1);
       await client.query("COMMIT");
     } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
+  }
+
+  async getTimelineSummary(sessionId: string): Promise<LiveTimelineSummary> {
+    const result = await this.pool.query<{
+      count: number | string;
+      first_offset_seconds: number | string | null;
+      last_offset_seconds: number | string | null;
+    }>(`SELECT COUNT(*)::int AS count,
+              MIN(offset_seconds)::int AS first_offset_seconds,
+              MAX(offset_seconds)::int AS last_offset_seconds
+       FROM live_timeline_messages
+       WHERE session_id=$1`, [sessionId]);
+    const row = result.rows[0];
+    return {
+      count: Number(row?.count ?? 0),
+      firstOffsetSeconds: row?.first_offset_seconds == null ? null : Number(row.first_offset_seconds),
+      lastOffsetSeconds: row?.last_offset_seconds == null ? null : Number(row.last_offset_seconds),
+    };
   }
 
   async setBatchStatus(batchId: string, status: LiveBatchAdminStatus): Promise<void> {
