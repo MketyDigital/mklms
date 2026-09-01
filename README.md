@@ -19,7 +19,7 @@ The current production architecture uses three Workers:
 
 1. `mklms` — the main OpenNext LMS application.
 2. `mklms-media-delivery` — protected private video delivery from R2.
-3. `mkety-managed-hosting-billing` — reusable NOWPayments managed-hosting billing service.
+3. `mkety-managed-hosting-billing` — reusable NOWPayments cc managed-hosting billing service.
 
 The main Worker binds:
 
