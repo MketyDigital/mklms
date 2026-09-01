@@ -4,11 +4,12 @@ import { BookOpen, KeyRound, Radio, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PublicCertificateLookup } from "@/features/certificates/components/public-certificate-lookup";
+import { BrandMark } from "@/features/settings/components/branding-provider";
 
 const surfaces = [
   {
     title: "Student portal",
-    description: "Sign in with a MkLMS student access code and access courses, progress, certificates, messages and profile.",
+    description: "Sign in with your organization-issued student access code and access courses, progress, certificates, messages and profile.",
     href: "/login",
     action: "Student login",
     icon: BookOpen,
@@ -35,9 +36,12 @@ export default function HomePage() {
       <div className="mx-auto flex min-h-dvh max-w-6xl flex-col justify-center px-5 py-12 sm:px-8">
         <div className="max-w-3xl">
           <div className="mb-5 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium text-muted-foreground">
-            <Radio className="size-3.5" /> MkLMS
+            <Radio className="size-3.5" /> Learning portal
           </div>
-          <h1 className="text-4xl font-semibold tracking-tight sm:text-6xl">MkLMS</h1>
+          <BrandMark
+            className="text-4xl font-semibold tracking-tight sm:text-6xl"
+            logoClassName="size-12 sm:size-16"
+          />
           <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
             Reusable learning, protected media, certificates, messaging and scheduled simulated-live classes in one system.
           </p>

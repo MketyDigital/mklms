@@ -124,3 +124,47 @@
     @apply bg-background text-foreground;
   }
 }
+
+@media (max-width: 1023px) {
+  [data-live-mobile-viewport] {
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  [data-live-mobile-viewport] > main {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  [data-live-mobile-viewport] > main > div {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  [data-live-mobile-viewport] > main > div > header,
+  [data-live-mobile-viewport] > main > div > div:not(.grid) {
+    flex: none;
+  }
+
+  [data-live-mobile-viewport] > main > div > .grid {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 0%;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  [data-live-mobile-viewport] > main > div > .grid > aside {
+    min-height: 0;
+    flex: 1 1 0%;
+  }
+
+  [data-live-mobile-viewport] > main > div > .grid > aside > div:nth-child(2) {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
