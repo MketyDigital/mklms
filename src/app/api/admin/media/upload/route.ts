@@ -2,12 +2,25 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
+import { getManagedHostingServiceAccess } from "@/features/hosting/server/managed-hosting-access";
 import { PostgresAdminMediaRepository } from "@/features/media/repositories/postgres-admin-media.repository";
 import { getConfiguredStorageProvider } from "@/providers/s3-compatible-storage-provider";
 
 export async function POST(request: Request) {
   if (!(await hasValidAdminSession())) {
     return NextResponse.json({ ok: false, message: "Unauthorized." }, { status: 401 });
+  }
+
+  const hostingAccess = await getManagedHostingServiceAccess();
+  if (!hostingAccess.allowed) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "HOSTING_PAYMENT_REQUIRED",
+        message: "Hosted-video uploads are temporarily restricted because a managed hosting payment is overdue. Payment confirmation restores uploads automatically.",
+      },
+      { status: 402 },
+    );
   }
 
   const formData = await request.formData().catch(() => null);
