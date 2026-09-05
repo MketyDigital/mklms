@@ -1,4 +1,4 @@
-name: Diagnose MkLMS Cloudflare audit history
+name: Diagnose MkLMS Cloudflare security event
 
 on:
   push:
@@ -18,18 +18,36 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - name: Read-only Cloudflare audit history
+      - name: Verify Logs Read and inspect fresh challenge Ray
         shell: bash
         run: |
           set -euo pipefail
           auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
-          echo "=== AUDIT LOGS V2 SINCE 2026-08-30 ==="
-          curl -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/logs/audit?since=2026-08-30T00:00:00Z&before=2026-09-06T00:00:00Z&limit=200" > /tmp/audit.json || true
-          jq -c '{success,errors,messages,result_info}' /tmp/audit.json 2>/dev/null || cat /tmp/audit.json
-          echo "=== RELEVANT CHANGES ==="
-          jq -c '.result[]? | select(
-            ((.zone.name // "") == "mkety.com") or
-            ((.raw.uri // "") | test("workers|custom_hostnames|settings|rulesets|firewall|security"; "i")) or
-            ((.action.description // "") | test("worker|hostname|security|browser|firewall|rule|setting|route"; "i"))
-          ) | {time:.action.time,description:.action.description,type:.action.type,result:.action.result,actor:{type:.actor.type,email:.actor.email,context:.actor.context,token_name:.actor.token_name},zone:.zone.name,raw:{method:.raw.method,status_code:.raw.status_code,uri:.raw.uri},resource:{type:.resource.type,product:.resource.product,request:.resource.request,response:.resource.response}}' /tmp/audit.json 2>/dev/null | head -200 || true
-          echo "READ_ONLY_AUDIT_DIAGNOSTIC_COMPLETE"
+          zone_name=mkety.com
+          host=learn.starpipsforex.com
+
+          zones=$(curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones?account.id=$CLOUDFLARE_ACCOUNT_ID&name=$zone_name")
+          zone_id=$(printf '%s' "$zones" | jq -r '.result[0].id // empty')
+          test -n "$zone_id"
+
+          echo "=== CREATE FRESH CHALLENGE REQUEST ==="
+          curl -sS -D /tmp/headers.txt -o /tmp/body.html --connect-timeout 8 --max-time 15 "https://$host/" || true
+          grep -Ei '^(HTTP/|cf-|server:|content-type:)' /tmp/headers.txt || true
+          ray=$(awk 'BEGIN{IGNORECASE=1} /^cf-ray:/ {gsub("\r",""); print $2; exit}' /tmp/headers.txt | cut -d- -f1)
+          echo "RAY_ID=${ray:-none}"
+          test -n "${ray:-}"
+
+          echo "=== RAY LOOKUP ==="
+          curl -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/logs/rayids/$ray" > /tmp/ray.json || true
+          jq -c '{success,errors,messages}' /tmp/ray.json || cat /tmp/ray.json
+          echo "=== EVENT DETAILS ==="
+          jq -c '.result | {RayID:.RayID,ClientIP:.ClientIP,ClientCountry:.ClientCountry,ClientRequestHost:.ClientRequestHost,ClientRequestPath:.ClientRequestPath,EdgeResponseStatus:.EdgeResponseStatus,SecurityLevel:.SecurityLevel,WAFAction:.WAFAction,WAFRuleID:.WAFRuleID,WAFRuleMessage:.WAFRuleMessage,FirewallMatchesActions:.FirewallMatchesActions,FirewallMatchesRuleIDs:.FirewallMatchesRuleIDs,FirewallMatchesSources:.FirewallMatchesSources,BotScore:.BotScore,BotScoreSrc:.BotScoreSrc,ClientRequestUserAgent:.ClientRequestUserAgent}' /tmp/ray.json 2>/dev/null || true
+
+          echo "=== FIREWALL EVENTS API FALLBACK ==="
+          now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          since=$(date -u -d '10 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
+          curl -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/security/events?since=$since&until=$now&ray_id=$ray&per_page=20" > /tmp/events.json || true
+          jq -c '{success,errors,messages,result_info}' /tmp/events.json 2>/dev/null || cat /tmp/events.json
+          jq -c '.result[]? | {ray_id,action,kind,source,rule_id,rule_message,host,method,path,user_agent,ip,country,occurred_at}' /tmp/events.json 2>/dev/null || true
+
+          echo "READ_ONLY_SECURITY_EVENT_DIAGNOSTIC_COMPLETE"
