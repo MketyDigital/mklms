@@ -2,6 +2,7 @@ BEGIN;
 
 CREATE TABLE IF NOT EXISTS managed_hosting_operator_policy (
   id SMALLINT PRIMARY KEY DEFAULT 1,
+  configured BOOLEAN NOT NULL DEFAULT FALSE,
   enabled BOOLEAN NOT NULL DEFAULT TRUE,
   minimum_monthly_fee_usd NUMERIC(12,2) NOT NULL DEFAULT 15,
   maximum_monthly_fee_usd NUMERIC(12,2) NOT NULL DEFAULT 50,
