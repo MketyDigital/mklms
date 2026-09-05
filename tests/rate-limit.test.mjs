@@ -73,7 +73,17 @@ test('distributed binding uses local fallback when Cloudflare binding throws', a
   assert.equal(second.allowed, false);
 });
 
-test('distributed binding fails open when no binding or fallback exists', async () => {
-  const result = await consumeRateLimitBinding(undefined, 'any-key', 60);
-  assert.deepEqual(result, { allowed: true, remaining: -1, retryAfterSeconds: 60 });
+test('distributed binding warns and fails open when no binding or fallback exists', async () => {
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args.map(String).join(' '));
+
+  try {
+    const result = await consumeRateLimitBinding(undefined, 'any-key', 60);
+    assert.deepEqual(result, { allowed: true, remaining: -1, retryAfterSeconds: 60 });
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /distributed rate limiter binding is missing/i);
+  } finally {
+    console.warn = originalWarn;
+  }
 });
