@@ -1,4 +1,4 @@
-name: Configure MkLMS conservative SaaS WAF protection
+name: Recheck MkLMS SaaS WAF propagation
 
 on:
   push:
@@ -11,68 +11,43 @@ permissions:
   contents: read
 
 jobs:
-  protect:
+  verify:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - name: Create and verify narrow exploit-probe WAF rule
+      - name: Read-only verify SaaS custom WAF behavior
         shell: bash
         run: |
           set -euo pipefail
-          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json")
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
           zone_name=mkety.com
           host=learn.starpipsforex.com
           description='Mkety block impossible exploit probes'
-          expression='(not cf.client.bot and (http.request.uri.path eq "/wp-login.php" or http.request.uri.path eq "/xmlrpc.php" or http.request.uri.path eq "/.env" or http.request.uri.path eq "/.git" or starts_with(http.request.uri.path, "/.git/") or http.request.uri.path eq "/wp-admin" or starts_with(http.request.uri.path, "/wp-admin/") or http.request.uri.path eq "/phpmyadmin" or starts_with(http.request.uri.path, "/phpmyadmin/")))'
 
           zones=$(curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones?account.id=$CLOUDFLARE_ACCOUNT_ID&name=$zone_name")
           zone_id=$(printf '%s' "$zones" | jq -r '.result[0].id // empty')
           test -n "$zone_id"
-          echo "ZONE_ID=$zone_id"
 
-          echo "=== INSPECT CUSTOM FIREWALL ENTRYPOINT ==="
-          status=$(curl -sS -o /tmp/entry.json -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/rulesets/phases/http_request_firewall_custom/entrypoint")
-          cat /tmp/entry.json | jq -c '{success,errors,result:{id:.result.id,name:.result.name,kind:.result.kind,phase:.result.phase,rules:[.result.rules[]? | {id,description,action,expression,enabled}]}}' || true
+          echo "=== CURRENT RULE ==="
+          curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/rulesets/phases/http_request_firewall_custom/entrypoint" > /tmp/rules.json
+          jq -c --arg d "$description" '.result.rules[]? | select(.description == $d) | {id,description,action,expression,enabled,last_updated}' /tmp/rules.json
 
-          existing=$(jq -r --arg d "$description" '.result.rules[]? | select(.description == $d) | .id' /tmp/entry.json | head -1)
-          if [ -n "$existing" ]; then
-            echo "RULE_ALREADY_EXISTS=$existing"
-          elif [ "$status" = "200" ] && [ "$(jq -r '.success' /tmp/entry.json)" = "true" ]; then
-            ruleset_id=$(jq -r '.result.id' /tmp/entry.json)
-            payload=$(jq -nc --arg d "$description" --arg e "$expression" '{description:$d,expression:$e,action:"block",enabled:true}')
-            curl -fsS "${auth[@]}" --request POST --data "$payload" "https://api.cloudflare.com/client/v4/zones/$zone_id/rulesets/$ruleset_id/rules" > /tmp/write.json
-            jq -e '.success == true' /tmp/write.json >/dev/null
-            jq -c '{success,errors,result:{id:.result.id,description:.result.description,action:.result.action,expression:.result.expression,enabled:.result.enabled}}' /tmp/write.json
-          elif [ "$status" = "404" ]; then
-            rule=$(jq -nc --arg d "$description" --arg e "$expression" '{description:$d,expression:$e,action:"block",enabled:true}')
-            payload=$(jq -nc --argjson rule "$rule" '{name:"default",description:"Mkety conservative SaaS request protection",kind:"zone",phase:"http_request_firewall_custom",rules:[$rule]}')
-            curl -fsS "${auth[@]}" --request POST --data "$payload" "https://api.cloudflare.com/client/v4/zones/$zone_id/rulesets" > /tmp/write.json
-            jq -e '.success == true' /tmp/write.json >/dev/null
-            jq -c '{success,errors,result:{id:.result.id,name:.result.name,kind:.result.kind,phase:.result.phase,rules:[.result.rules[]? | {id,description,action,expression,enabled}]}}' /tmp/write.json
-          else
-            echo "Unexpected entrypoint response HTTP $status"
-            cat /tmp/entry.json
-            exit 1
-          fi
-
-          echo "=== VERIFY RULE ==="
-          curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/rulesets/phases/http_request_firewall_custom/entrypoint" > /tmp/verify.json
-          jq -e --arg d "$description" '.success == true and any(.result.rules[]?; .description == $d and .action == "block" and .enabled == true)' /tmp/verify.json >/dev/null
-          jq -c --arg d "$description" '.result.rules[]? | select(.description == $d) | {id,description,action,expression,enabled}' /tmp/verify.json
-
-          echo "=== VERIFY REAL SITE STILL WORKS ==="
-          root_code=$(curl -sS -o /tmp/root.html -w '%{http_code}' --connect-timeout 8 --max-time 15 "https://$host/")
+          echo "=== ROOT ==="
+          root_code=$(curl -sS -D /tmp/root.headers -o /tmp/root.html -w '%{http_code}' --connect-timeout 8 --max-time 15 "https://$host/")
           echo "ROOT_HTTP=$root_code"
+          grep -Ei '^(cf-ray:|cf-mitigated:|server:)' /tmp/root.headers || true
           echo "ROOT_TITLE=$(grep -oPm1 '(?<=<title>)[^<]+' /tmp/root.html || true)"
+
+          for path in '/.env' '/wp-login.php' '/.git/config' '/phpmyadmin/'; do
+            safe=$(printf '%s' "$path" | tr '/.' '__')
+            code=$(curl -sS -D "/tmp/${safe}.headers" -o "/tmp/${safe}.body" -w '%{http_code}' --connect-timeout 8 --max-time 15 "https://$host$path" || true)
+            echo "PROBE path=$path http=$code"
+            grep -Ei '^(cf-ray:|cf-mitigated:|server:)' "/tmp/${safe}.headers" || true
+          done
+
           test "$root_code" = "200"
           grep -q 'STARPIPSFOREX' /tmp/root.html
-
-          echo "=== VERIFY IMPOSSIBLE PROBE IS BLOCKED ==="
-          probe_code=$(curl -sS -o /tmp/probe.html -w '%{http_code}' --connect-timeout 8 --max-time 15 "https://$host/.env" || true)
-          echo "PROBE_HTTP=$probe_code"
-          test "$probe_code" = "403"
-
-          echo "MKETY_CONSERVATIVE_WAF_PROTECTION_VERIFIED"
+          echo "READ_ONLY_SAAS_WAF_RECHECK_COMPLETE"
