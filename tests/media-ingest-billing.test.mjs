@@ -54,7 +54,7 @@ test("media ingest state machine allows one-way safe publishing flow", () => {
   assert.throws(() => nextMediaIngestState("DRAFT", "READY"));
 });
 
-test("managed hosting policy has a hard 15 USD floor and scales to configured maximum", () => {
+test("managed hosting keeps a 15 USD month-end minimum while usage can scale higher", () => {
   const policy = normalizeManagedHostingPolicy({
     enabled: true,
     minimumMonthlyFeeUsd: 3,
@@ -63,7 +63,7 @@ test("managed hosting policy has a hard 15 USD floor and scales to configured ma
     notice: "Monthly managed service.",
   });
   assert.equal(policy.minimumMonthlyFeeUsd, 15);
-  assert.equal(calculateManagedHostingFee({ watchMinutes: 5000, policy }), 15);
+  assert.equal(calculateManagedHostingFee({ watchMinutes: 5000, policy }), 0);
   assert.equal(calculateManagedHostingFee({ watchMinutes: 200000, policy }), 50);
 });
 
