@@ -1,0 +1,195 @@
+name: Redeploy verified MkLMS main and finish direct upload
+
+on:
+  push:
+    branches:
+      - ops/cloudflare-new-update-setup-2026-09-05
+    paths:
+      - .github/workflows/redeploy-main-and-finish-direct-upload.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mklms-cloudflare-production-setup
+  cancel-in-progress: false
+
+jobs:
+  deploy-and-configure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.MKLMS_R2_DIRECT_UPLOAD_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.MKLMS_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY }}
+      EXPECTED_MAIN_SHA: 90066911ff6d8284147569fe85241009fbdf1841
+      EXPECTED_TREE_SHA: 17322827fbb39f6ea1867d06f0ef29d6c6475306
+      EXPECTED_MAIN_WORKER: mklms
+      EXPECTED_MEDIA_WORKER: mklms-media-delivery
+      EXPECTED_BILLING_WORKER: mkety-managed-hosting-billing
+      EXPECTED_BUCKET: spf-media
+      EXPECTED_ZONE: mkety.com
+      EXPECTED_ROUTE: learn.starpipsforex.com/*
+      LMS_ORIGIN: https://learn.starpipsforex.com
+    steps:
+      - name: Checkout exact merged production commit
+        uses: actions/checkout@v4
+        with:
+          ref: 90066911ff6d8284147569fe85241009fbdf1841
+          fetch-depth: 1
+
+      - name: Guard exact Git commit and tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_sha=$(git rev-parse HEAD)
+          actual_tree=$(git rev-parse HEAD^{tree})
+          echo "Checked-out commit: $actual_sha"
+          echo "Checked-out tree: $actual_tree"
+          test "$actual_sha" = "$EXPECTED_MAIN_SHA"
+          test "$actual_tree" = "$EXPECTED_TREE_SHA"
+          echo "Exact merged/tested production tree verified."
+
+      - name: Guard exact Cloudflare account, Workers, route, bindings, privacy, CORS and R2 credentials
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.MKLMS_R2_DIRECT_UPLOAD_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MKLMS_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          set -euo pipefail
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY; do
+            test -n "${!name:-}" || { echo "Missing required secret backing $name"; exit 1; }
+          done
+
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
+
+          curl -fsS "${auth[@]}" "$api" > /tmp/account.json
+          jq -e '.success == true and .result.id != null' /tmp/account.json >/dev/null
+          echo "Verified Cloudflare account: $(jq -r '.result.name' /tmp/account.json)"
+
+          curl -fsS "${auth[@]}" "$api/workers/scripts" > /tmp/scripts.json
+          for worker in "$EXPECTED_MAIN_WORKER" "$EXPECTED_MEDIA_WORKER" "$EXPECTED_BILLING_WORKER"; do
+            jq -e --arg worker "$worker" '.result[] | select(.id == $worker)' /tmp/scripts.json >/dev/null || { echo "Missing expected Worker: $worker"; exit 1; }
+          done
+
+          curl -fsS "${auth[@]}" "$api/r2/buckets/$EXPECTED_BUCKET" > /tmp/bucket.json
+          jq -e '.success == true and .result.name == "spf-media"' /tmp/bucket.json >/dev/null
+
+          curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones?account.id=$CLOUDFLARE_ACCOUNT_ID&name=$EXPECTED_ZONE" > /tmp/zones.json
+          zone_id=$(jq -r '.result[] | select(.name == "mkety.com") | .id' /tmp/zones.json | head -1)
+          test -n "$zone_id"
+          curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/workers/routes" > /tmp/routes.json
+          jq -e --arg route "$EXPECTED_ROUTE" '.result[] | select(.pattern == $route and .script == "mklms")' /tmp/routes.json >/dev/null
+
+          curl -fsS "${auth[@]}" "$api/workers/scripts/$EXPECTED_MAIN_WORKER/settings" > /tmp/main-before.json
+          curl -fsS "${auth[@]}" "$api/workers/scripts/$EXPECTED_MEDIA_WORKER/settings" > /tmp/media-before.json
+          jq -e '.result.bindings[] | select(.name == "APP_STORAGE_BUCKET" and .type == "r2_bucket" and .bucket_name == "spf-media")' /tmp/main-before.json >/dev/null
+          jq -e '.result.bindings[] | select(.name == "MEDIA_BUCKET" and .type == "r2_bucket" and .bucket_name == "spf-media")' /tmp/media-before.json >/dev/null
+          for binding in MKLMS_MEDIA_SIGNING_SECRET MKLMS_MEDIA_DELIVERY_BASE_URL MKLMS_MANAGED_HOSTING_OPERATOR_KEY MKLMS_BILLING_SERVICE_URL MKLMS_BILLING_INSTALLATION_ID MKLMS_BILLING_SHARED_SECRET; do
+            jq -e --arg name "$binding" '.result.bindings[] | select(.name == $name)' /tmp/main-before.json >/dev/null || { echo "Existing critical binding missing: $binding"; exit 1; }
+          done
+
+          curl -fsS "${auth[@]}" "$api/r2/buckets/$EXPECTED_BUCKET/domains/managed" > /tmp/public.json
+          jq -e '.success == true and .result.enabled == false' /tmp/public.json >/dev/null
+
+          curl -fsS "${auth[@]}" "$api/r2/buckets/$EXPECTED_BUCKET/cors" > /tmp/cors.json
+          jq -e --arg origin "$LMS_ORIGIN" '[.result.rules[]? | select((.allowed.origins | index($origin)) != null and (.allowed.methods | index("PUT")) != null and ((.allowed.headers // []) | index("Content-Type")) != null)] | length > 0' /tmp/cors.json >/dev/null
+
+          aws s3api list-objects-v2 --bucket "$EXPECTED_BUCKET" --max-items 1 --endpoint-url "https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com" >/dev/null
+          echo "Every production identity/safety guard passed before redeploy."
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install exact project dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Re-run domain tests on exact merged tree
+        run: npm test
+
+      - name: Build exact merged tree for Cloudflare
+        run: npm run cf:build
+
+      - name: Redeploy exact merged/tested tree to mklms only
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx opennextjs-cloudflare deploy
+          echo "Exact merged/tested main tree redeployed to mklms."
+
+      - name: Confirm newest mklms version is now actively deployed at 100 percent
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          base="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$EXPECTED_MAIN_WORKER"
+          curl -fsS "${auth[@]}" "$base/deployments" > /tmp/deployments-after-redeploy.json
+          curl -fsS "${auth[@]}" "$base/versions?per_page=10" > /tmp/versions-after-redeploy.json
+          active=$(jq -r '.result.deployments[0].versions[] | select(.percentage == 100) | .version_id' /tmp/deployments-after-redeploy.json | head -1)
+          latest=$(jq -r '[.. | objects | select((has("id")) and (has("number"))) | {id,number}] | unique_by(.id) | sort_by(.number) | reverse | .[0].id' /tmp/versions-after-redeploy.json)
+          echo "Active version: $active"
+          echo "Latest version: $latest"
+          test -n "$active"
+          test "$active" = "$latest" || { echo "Latest version is not the active version; refusing to add secrets."; exit 1; }
+          echo "Latest and active versions match; safe to attach secrets."
+
+      - name: Add four new direct-upload secrets to active mklms
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg bucket "$EXPECTED_BUCKET" \
+            --arg endpoint "https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com" \
+            --arg access "$R2_ACCESS_KEY_ID" \
+            --arg secret "$R2_SECRET_ACCESS_KEY" \
+            '{
+              MKLMS_R2_DIRECT_UPLOAD_BUCKET:$bucket,
+              MKLMS_R2_DIRECT_UPLOAD_ENDPOINT:$endpoint,
+              MKLMS_R2_DIRECT_UPLOAD_ACCESS_KEY_ID:$access,
+              MKLMS_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY:$secret
+            }' > /tmp/mklms-direct-upload-secrets.json
+          npx wrangler secret bulk /tmp/mklms-direct-upload-secrets.json --name "$EXPECTED_MAIN_WORKER" --config wrangler.jsonc
+          rm -f /tmp/mklms-direct-upload-secrets.json
+          echo "Four direct-upload secrets attached to mklms; values never printed."
+
+      - name: Final Cloudflare post-verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
+
+          curl -fsS "${auth[@]}" "$api/workers/scripts/$EXPECTED_MAIN_WORKER/settings" > /tmp/main-final.json
+          curl -fsS "${auth[@]}" "$api/workers/scripts/$EXPECTED_MEDIA_WORKER/settings" > /tmp/media-final.json
+
+          for binding in MKLMS_R2_DIRECT_UPLOAD_BUCKET MKLMS_R2_DIRECT_UPLOAD_ENDPOINT MKLMS_R2_DIRECT_UPLOAD_ACCESS_KEY_ID MKLMS_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY; do
+            jq -e --arg name "$binding" '.result.bindings[] | select(.name == $name and .type == "secret_text")' /tmp/main-final.json >/dev/null || { echo "Missing new binding: $binding"; exit 1; }
+          done
+          for binding in MKLMS_MEDIA_SIGNING_SECRET MKLMS_MEDIA_DELIVERY_BASE_URL MKLMS_MANAGED_HOSTING_OPERATOR_KEY MKLMS_BILLING_SERVICE_URL MKLMS_BILLING_INSTALLATION_ID MKLMS_BILLING_SHARED_SECRET; do
+            jq -e --arg name "$binding" '.result.bindings[] | select(.name == $name)' /tmp/main-final.json >/dev/null || { echo "Existing binding missing after change: $binding"; exit 1; }
+          done
+          jq -e '.result.bindings[] | select(.name == "APP_STORAGE_BUCKET" and .type == "r2_bucket" and .bucket_name == "spf-media")' /tmp/main-final.json >/dev/null
+          jq -e '.result.bindings[] | select(.name == "MEDIA_BUCKET" and .type == "r2_bucket" and .bucket_name == "spf-media")' /tmp/media-final.json >/dev/null
+
+          curl -fsS "${auth[@]}" "$api/r2/buckets/$EXPECTED_BUCKET/cors" > /tmp/cors-final.json
+          jq -e --arg origin "$LMS_ORIGIN" '[.result.rules[]? | select((.allowed.origins | index($origin)) != null and (.allowed.methods | index("PUT")) != null and ((.allowed.headers // []) | index("Content-Type")) != null)] | length > 0' /tmp/cors-final.json >/dev/null
+          curl -fsS "${auth[@]}" "$api/r2/buckets/$EXPECTED_BUCKET/domains/managed" > /tmp/public-final.json
+          jq -e '.success == true and .result.enabled == false' /tmp/public-final.json >/dev/null
+
+          curl -fsS "${auth[@]}" "$api/workers/scripts/$EXPECTED_MAIN_WORKER/deployments" > /tmp/deployments-final.json
+          jq -e '.result.deployments[0].versions[] | select(.percentage == 100)' /tmp/deployments-final.json >/dev/null
+
+          echo "FINAL PRODUCTION CLOUDFLARE VERIFICATION PASSED"
+          echo "- exact tested main tree was redeployed to mklms"
+          echo "- route remains learn.starpipsforex.com/* -> mklms"
+          echo "- four new direct-upload secret bindings exist on mklms"
+          echo "- APP_STORAGE_BUCKET remains spf-media"
+          echo "- MEDIA_BUCKET remains spf-media"
+          echo "- existing media/billing integration bindings remain present"
+          echo "- spf-media CORS allows exact origin https://learn.starpipsforex.com for PUT Content-Type"
+          echo "- spf-media public r2.dev access remains disabled"
