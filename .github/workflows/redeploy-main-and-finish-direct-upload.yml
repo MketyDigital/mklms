@@ -1,4 +1,4 @@
-name: Inspect exact MkLMS production limiter binding types
+name: Verify MkLMS production auth limiter behavior
 
 on:
   push:
@@ -14,29 +14,30 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 8
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - name: Read limiter names/types and current deployed version metadata only
+      - name: Sustain harmless invalid claim attempts against production
         shell: bash
         run: |
           set -euo pipefail
-          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
-          base="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers"
-          version='ef09d30d-a3b9-4342-8d9a-59d7a1f11a46'
-
-          echo "=== SETTINGS: LIMITER BINDING NAMES/TYPES ONLY ==="
-          curl -fsS "${auth[@]}" "$base/scripts/mklms/settings" > /tmp/settings.json
-          jq -e '.success == true' /tmp/settings.json >/dev/null
-          jq -c '[.result.bindings[]? | select(.name | endswith("_RATE_LIMITER")) | {name,type,namespace_id,simple}]' /tmp/settings.json
-
-          echo "=== CURRENT DEPLOYED VERSION METADATA ==="
-          curl -fsS "${auth[@]}" "$base/scripts/mklms/versions/$version" > /tmp/version.json
-          jq -e '.success == true' /tmp/version.json >/dev/null
-          jq -c '{id:.result.id,number:.result.number,metadata:.result.metadata,rate_limits:[.result.resources.bindings[]? | select(.name | endswith("_RATE_LIMITER")) | {name,type,namespace_id,simple}]}' /tmp/version.json
-
-          echo "=== AUDIT AROUND PRODUCTION DEPLOY ==="
-          curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/logs/audit?since=2026-09-05T19:15:00Z&before=2026-09-05T19:20:30Z&limit=200" > /tmp/audit.json
-          jq -e '.success == true' /tmp/audit.json >/dev/null
-          jq -c '.result[]? | select(((.raw.uri // "") | contains("/workers/scripts/mklms"))) | {time:.action.time,uri:.raw.uri,version_id:.resource.response.id,number:.resource.response.number,source:.resource.response.metadata.source,rate_limits:[.resource.response.resources.bindings[]? | select(.name | endswith("_RATE_LIMITER")) | {name,type,namespace_id,simple}]}' /tmp/audit.json
+          url='https://learn.starpipsforex.com/api/access/claim'
+          body='{}'
+          saw_429=0
+          first_429=0
+          echo "=== PRODUCTION AUTH LIMITER SUSTAINED PROBE ==="
+          for i in $(seq 1 45); do
+            headers=$(mktemp)
+            response=$(mktemp)
+            code=$(curl -sS -D "$headers" -o "$response" -w '%{http_code}' -X POST "$url" -H 'content-type: application/json' --data "$body")
+            ray=$(awk 'BEGIN{IGNORECASE=1} /^cf-ray:/ {gsub("\r", ""); print $2}' "$headers" | tail -1)
+            retry=$(awk 'BEGIN{IGNORECASE=1} /^retry-after:/ {gsub("\r", ""); print $2}' "$headers" | tail -1)
+            printf 'request=%02d status=%s retry_after=%s ray=%s\n' "$i" "$code" "${retry:-}" "${ray:-none}"
+            if [ "$code" = "429" ] && [ "$saw_429" = "0" ]; then
+              saw_429=1
+              first_429=$i
+            fi
+            rm -f "$headers" "$response"
+            sleep 1
+          done
+          echo "SAW_429=$saw_429"
+          echo "FIRST_429_AT=$first_429"
+          echo "PRODUCTION_AUTH_LIMITER_PROBE_COMPLETE"
