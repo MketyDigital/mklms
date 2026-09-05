@@ -1,3 +1,5 @@
+import { getCloudflareContext } from "@opennextjs/cloudflare";
+
 export interface RateLimitResult {
   allowed: boolean;
   remaining: number;
@@ -8,6 +10,17 @@ interface Bucket {
   count: number;
   resetAt: number;
 }
+
+export interface CloudflareRateLimitBinding {
+  limit(input: { key: string }): Promise<{ success: boolean }>;
+}
+
+export type DistributedRateLimitBindingName =
+  | "AUTH_RATE_LIMITER"
+  | "ADMIN_RATE_LIMITER"
+  | "STUDENT_MUTATION_RATE_LIMITER"
+  | "PLAYBACK_RATE_LIMITER"
+  | "CERT_RATE_LIMITER";
 
 export class FixedWindowRateLimiter {
   private readonly limit: number;
@@ -69,6 +82,46 @@ export class FixedWindowRateLimiter {
 
     const oldestKey = this.buckets.keys().next().value as string | undefined;
     if (oldestKey) this.buckets.delete(oldestKey);
+  }
+}
+
+function failOpenResult(retryAfterSeconds: number): RateLimitResult {
+  return { allowed: true, remaining: -1, retryAfterSeconds };
+}
+
+export async function consumeRateLimitBinding(
+  binding: CloudflareRateLimitBinding | undefined,
+  key: string,
+  retryAfterSeconds: number,
+  fallback?: FixedWindowRateLimiter,
+  now = new Date(),
+): Promise<RateLimitResult> {
+  const normalizedKey = key.trim() || "unknown";
+  if (!binding) return fallback?.consume(normalizedKey, now) ?? failOpenResult(retryAfterSeconds);
+
+  try {
+    const result = await binding.limit({ key: normalizedKey });
+    return result.success
+      ? failOpenResult(retryAfterSeconds)
+      : { allowed: false, remaining: 0, retryAfterSeconds };
+  } catch (error) {
+    console.warn("MkLMS distributed rate limiter unavailable; using safe fallback", error);
+    return fallback?.consume(normalizedKey, now) ?? failOpenResult(retryAfterSeconds);
+  }
+}
+
+export async function consumeDistributedRateLimit(
+  bindingName: DistributedRateLimitBindingName,
+  key: string,
+  fallback?: FixedWindowRateLimiter,
+): Promise<RateLimitResult> {
+  try {
+    const context = getCloudflareContext();
+    const env = context.env as unknown as Partial<Record<DistributedRateLimitBindingName, CloudflareRateLimitBinding>>;
+    return consumeRateLimitBinding(env[bindingName], key, 60, fallback);
+  } catch (error) {
+    console.warn(`MkLMS ${bindingName} binding unavailable; using safe fallback`, error);
+    return fallback?.consume(key) ?? failOpenResult(60);
   }
 }
 
