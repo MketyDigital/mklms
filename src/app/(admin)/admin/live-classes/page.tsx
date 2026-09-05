@@ -1,4 +1,5 @@
 import { AppLayout } from "@/components/layout/app-layout";
+import { AdminLiveChatVisibilityControl } from "@/features/live-classes/components/admin-live-chat-visibility-control";
 import { AdminLiveClassManager } from "@/features/live-classes/components/admin-live-class-manager";
 import { PostgresAdminLiveClassRepository } from "@/features/live-classes/repositories/postgres-admin-live-class.repository";
 import { PostgresLiveClassRepository } from "@/features/live-classes/repositories/postgres-live-class.repository";
@@ -62,6 +63,7 @@ export default async function AdminLiveClassesPage() {
             Create temporary 1–3 day simulated-live classes, schedule media, import staged chat, set CTA/expiry behavior, and share the public link externally.
           </p>
         </div>
+        <AdminLiveChatVisibilityControl batches={batchRecords} />
         <AdminLiveClassManager
           batches={batches}
           media={media}

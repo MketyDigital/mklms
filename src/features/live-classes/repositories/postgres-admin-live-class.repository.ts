@@ -4,6 +4,7 @@ import type { Pool, PoolClient } from "pg";
 import { getPostgresPool } from "@/lib/postgres";
 import type { ImportedLiveChatItem } from "../domain/import-live-chat";
 import type { ViewerDisplayMode } from "../domain/live-session";
+import type { AttendeeChatVisibility } from "../services/live-room.service";
 import type {
   AdminLiveBatchRecord,
   AdminLiveClassRepository,
@@ -14,8 +15,8 @@ import type {
 
 type BatchRow = {
   id: string; slug: string; title: string; description: string | null; status: LiveBatchAdminStatus;
-  expected_viewer_baseline: number; viewer_display_mode: ViewerDisplayMode; ended_message: string | null;
-  ended_redirect_url: string | null; notification_destination: string | null;
+  expected_viewer_baseline: number; viewer_display_mode: ViewerDisplayMode; attendee_chat_visibility: AttendeeChatVisibility;
+  ended_message: string | null; ended_redirect_url: string | null; notification_destination: string | null;
 };
 
 type SessionRow = {
@@ -34,27 +35,27 @@ export class PostgresAdminLiveClassRepository implements AdminLiveClassRepositor
 
   async listBatches(): Promise<AdminLiveBatchRecord[]> {
     const result = await this.pool.query<BatchRow>(`SELECT id, slug, title, description, status, expected_viewer_baseline,
-               viewer_display_mode, ended_message, ended_redirect_url, notification_destination
+               viewer_display_mode, attendee_chat_visibility, ended_message, ended_redirect_url, notification_destination
         FROM live_batches ORDER BY created_at DESC`);
     return result.rows.map((row) => this.mapBatch(row));
   }
 
   async findBatchById(id: string): Promise<AdminLiveBatchRecord | null> {
     const result = await this.pool.query<BatchRow>(`SELECT id, slug, title, description, status, expected_viewer_baseline,
-               viewer_display_mode, ended_message, ended_redirect_url, notification_destination
+               viewer_display_mode, attendee_chat_visibility, ended_message, ended_redirect_url, notification_destination
         FROM live_batches WHERE id = $1 LIMIT 1`, [id]);
     return result.rows[0] ? this.mapBatch(result.rows[0]) : null;
   }
 
   async createBatch(input: Omit<AdminLiveBatchRecord, "id">): Promise<AdminLiveBatchRecord> {
     const result = await this.pool.query<BatchRow>(`INSERT INTO live_batches (
-          id, slug, title, description, status, expected_viewer_baseline, viewer_display_mode,
+          id, slug, title, description, status, expected_viewer_baseline, viewer_display_mode, attendee_chat_visibility,
           ended_message, ended_redirect_url, notification_destination, created_at, updated_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),NOW())
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),NOW())
         RETURNING id, slug, title, description, status, expected_viewer_baseline,
-                  viewer_display_mode, ended_message, ended_redirect_url, notification_destination`, [
+                  viewer_display_mode, attendee_chat_visibility, ended_message, ended_redirect_url, notification_destination`, [
       randomUUID(), input.slug, input.title, input.description ?? null, input.status,
-      input.expectedViewerBaseline, input.viewerDisplayMode, input.endedMessage ?? null,
+      input.expectedViewerBaseline, input.viewerDisplayMode, input.attendeeChatVisibility, input.endedMessage ?? null,
       input.endedRedirectUrl ?? null, input.notificationDestination ?? null,
     ]);
     return this.mapBatch(result.rows[0]);
@@ -62,9 +63,9 @@ export class PostgresAdminLiveClassRepository implements AdminLiveClassRepositor
 
   async updateBatch(batchId: string, input: Omit<AdminLiveBatchRecord, "id" | "status">): Promise<void> {
     const result = await this.pool.query(`UPDATE live_batches SET
-      slug=$2,title=$3,description=$4,expected_viewer_baseline=$5,viewer_display_mode=$6,
-      ended_message=$7,ended_redirect_url=$8,notification_destination=$9,updated_at=NOW()
-      WHERE id=$1`, [batchId,input.slug,input.title,input.description ?? null,input.expectedViewerBaseline,input.viewerDisplayMode,input.endedMessage ?? null,input.endedRedirectUrl ?? null,input.notificationDestination ?? null]);
+      slug=$2,title=$3,description=$4,expected_viewer_baseline=$5,viewer_display_mode=$6,attendee_chat_visibility=$7,
+      ended_message=$8,ended_redirect_url=$9,notification_destination=$10,updated_at=NOW()
+      WHERE id=$1`, [batchId,input.slug,input.title,input.description ?? null,input.expectedViewerBaseline,input.viewerDisplayMode,input.attendeeChatVisibility,input.endedMessage ?? null,input.endedRedirectUrl ?? null,input.notificationDestination ?? null]);
     if (result.rowCount !== 1) throw new Error("Live class not found.");
   }
 
@@ -193,7 +194,7 @@ export class PostgresAdminLiveClassRepository implements AdminLiveClassRepositor
 
   private mapBatch(row: BatchRow): AdminLiveBatchRecord {
     return { id: row.id,slug: row.slug,title: row.title,description: row.description,status: row.status,
-      expectedViewerBaseline: row.expected_viewer_baseline,viewerDisplayMode: row.viewer_display_mode,endedMessage: row.ended_message,
-      endedRedirectUrl: row.ended_redirect_url,notificationDestination: row.notification_destination };
+      expectedViewerBaseline: row.expected_viewer_baseline,viewerDisplayMode: row.viewer_display_mode,attendeeChatVisibility: row.attendee_chat_visibility,
+      endedMessage: row.ended_message,endedRedirectUrl: row.ended_redirect_url,notificationDestination: row.notification_destination };
   }
 }

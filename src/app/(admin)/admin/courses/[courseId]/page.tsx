@@ -8,6 +8,10 @@ import { Button } from "@/components/ui/button";
 import { AdminCourseBuilder } from "@/features/courses/components/admin/admin-course-builder";
 import { PostgresLearningRepository } from "@/features/courses/repositories/postgres-learning.repository";
 import { PostgresAdminMediaRepository } from "@/features/media/repositories/postgres-admin-media.repository";
+import { AdminPaidLiveEditor } from "@/features/paid-live/components/admin-paid-live-editor";
+import { PostgresPaidLiveRepository } from "@/features/paid-live/repositories/postgres-paid-live.repository";
+import { AdminQuizEditor } from "@/features/quizzes/components/admin-quiz-editor";
+import { PostgresQuizRepository } from "@/features/quizzes/repositories/postgres-quiz.repository";
 import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
 
 export const dynamic = "force-dynamic";
@@ -18,13 +22,23 @@ export default async function AdminCourseBuilderPage({
   params: Promise<{ courseId: string }>;
 }) {
   const { courseId } = await params;
-  const [course, mediaAssets, settings] = await Promise.all([
+  const [course, mediaAssets, settings, quizzes, paidLiveSessions] = await Promise.all([
     new PostgresLearningRepository().getCourseStructure(courseId),
     new PostgresAdminMediaRepository().listAssets(),
     new PostgresSettingsRepository().getPlatformSettings(),
+    new PostgresQuizRepository().listByCourse(courseId),
+    new PostgresPaidLiveRepository().listByCourse(courseId),
   ]);
 
   if (!course) notFound();
+
+  const mediaOptions = mediaAssets.map((asset) => ({
+    id: asset.id,
+    title: asset.title,
+    sourceType: asset.sourceType,
+    durationSeconds: asset.durationSeconds ?? null,
+    status: asset.status,
+  }));
 
   return (
     <AppLayout
@@ -50,20 +64,22 @@ export default async function AdminCourseBuilderPage({
             <Badge variant="outline">{course.status}</Badge>
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            Build the course structure as ordered modules and lessons. Media delivery remains provider-neutral.
+            Build lessons, quizzes, and enrollment-gated paid live sessions for this course.
           </p>
         </div>
 
-        <AdminCourseBuilder
-          course={course}
-          mediaAssets={mediaAssets.map((asset) => ({
-            id: asset.id,
-            title: asset.title,
-            sourceType: asset.sourceType,
-            durationSeconds: asset.durationSeconds ?? null,
-            status: asset.status,
-          }))}
-        />
+        <div className="space-y-8">
+          <AdminCourseBuilder course={course} mediaAssets={mediaOptions} />
+          <AdminQuizEditor
+            modules={course.modules.map((courseModule) => ({ id: courseModule.id, title: courseModule.title }))}
+            initialQuizzes={quizzes}
+          />
+          <AdminPaidLiveEditor
+            courseId={course.id}
+            sessions={paidLiveSessions}
+            mediaAssets={mediaOptions.map((asset) => ({ id: asset.id, title: asset.title, status: asset.status }))}
+          />
+        </div>
       </div>
     </AppLayout>
   );

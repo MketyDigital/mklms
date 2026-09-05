@@ -6,6 +6,8 @@ import { AdminLiveClassService } from '../src/features/live-classes/services/adm
 class FakeRepository {
   constructor() { this.batches = []; this.sessions = []; this.timeline = []; }
   async createBatch(input) { const record = { id: `batch-${this.batches.length + 1}`, ...input }; this.batches.push(record); return record; }
+  async findBatchById(batchId) { return this.batches.find((item) => item.id === batchId) ?? null; }
+  async updateBatch(batchId, input) { const index = this.batches.findIndex((item) => item.id === batchId); if (index < 0) throw new Error('Live class not found.'); this.batches[index] = { ...this.batches[index], ...input }; }
   async createSession(batchId, input) { const record = { id: `session-${this.sessions.length + 1}`, batchId, ...input }; this.sessions.push(record); return record; }
   async findSessionById(sessionId) { return this.sessions.find((item) => item.id === sessionId) ?? null; }
   async replaceTimelineMessages(sessionId, items) { this.timeline = items.map((item, index) => ({ id: `chat-${index + 1}`, sessionId, position: index + 1, ...item })); return this.timeline; }
@@ -27,6 +29,24 @@ test('admin creates a reusable batch with normalized slug and configured viewer 
   assert.equal(batch.slug, 'august-free-class');
   assert.equal(batch.expectedViewerBaseline, 1800);
   assert.equal(batch.status, 'DRAFT');
+});
+
+test('editing an existing free live class preserves its public viewer-comment setting when the legacy form omits it', async () => {
+  const repository = new FakeRepository();
+  repository.batches.push({
+    id: 'batch-1', slug: 'free-class', title: 'Free Class', description: null, status: 'ACTIVE',
+    expectedViewerBaseline: 500, viewerDisplayMode: 'CONFIGURED_BASELINE', attendeeChatVisibility: 'PUBLIC',
+    endedMessage: null, endedRedirectUrl: null, notificationDestination: null,
+  });
+  const service = new AdminLiveClassService(repository);
+
+  await service.updateBatch('batch-1', {
+    title: 'Updated Free Class', slug: 'free-class', expectedViewerBaseline: 500,
+    viewerDisplayMode: 'CONFIGURED_BASELINE',
+  });
+
+  assert.equal(repository.batches[0].title, 'Updated Free Class');
+  assert.equal(repository.batches[0].attendeeChatVisibility, 'PUBLIC');
 });
 
 test('admin can add up to three ordered sessions with media, CTA and expiry behavior', async () => {

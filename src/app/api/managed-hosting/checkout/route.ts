@@ -7,11 +7,12 @@ import {
   getBillingMonthKey,
 } from "@/features/hosting/domain/managed-hosting";
 import { PostgresManagedHostingRepository } from "@/features/hosting/repositories/postgres-managed-hosting.repository";
+import { ensurePreviousManagedHostingInvoice } from "@/features/hosting/server/managed-hosting-access";
 import {
   canonicalBillingCheckoutPayload,
   signBillingPayload,
 } from "@/features/hosting/server/billing-signature";
-import { getManagedHostingPolicy } from "@/features/hosting/server/managed-hosting-policy";
+import { getEffectiveManagedHostingPolicy } from "@/features/hosting/server/managed-hosting-policy";
 
 export async function POST() {
   if (!(await hasValidAdminSession())) {
@@ -34,29 +35,42 @@ export async function POST() {
     return NextResponse.json({ ok: false, message: "Automatic billing is not configured." }, { status: 503 });
   }
 
-  const policy = getManagedHostingPolicy();
+  const repository = new PostgresManagedHostingRepository();
+  const effective = await getEffectiveManagedHostingPolicy(repository);
+  const policy = effective.policy;
   if (!policy.enabled) {
     return NextResponse.json({ ok: false, message: "Managed hosting is not enabled." }, { status: 409 });
   }
 
-  const repository = new PostgresManagedHostingRepository();
-  const usage = await repository.getCurrentMonthUsage();
-  const monthKey = getBillingMonthKey(usage.monthStart);
-  const monthOverride = await repository.getMonthOverride(monthKey);
-  if (monthOverride?.paymentStatus === "PAID") {
-    return NextResponse.json({ ok: false, message: "This month is already paid." }, { status: 409 });
-  }
-  if (monthOverride?.paymentStatus === "WAIVED") {
-    return NextResponse.json({ ok: false, message: "This month has been waived." }, { status: 409 });
-  }
+  await ensurePreviousManagedHostingInvoice(repository);
+  const outstanding = await repository.getOldestOutstandingInvoice();
 
-  const billing = calculateManagedHostingAmountDue({
-    watchMinutes: usage.courseWatchMinutesMeasured + usage.liveAudienceMinutesEstimated,
-    policy,
-    monthlyMinimumFloorUsd: monthOverride?.minimumFloorUsd,
-  });
-  if (billing.amountDueUsd <= 0) {
-    return NextResponse.json({ ok: false, message: "There is no amount due." }, { status: 409 });
+  let monthKey: string;
+  let amountUsd: number;
+
+  if (outstanding?.amountDueUsd != null && outstanding.amountDueUsd > 0) {
+    monthKey = outstanding.monthKey;
+    amountUsd = outstanding.amountDueUsd;
+  } else {
+    const usage = await repository.getCurrentMonthUsage();
+    monthKey = getBillingMonthKey(usage.monthStart);
+    const monthOverride = await repository.getMonthOverride(monthKey);
+    if (monthOverride?.paymentStatus === "PAID") {
+      return NextResponse.json({ ok: false, message: "This month is already paid." }, { status: 409 });
+    }
+    if (monthOverride?.paymentStatus === "WAIVED") {
+      return NextResponse.json({ ok: false, message: "This month has been waived." }, { status: 409 });
+    }
+
+    const billing = calculateManagedHostingAmountDue({
+      watchMinutes: usage.courseWatchMinutesMeasured + usage.liveAudienceMinutesEstimated,
+      policy,
+      monthlyMinimumFloorUsd: monthOverride?.minimumFloorUsd,
+    });
+    if (billing.amountDueUsd <= 0) {
+      return NextResponse.json({ ok: false, message: "There is no amount due." }, { status: 409 });
+    }
+    amountUsd = billing.amountDueUsd;
   }
 
   const timestamp = Math.floor(Date.now() / 1000);
@@ -64,7 +78,7 @@ export async function POST() {
   const requestBody = {
     installationId,
     monthKey,
-    amountUsd: billing.amountDueUsd,
+    amountUsd,
     timestamp,
     nonce,
   };
@@ -92,5 +106,5 @@ export async function POST() {
     );
   }
 
-  return NextResponse.json({ ok: true, invoiceUrl: payload.invoiceUrl, monthKey, amountUsd: billing.amountDueUsd });
+  return NextResponse.json({ ok: true, invoiceUrl: payload.invoiceUrl, monthKey, amountUsd });
 }

@@ -7,6 +7,8 @@ import {
   type LiveTimelineMessage,
 } from "../domain/live-timeline.ts";
 
+export type AttendeeChatVisibility = "OWNER_ONLY" | "PUBLIC";
+
 export interface LiveAttendeeMessageRecord {
   id: string;
   sessionId?: string | null;
@@ -32,6 +34,7 @@ export interface LiveRoomRepository {
     activeSince: Date;
   }): Promise<number>;
   listViewerMessages(viewerId: string, sessionId: string): Promise<LiveAttendeeMessageRecord[]>;
+  listSessionAttendeeMessages?(sessionId: string): Promise<LiveAttendeeMessageRecord[]>;
   listAdminAttendeeMessages(input: {
     batchId: string;
     sessionId?: string | null;
@@ -109,10 +112,11 @@ export class LiveRoomService {
     liveOffsetSeconds: number;
     stagedMessages: readonly LiveTimelineMessage[];
     recentStagedLimit?: number;
-  }): Promise<{
-    staged: LiveTimelineMessage[];
-    own: LiveAttendeeMessageRecord[];
-  }> {
+    attendeeChatVisibility?: AttendeeChatVisibility;
+  }): Promise<
+    | { staged: LiveTimelineMessage[]; own: LiveAttendeeMessageRecord[] }
+    | { staged: LiveTimelineMessage[]; own: LiveAttendeeMessageRecord[]; shared: LiveAttendeeMessageRecord[] }
+  > {
     const [own, staged] = await Promise.all([
       this.repository.listViewerMessages(input.viewerId, input.sessionId),
       Promise.resolve(
@@ -124,7 +128,14 @@ export class LiveRoomService {
       ),
     ]);
 
-    return { staged, own };
+    if (input.attendeeChatVisibility !== "PUBLIC") {
+      return { staged, own };
+    }
+
+    const allSessionMessages = await this.repository.listSessionAttendeeMessages?.(input.sessionId) ?? [];
+    const ownIds = new Set(own.map((message) => message.id));
+    const shared = allSessionMessages.filter((message) => !ownIds.has(message.id));
+    return { staged, own, shared };
   }
 
   async getAdminAttendeeMessages(input: {

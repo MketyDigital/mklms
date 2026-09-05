@@ -225,6 +225,29 @@ export class PostgresLearningRepository
     );
   }
 
+  async allRequiredQuizzesPassed(
+    studentId: string,
+    courseId: string,
+  ): Promise<boolean> {
+    const result = await this.pool.query<{ remaining: string }>(
+      `SELECT COUNT(*)::text AS remaining
+       FROM quizzes q
+       JOIN course_modules m ON m.id = q.module_id
+       WHERE m.course_id = $2
+         AND q.status = 'PUBLISHED'
+         AND NOT EXISTS (
+           SELECT 1
+           FROM quiz_attempts qa
+           WHERE qa.quiz_id = q.id
+             AND qa.student_id = $1
+             AND qa.passed = TRUE
+         )`,
+      [studentId, courseId],
+    );
+
+    return Number(result.rows[0]?.remaining ?? 0) === 0;
+  }
+
   async markEnrollmentCompleted(
     studentId: string,
     courseId: string,

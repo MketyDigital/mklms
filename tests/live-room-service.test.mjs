@@ -27,8 +27,12 @@ class FakeLiveRepository {
     return this.active;
   }
 
-  async listViewerMessages() {
-    return this.own;
+  async listViewerMessages(_viewerId, sessionId) {
+    return this.own.filter((item) => !item.sessionId || item.sessionId === sessionId);
+  }
+
+  async listSessionAttendeeMessages(sessionId) {
+    return this.all.filter((item) => !item.sessionId || item.sessionId === sessionId);
   }
 
   async listAdminAttendeeMessages() {
@@ -106,16 +110,49 @@ test('public attendee message view contains staged timeline plus only that viewe
 
   const result = await service.getPublicChat({
     viewerId: 'viewer-1',
+    sessionId: 'session-1',
     liveOffsetSeconds: 75,
     stagedMessages: [
       { id: 'staged-1', offsetSeconds: 30, displayName: 'Ada', message: 'Welcome', position: 1 },
       { id: 'staged-2', offsetSeconds: 90, displayName: 'John', message: 'Future message', position: 2 },
     ],
+    attendeeChatVisibility: 'OWNER_ONLY',
   });
 
   assert.deepEqual(result.staged.map((item) => item.id), ['staged-1']);
   assert.deepEqual(result.own.map((item) => item.id), ['mine-1']);
   assert.equal(result.own.some((item) => item.id === 'other-1'), false);
+  assert.equal('shared' in result, false);
+});
+
+test('public attendee chat shares only other viewers same-session comments without duplicating own comments', async () => {
+  const repository = new FakeLiveRepository();
+  repository.own = [
+    { id: 'mine-1', sessionId: 'session-1', displayName: 'Me', message: 'My question', createdAt: new Date('2026-08-30T19:10:00Z') },
+  ];
+  repository.all = [
+    ...repository.own,
+    { id: 'other-1', sessionId: 'session-1', displayName: 'Other', message: 'Visible question', createdAt: new Date('2026-08-30T19:11:00Z') },
+    { id: 'other-session', sessionId: 'session-2', displayName: 'Wrong room', message: 'Never leak', createdAt: new Date('2026-08-30T19:12:00Z') },
+  ];
+  const service = new LiveRoomService(repository);
+
+  const result = await service.getPublicChat({
+    viewerId: 'viewer-1',
+    sessionId: 'session-1',
+    liveOffsetSeconds: 75,
+    stagedMessages: [
+      { id: 'staged-1', offsetSeconds: 30, displayName: 'Ada', message: 'Welcome', position: 1 },
+      { id: 'staged-2', offsetSeconds: 90, displayName: 'John', message: 'Future message', position: 2 },
+    ],
+    attendeeChatVisibility: 'PUBLIC',
+  });
+
+  assert.deepEqual(result.staged.map((item) => item.id), ['staged-1']);
+  assert.deepEqual(result.own.map((item) => item.id), ['mine-1']);
+  assert.deepEqual(result.shared.map((item) => item.id), ['other-1']);
+  assert.equal(result.shared.some((item) => item.id === 'mine-1'), false);
+  assert.equal(result.shared.some((item) => item.id === 'other-session'), false);
 });
 
 test('admin attendee inbox can see all real attendee comments for moderation and response context', async () => {

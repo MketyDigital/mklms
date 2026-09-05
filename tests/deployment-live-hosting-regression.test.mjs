@@ -19,7 +19,7 @@ test("monthly operator amount is a floor and usage can increase the amount due",
     monthlyMinimumFloorUsd: 27,
   });
   assert.equal(below.minimumFloorUsd, 27);
-  assert.equal(below.usageDerivedFeeUsd, 15);
+  assert.equal(below.usageDerivedFeeUsd, 0);
   assert.equal(below.amountDueUsd, 27);
 
   const above = calculateManagedHostingAmountDue({
@@ -60,6 +60,7 @@ test("hosting page explains migration setup instead of hard-crashing", async () 
     new URL("../src/app/(admin)/admin/hosting/page.tsx", import.meta.url),
     "utf8",
   );
-  assert.match(source, /npm run db:migrate/);
+  assert.match(source, /setupError/);
+  assert.match(source, /MkLMS DB migrations GitHub Action/);
   assert.match(source, /Hosting setup is not complete/);
 });

@@ -7,7 +7,7 @@ import {
   isFreshBillingTimestamp,
   verifyBillingPayload,
 } from "@/features/hosting/server/billing-signature";
-import { getManagedHostingPolicy } from "@/features/hosting/server/managed-hosting-policy";
+import { getEffectiveManagedHostingPolicy } from "@/features/hosting/server/managed-hosting-policy";
 
 const settlementSchema = z.object({
   installationId: z.string().regex(/^[a-z0-9][a-z0-9-]{1,63}$/),
@@ -46,10 +46,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "Unauthorized settlement." }, { status: 401 });
   }
 
-  const policy = getManagedHostingPolicy();
-  const month = await new PostgresManagedHostingRepository().markMonthPaid({
+  const repository = new PostgresManagedHostingRepository();
+  const effective = await getEffectiveManagedHostingPolicy(repository);
+  const month = await repository.markMonthPaid({
     monthKey: parsed.data.monthKey,
-    defaultMinimumFloorUsd: policy.minimumMonthlyFeeUsd,
+    defaultMinimumFloorUsd: effective.policy.minimumMonthlyFeeUsd,
   });
 
   return NextResponse.json({ ok: true, month });

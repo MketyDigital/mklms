@@ -35,6 +35,10 @@ export interface LearningProgressRepository {
     lastPositionSeconds: number,
     completed: boolean,
   ): Promise<void>;
+  allRequiredQuizzesPassed?(
+    studentId: string,
+    courseId: string,
+  ): Promise<boolean>;
   markEnrollmentCompleted(studentId: string, courseId: string): Promise<void>;
 }
 
@@ -84,6 +88,15 @@ export class LearningProgressService {
     this.repository = repository;
   }
 
+  private async allRequiredQuizzesPassed(
+    studentId: string,
+    courseId: string,
+  ): Promise<boolean> {
+    return this.repository.allRequiredQuizzesPassed
+      ? this.repository.allRequiredQuizzesPassed(studentId, courseId)
+      : true;
+  }
+
   async completeLesson(
     studentId: string,
     courseId: string,
@@ -120,7 +133,9 @@ export class LearningProgressService {
     completedBefore.add(lessonId);
 
     const progressPercent = calculateCourseProgress(course, completedBefore);
-    const courseCompleted = progressPercent === 100;
+    const courseCompleted =
+      progressPercent === 100 &&
+      (await this.allRequiredQuizzesPassed(studentId, courseId));
 
     if (courseCompleted && enrollment.status !== "COMPLETED") {
       await this.repository.markEnrollmentCompleted(studentId, courseId);
@@ -130,7 +145,8 @@ export class LearningProgressService {
       ok: true,
       progressPercent,
       courseCompleted,
-      nextLessonId: courseCompleted ? null : getNextLessonId(course, lessonId),
+      nextLessonId:
+        progressPercent === 100 ? null : getNextLessonId(course, lessonId),
     };
   }
 
@@ -189,7 +205,9 @@ export class LearningProgressService {
     if (lessonCompleted) completedBefore.add(lessonId);
 
     const courseProgressPercent = calculateCourseProgress(course, completedBefore);
-    const courseCompleted = courseProgressPercent === 100;
+    const courseCompleted =
+      courseProgressPercent === 100 &&
+      (await this.allRequiredQuizzesPassed(studentId, courseId));
 
     if (courseCompleted && enrollment.status !== "COMPLETED") {
       await this.repository.markEnrollmentCompleted(studentId, courseId);
@@ -201,7 +219,7 @@ export class LearningProgressService {
       courseProgressPercent,
       courseCompleted,
       nextLessonId:
-        lessonCompleted && !courseCompleted
+        lessonCompleted && courseProgressPercent < 100
           ? getNextLessonId(course, lessonId)
           : null,
     };

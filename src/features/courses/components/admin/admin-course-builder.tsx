@@ -27,6 +27,16 @@ export function AdminCourseBuilder({ course, mediaAssets }: AdminCourseBuilderPr
   const [completionMode, setCompletionMode] = useState<LessonCompletionMode>("VIDEO_PROGRESS");
   const [completionThresholdPercent, setCompletionThresholdPercent] = useState(90);
   const [durationSeconds, setDurationSeconds] = useState<number | "">("");
+  const [editingModuleId, setEditingModuleId] = useState<string | null>(null);
+  const [editModuleTitle, setEditModuleTitle] = useState("");
+  const [editModuleDescription, setEditModuleDescription] = useState("");
+  const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
+  const [editLessonTitle, setEditLessonTitle] = useState("");
+  const [editLessonDescription, setEditLessonDescription] = useState("");
+  const [editLessonMediaAssetId, setEditLessonMediaAssetId] = useState("");
+  const [editLessonCompletionMode, setEditLessonCompletionMode] = useState<LessonCompletionMode>("VIDEO_PROGRESS");
+  const [editLessonThreshold, setEditLessonThreshold] = useState(90);
+  const [editLessonDuration, setEditLessonDuration] = useState<number | "">("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -77,12 +87,18 @@ export function AdminCourseBuilder({ course, mediaAssets }: AdminCourseBuilderPr
     finally { setBusy(false); }
   }
 
-  async function editModule(courseModule: CourseStructure["modules"][number]) {
-    const title = window.prompt("Module title", courseModule.title)?.trim(); if (!title) return;
-    const description = window.prompt("Module description", courseModule.description ?? ""); if (description === null) return;
+  function beginEditModule(courseModule: CourseStructure["modules"][number]) {
+    setEditingModuleId(courseModule.id);
+    setEditModuleTitle(courseModule.title);
+    setEditModuleDescription(courseModule.description ?? "");
+  }
+
+  async function saveModule(courseModule: CourseStructure["modules"][number]) {
     setBusy(true); setMessage(null);
-    try { await request(`/api/admin/modules/${courseModule.id}`, "PATCH", { title, description: description || null }); setMessage("Module updated."); router.refresh(); }
-    catch (error) { setMessage(error instanceof Error ? error.message : "Could not edit module."); }
+    try {
+      await request(`/api/admin/modules/${courseModule.id}`, "PATCH", { title: editModuleTitle, description: editModuleDescription || null });
+      setEditingModuleId(null); setMessage("Module updated."); router.refresh();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Could not edit module."); }
     finally { setBusy(false); }
   }
 
@@ -94,24 +110,37 @@ export function AdminCourseBuilder({ course, mediaAssets }: AdminCourseBuilderPr
     finally { setBusy(false); }
   }
 
-  async function editLesson(lesson: CourseStructure["modules"][number]["lessons"][number]) {
-    const title = window.prompt("Lesson title", lesson.title)?.trim(); if (!title) return;
-    const description = window.prompt("Lesson description", lesson.description ?? ""); if (description === null) return;
-    let nextMedia = lesson.mediaAssetId ?? "";
-    let nextDuration = lesson.durationSeconds ?? null;
-    let nextThreshold = lesson.completionThresholdPercent;
-    if (lesson.completionMode === "VIDEO_PROGRESS") {
-      const media = window.prompt("Media asset ID (copy from Media Library if changing it)", nextMedia); if (media === null) return; nextMedia = media.trim();
-      const duration = window.prompt("Duration in seconds", String(nextDuration ?? "")); if (duration === null) return; nextDuration = Number(duration);
-      const threshold = window.prompt("Completion threshold %", String(nextThreshold)); if (threshold === null) return; nextThreshold = Number(threshold);
+  function beginEditLesson(lesson: CourseStructure["modules"][number]["lessons"][number]) {
+    setEditingLessonId(lesson.id);
+    setEditLessonTitle(lesson.title);
+    setEditLessonDescription(lesson.description ?? "");
+    setEditLessonMediaAssetId(lesson.mediaAssetId ?? "");
+    setEditLessonCompletionMode(lesson.completionMode);
+    setEditLessonThreshold(lesson.completionThresholdPercent);
+    setEditLessonDuration(lesson.durationSeconds ?? "");
+  }
+
+  function selectEditMedia(assetId: string) {
+    setEditLessonMediaAssetId(assetId);
+    const asset = readyMedia.find((item) => item.id === assetId);
+    if (asset?.durationSeconds) setEditLessonDuration(asset.durationSeconds);
+  }
+
+  async function saveLesson(lesson: CourseStructure["modules"][number]["lessons"][number]) {
+    if (editLessonCompletionMode === "VIDEO_PROGRESS" && (!editLessonMediaAssetId || !editLessonDuration)) {
+      setMessage("Video-progress lessons require a media asset and video duration."); return;
     }
     setBusy(true); setMessage(null);
     try {
       await request(`/api/admin/lessons/${lesson.id}`, "PATCH", {
-        title, description: description || null, mediaAssetId: nextMedia || null, completionMode: lesson.completionMode,
-        completionThresholdPercent: nextThreshold, durationSeconds: nextDuration,
+        title: editLessonTitle,
+        description: editLessonDescription || null,
+        mediaAssetId: editLessonMediaAssetId || null,
+        completionMode: editLessonCompletionMode,
+        completionThresholdPercent: editLessonCompletionMode === "VIDEO_PROGRESS" ? editLessonThreshold : 100,
+        durationSeconds: editLessonCompletionMode === "VIDEO_PROGRESS" && editLessonDuration ? Number(editLessonDuration) : null,
       });
-      setMessage("Lesson updated."); router.refresh();
+      setEditingLessonId(null); setMessage("Lesson updated."); router.refresh();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Could not edit lesson."); }
     finally { setBusy(false); }
   }
@@ -150,13 +179,33 @@ export function AdminCourseBuilder({ course, mediaAssets }: AdminCourseBuilderPr
       <div className="space-y-4">
         {course.modules.map((courseModule, moduleIndex) => (
           <Card key={courseModule.id}>
-            <CardHeader><div className="flex flex-wrap items-center justify-between gap-2"><div><CardTitle className="text-base">Module {moduleIndex + 1}: {courseModule.title}</CardTitle>{courseModule.description ? <CardDescription>{courseModule.description}</CardDescription> : null}</div><div className="flex gap-2"><Button size="sm" variant="outline" disabled={busy} onClick={() => void editModule(courseModule)}>Edit module</Button><Button size="sm" variant="destructive" disabled={busy} onClick={() => void deleteModule(courseModule)}>Delete module</Button></div></div></CardHeader>
-            <CardContent className="space-y-2">
-              {courseModule.lessons.map((lesson, lessonIndex) => (
-                <div key={lesson.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
-                  <div><p className="text-sm font-medium">Lesson {lessonIndex + 1}: {lesson.title}</p><p className="mt-1 text-xs text-muted-foreground">{lesson.completionMode}{lesson.durationSeconds ? ` · ${lesson.durationSeconds}s` : ""}{lesson.mediaAssetId ? ` · media ${lesson.mediaAssetId}` : " · no media"}</p></div>
-                  <div className="flex flex-wrap items-center gap-2"><Badge variant="outline">{lesson.status}</Badge><Button size="sm" variant="outline" disabled={busy} onClick={() => void editLesson(lesson)}>Edit lesson</Button>{lesson.status === "PUBLISHED" ? <Button size="sm" variant="outline" disabled={busy} onClick={() => void setLessonStatus(lesson.id, "DRAFT")}>Unpublish</Button> : <Button size="sm" disabled={busy} onClick={() => void setLessonStatus(lesson.id, "PUBLISHED")}>Publish</Button>}<Button size="sm" variant="destructive" disabled={busy} onClick={() => void deleteLesson(lesson)}>Delete lesson</Button></div>
+            <CardHeader>
+              {editingModuleId === courseModule.id ? (
+                <div className="space-y-3">
+                  <Input value={editModuleTitle} onChange={(e) => setEditModuleTitle(e.target.value)} aria-label="Module title" />
+                  <Textarea value={editModuleDescription} onChange={(e) => setEditModuleDescription(e.target.value)} aria-label="Module description" />
+                  <div className="flex gap-2"><Button size="sm" disabled={busy} onClick={() => void saveModule(courseModule)}>Save module</Button><Button size="sm" variant="outline" onClick={() => setEditingModuleId(null)}>Cancel</Button></div>
                 </div>
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-2"><div><CardTitle className="text-base">Module {moduleIndex + 1}: {courseModule.title}</CardTitle>{courseModule.description ? <CardDescription>{courseModule.description}</CardDescription> : null}</div><div className="flex gap-2"><Button size="sm" variant="outline" disabled={busy} onClick={() => beginEditModule(courseModule)}>Edit module</Button><Button size="sm" variant="destructive" disabled={busy} onClick={() => void deleteModule(courseModule)}>Delete module</Button></div></div>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {courseModule.lessons.map((lesson, lessonIndex) => (
+                editingLessonId === lesson.id ? (
+                  <div key={lesson.id} className="space-y-3 rounded-lg border p-4">
+                    <div className="grid gap-3 sm:grid-cols-2"><div className="space-y-1"><Label>Lesson title</Label><Input value={editLessonTitle} onChange={(e) => setEditLessonTitle(e.target.value)} /></div><div className="space-y-1"><Label>Completion method</Label><select className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm" value={editLessonCompletionMode} onChange={(e) => setEditLessonCompletionMode(e.target.value as LessonCompletionMode)}><option value="VIDEO_PROGRESS">Video progress</option><option value="MANUAL">Manual</option><option value="CUSTOM">Custom</option></select></div></div>
+                    <div className="space-y-1"><Label>Description</Label><Textarea value={editLessonDescription} onChange={(e) => setEditLessonDescription(e.target.value)} /></div>
+                    <div className="space-y-1"><Label>Media asset</Label><select className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm" value={editLessonMediaAssetId} onChange={(e) => selectEditMedia(e.target.value)}><option value="">No media</option>{readyMedia.map((asset) => <option key={asset.id} value={asset.id}>{asset.title} · {asset.sourceType}</option>)}</select></div>
+                    {editLessonCompletionMode === "VIDEO_PROGRESS" ? <div className="grid gap-3 sm:grid-cols-2"><div className="space-y-1"><Label>Duration (seconds)</Label><Input type="number" min="1" value={editLessonDuration} onChange={(e) => setEditLessonDuration(e.target.value ? Number(e.target.value) : "")} /></div><div className="space-y-1"><Label>Completion threshold %</Label><Input type="number" min="1" max="100" value={editLessonThreshold} onChange={(e) => setEditLessonThreshold(Number(e.target.value))} /></div></div> : null}
+                    <div className="flex gap-2"><Button size="sm" disabled={busy} onClick={() => void saveLesson(lesson)}>Save lesson</Button><Button size="sm" variant="outline" onClick={() => setEditingLessonId(null)}>Cancel</Button></div>
+                  </div>
+                ) : (
+                  <div key={lesson.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
+                    <div><p className="text-sm font-medium">Lesson {lessonIndex + 1}: {lesson.title}</p><p className="mt-1 text-xs text-muted-foreground">{lesson.completionMode}{lesson.durationSeconds ? ` · ${lesson.durationSeconds}s` : ""}{lesson.mediaAssetId ? ` · media ${lesson.mediaAssetId}` : " · no media"}</p></div>
+                    <div className="flex flex-wrap items-center gap-2"><Badge variant="outline">{lesson.status}</Badge><Button size="sm" variant="outline" disabled={busy} onClick={() => beginEditLesson(lesson)}>Edit lesson</Button>{lesson.status === "PUBLISHED" ? <Button size="sm" variant="outline" disabled={busy} onClick={() => void setLessonStatus(lesson.id, "DRAFT")}>Unpublish</Button> : <Button size="sm" disabled={busy} onClick={() => void setLessonStatus(lesson.id, "PUBLISHED")}>Publish</Button>}<Button size="sm" variant="destructive" disabled={busy} onClick={() => void deleteLesson(lesson)}>Delete lesson</Button></div>
+                  </div>
+                )
               ))}
               {!courseModule.lessons.length ? <p className="py-4 text-sm text-muted-foreground">No lessons in this module yet.</p> : null}
             </CardContent>
