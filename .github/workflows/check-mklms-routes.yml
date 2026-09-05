@@ -1,0 +1,49 @@
+name: Check MkLMS Worker routes
+
+on:
+  push:
+    branches:
+      - ops/cloudflare-new-update-setup-2026-09-05
+    paths:
+      - .github/workflows/check-mklms-routes.yml
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Find zone routes assigned to mklms
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          zones_url="https://api.cloudflare.com/client/v4/zones?account.id=$CLOUDFLARE_ACCOUNT_ID&per_page=50"
+          status=$(curl -sS -o /tmp/zones.json -w '%{http_code}' "${auth[@]}" "$zones_url")
+          if [ "$status" != "200" ]; then
+            echo "Unable to enumerate account zones with this token (HTTP $status)."
+            cat /tmp/zones.json | jq '{success,errors}' || true
+            exit 2
+          fi
+          jq -e '.success == true' /tmp/zones.json >/dev/null
+          : > /tmp/mklms-routes.txt
+          while IFS=$'\t' read -r zone_id zone_name; do
+            route_status=$(curl -sS -o /tmp/routes.json -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/workers/routes")
+            if [ "$route_status" != "200" ]; then
+              echo "Unable to inspect Worker routes for zone $zone_name (HTTP $route_status)."
+              exit 3
+            fi
+            jq -r --arg zone "$zone_name" '.result[]? | select(.script == "mklms") | [$zone,.pattern] | @tsv' /tmp/routes.json >> /tmp/mklms-routes.txt
+          done < <(jq -r '.result[] | [.id,.name] | @tsv' /tmp/zones.json)
+
+          if [ -s /tmp/mklms-routes.txt ]; then
+            echo "mklms Worker Routes found:"
+            cat /tmp/mklms-routes.txt
+          else
+            echo "No zone Worker Routes are assigned to mklms."
+          fi
