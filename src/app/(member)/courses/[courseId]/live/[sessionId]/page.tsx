@@ -42,6 +42,7 @@ export default async function PaidCourseLivePage({
           startsAt: liveSession.startsAt.toISOString(),
           endsAt: liveSession.endsAt.toISOString(),
           state,
+          deliveryMode: liveSession.deliveryMode,
         }} />
       </div>
     </AppLayout>
