@@ -32,15 +32,19 @@ jobs:
 
           echo "Active deployment (safe metadata):"
           jq '.result.deployments[0] | {id,created_on,source,strategy,versions,annotations}' /tmp/deployments.json
+
+          jq '[.. | objects | select((has("id")) and (has("number"))) | {id,number,metadata:{created_on:(.metadata.created_on // null),modified_on:(.metadata.modified_on // null),source:(.metadata.source // null)}}] | unique_by(.id) | sort_by(.number) | reverse' /tmp/versions.json > /tmp/version-list.json
           echo "Latest Worker versions (safe metadata):"
-          jq '[.result[] | {id,number,metadata:{created_on:.metadata.created_on,source:.metadata.source}}][0:5]' /tmp/versions.json
+          jq '.[0:5]' /tmp/version-list.json
 
           active=$(jq -r '.result.deployments[0].versions[] | select(.percentage == 100) | .version_id' /tmp/deployments.json | head -1)
-          latest=$(jq -r '.result[0].id' /tmp/versions.json)
+          latest=$(jq -r '.[0].id' /tmp/version-list.json)
+          latest_number=$(jq -r '.[0].number' /tmp/version-list.json)
           echo "ACTIVE_VERSION=$active"
           echo "LATEST_VERSION=$latest"
+          echo "LATEST_VERSION_NUMBER=$latest_number"
           if [ "$active" = "$latest" ]; then
             echo "Active deployment already uses latest version."
           else
-            echo "Active deployment intentionally differs from latest version; no deployment change made."
+            echo "Active deployment differs from latest version; no deployment change made."
           fi
