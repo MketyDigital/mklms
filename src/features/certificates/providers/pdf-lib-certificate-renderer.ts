@@ -1,7 +1,7 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 import type { StorageProvider } from "@/providers/storage-provider";
-import { REAL_CERTIFICATE_DEFAULT_LAYOUT } from "./default-certificate-layout";
+import { REAL_CERTIFICATE_DEFAULT_LAYOUT } from "./default-certificate-layout.ts";
 import type {
   CertificateRenderer,
   CertificateTemplateDefinition,
