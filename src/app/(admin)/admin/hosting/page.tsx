@@ -5,8 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ManagedHostingPanel } from "@/features/hosting/components/managed-hosting-panel";
 import type { ManagedHostingMonthOverride } from "@/features/hosting/domain/managed-hosting";
 import { PostgresManagedHostingRepository } from "@/features/hosting/repositories/postgres-managed-hosting.repository";
+import { getManagedHostingServiceAccess } from "@/features/hosting/server/managed-hosting-access";
 import {
-  getManagedHostingPolicy,
+  getEffectiveManagedHostingPolicy,
   isManagedHostingBillingAutomationConfigured,
 } from "@/features/hosting/server/managed-hosting-policy";
 import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
@@ -17,17 +18,19 @@ export default async function AdminHostingPage() {
   const hostingRepository = new PostgresManagedHostingRepository();
   const settingsRepository = new PostgresSettingsRepository();
   const platformSettings = await settingsRepository.getPlatformSettings();
-  const policy = getManagedHostingPolicy();
+  const effective = await getEffectiveManagedHostingPolicy(hostingRepository);
   const billingAutomationEnabled = isManagedHostingBillingAutomationConfigured();
 
   let usage: Awaited<ReturnType<PostgresManagedHostingRepository["getCurrentMonthUsage"]>> | null = null;
   let monthOverride: ManagedHostingMonthOverride | null = null;
+  let serviceAccess: Awaited<ReturnType<typeof getManagedHostingServiceAccess>> | null = null;
   let setupError: string | null = null;
 
   try {
-    [usage, monthOverride] = await Promise.all([
-      hostingRepository.getCurrentMonthUsage(),
+    usage = await hostingRepository.getCurrentMonthUsage();
+    [monthOverride, serviceAccess] = await Promise.all([
       hostingRepository.getMonthOverride(),
+      getManagedHostingServiceAccess(hostingRepository),
     ]);
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
@@ -35,8 +38,8 @@ export default async function AdminHostingPage() {
       /media_watch_credits|managed_hosting/i.test(message) ||
       /does not exist|undefined table|relation/i.test(message);
     setupError = looksLikeMissingSchema
-      ? "The hosting/usage database schema is not current. Run npm run db:migrate against this deployment database (or the MkLMS DB migrations GitHub Action), require verification to pass, then reload this page."
-      : "Hosting usage could not be loaded. Check the database connection and migration status in Settings & Integrations.";
+      ? "The hosting/usage database schema is not current. Run the current MkLMS database migrations, require verification to pass, then reload this page."
+      : "Hosting billing could not be loaded. Check the database connection and migration status in Settings & Integrations.";
   }
 
   return (
@@ -49,19 +52,22 @@ export default async function AdminHostingPage() {
       isAdmin={true}
       unreadMessages={0}
     >
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold tracking-tight">Hosting & Usage</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Hosting & Billing</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Monthly course/live usage and, when enabled for this deployment, the current managed-hosting amount and payment status.
+            View your current managed video-hosting balance, payment status and any payment notices.
           </p>
         </div>
 
         {usage ? (
           <ManagedHostingPanel
-            policy={policy}
+            policy={effective.policy}
+            displayTitle={effective.displayTitle}
+            displayDescription={effective.displayDescription}
             monthStart={usage.monthStart}
             monthOverride={monthOverride}
+            serviceAccess={serviceAccess}
             billingAutomationEnabled={billingAutomationEnabled}
             usage={{
               courseWatchMinutesMeasured: usage.courseWatchMinutesMeasured,
