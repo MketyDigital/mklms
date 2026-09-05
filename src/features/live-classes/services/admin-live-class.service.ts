@@ -7,6 +7,7 @@ import {
   type ImportedLiveChatItem,
   type LiveChatImportError,
 } from "../domain/import-live-chat.ts";
+import type { AttendeeChatVisibility } from "./live-room.service.ts";
 
 export type LiveBatchAdminStatus = "DRAFT" | "ACTIVE" | "ARCHIVED";
 
@@ -18,6 +19,7 @@ export interface AdminLiveBatchRecord {
   status: LiveBatchAdminStatus;
   expectedViewerBaseline: number;
   viewerDisplayMode: ViewerDisplayMode;
+  attendeeChatVisibility: AttendeeChatVisibility;
   endedMessage?: string | null;
   endedRedirectUrl?: string | null;
   notificationDestination?: string | null;
@@ -67,8 +69,15 @@ function optionalText(value?: string | null): string | null {
 }
 
 function normalizeBatchInput(input: {
-  title: string; slug?: string | null; description?: string | null; expectedViewerBaseline?: number | null;
-  viewerDisplayMode?: ViewerDisplayMode; endedMessage?: string | null; endedRedirectUrl?: string | null; notificationDestination?: string | null;
+  title: string;
+  slug?: string | null;
+  description?: string | null;
+  expectedViewerBaseline?: number | null;
+  viewerDisplayMode?: ViewerDisplayMode;
+  attendeeChatVisibility?: AttendeeChatVisibility;
+  endedMessage?: string | null;
+  endedRedirectUrl?: string | null;
+  notificationDestination?: string | null;
 }) {
   const title = input.title.trim();
   if (!title) throw new Error("Live class title is required.");
@@ -80,6 +89,7 @@ function normalizeBatchInput(input: {
     description: optionalText(input.description),
     expectedViewerBaseline,
     viewerDisplayMode: input.viewerDisplayMode ?? "CONFIGURED_BASELINE" as ViewerDisplayMode,
+    attendeeChatVisibility: input.attendeeChatVisibility ?? "OWNER_ONLY" as AttendeeChatVisibility,
     endedMessage: optionalText(input.endedMessage),
     endedRedirectUrl: normalizeSafeExternalUrl(input.endedRedirectUrl),
     notificationDestination: optionalText(input.notificationDestination),
@@ -160,7 +170,7 @@ export class AdminLiveClassService {
   async createQuickTest(input: { title?: string; expectedViewerBaseline?: number; now?: Date } = {}) {
     const now = input.now ?? new Date();
     const suffix = now.toISOString().replace(/\D/g, "").slice(0, 14);
-    const batch = await this.createBatch({ title: input.title?.trim() || "Live Room Test", slug: `live-room-test-${suffix}`, description: "Temporary no-media test room for verifying the live experience.", expectedViewerBaseline: input.expectedViewerBaseline ?? 100, viewerDisplayMode: "CONFIGURED_BASELINE", endedMessage: "This live-room test has ended." });
+    const batch = await this.createBatch({ title: input.title?.trim() || "Live Room Test", slug: `live-room-test-${suffix}`, description: "Temporary no-media test room for verifying the live experience.", expectedViewerBaseline: input.expectedViewerBaseline ?? 100, viewerDisplayMode: "CONFIGURED_BASELINE", attendeeChatVisibility: "OWNER_ONLY", endedMessage: "This live-room test has ended." });
     const session = await this.createSession(batch.id, { title: "Test Session", position: 1, startsAt: new Date(now.getTime() - 5_000), durationSeconds: 15 * 60, mediaAssetId: null, status: "PUBLISHED" });
     await this.setBatchStatus(batch.id, "ACTIVE");
     return { batch: { ...batch, status: "ACTIVE" as const }, session };
