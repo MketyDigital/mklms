@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getCurrentStudentSession } from "@/features/access/server/current-student";
+import { getManagedHostingServiceAccess } from "@/features/hosting/server/managed-hosting-access";
 import { PostgresMediaPlaybackRepository } from "@/features/media/repositories/postgres-media-playback.repository";
 import { MediaPlaybackService } from "@/features/media/services/media-playback.service";
 import { getConfiguredMediaProvider } from "@/providers/signed-delivery-media-provider";
@@ -14,6 +15,18 @@ export async function POST(
   const session = await getCurrentStudentSession();
   if (!session) {
     return NextResponse.json({ ok: false, message: "Unauthorized." }, { status: 401 });
+  }
+
+  const hostingAccess = await getManagedHostingServiceAccess();
+  if (!hostingAccess.allowed) {
+    return NextResponse.json(
+      {
+        ok: false,
+        reason: "HOSTING_PAYMENT_REQUIRED",
+        message: "Protected course video is temporarily unavailable because the site owner's managed hosting payment is overdue.",
+      },
+      { status: 402, headers: { "Cache-Control": "private, no-store" } },
+    );
   }
 
   const { courseId, lessonId } = await context.params;
