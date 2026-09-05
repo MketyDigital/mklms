@@ -3,10 +3,13 @@ import type { Pool } from "pg";
 
 import { getPostgresPool } from "@/lib/postgres";
 import type { QuizRecord, QuizStatus } from "../domain/model";
-import type { SubmittedQuizAnswer } from "../services/quiz-scoring.service";
 
 export class PostgresQuizRepository {
-  constructor(private readonly pool: Pool = getPostgresPool()) {}
+  private readonly pool: Pool;
+
+  constructor(pool: Pool = getPostgresPool()) {
+    this.pool = pool;
+  }
 
   async listByCourse(courseId: string, publishedOnly = false): Promise<QuizRecord[]> {
     const result = await this.pool.query<{ id: string }>(
