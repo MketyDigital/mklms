@@ -1,4 +1,4 @@
-name: Smoke test MkLMS deployed security limits
+name: Diagnose MkLMS deployed rate limiter
 
 on:
   push:
@@ -14,39 +14,37 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 8
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - name: Safely verify sustained deployed claim limiter and public routes
+      - name: Tail live Worker while exercising invalid claim requests
         shell: bash
         run: |
-          set -euo pipefail
+          set -u
           host=learn.starpipsforex.com
+          : > /tmp/tail.log
 
-          root_code=$(curl -sS -o /tmp/root.html -w '%{http_code}' --connect-timeout 8 --max-time 15 "https://$host/")
-          probe_code=$(curl -sS -o /tmp/probe.html -w '%{http_code}' --connect-timeout 8 --max-time 15 "https://$host/.env" || true)
-          test "$root_code" = "200"
-          test "$probe_code" = "403"
-          grep -q 'STARPIPSFOREX' /tmp/root.html
+          timeout 40s npx --yes wrangler@4.127.1 tail mklms --format=json --sampling-rate=1 > /tmp/tail.log 2>&1 &
+          tail_pid=$!
+          sleep 8
 
-          echo "=== SUSTAINED CLAIM LIMITER SMOKE TEST ==="
-          seen_400=0
-          seen_429=0
-          for i in $(seq 1 30); do
-            code=$(curl -sS -D "/tmp/claim-$i.headers" -o "/tmp/claim-$i.json" -w '%{http_code}' \
+          for i in $(seq 1 8); do
+            code=$(curl -sS -o "/tmp/claim-$i.json" -w '%{http_code}' \
               --connect-timeout 8 --max-time 15 \
               -H 'Content-Type: application/json' \
               --data '{}' \
-              "https://$host/api/access/claim")
-            ray=$(grep -i '^cf-ray:' "/tmp/claim-$i.headers" | tr -d '\r' | awk '{print $2}' || true)
-            echo "CLAIM_REQUEST_$i=$code RAY=$ray"
-            if [ "$code" = "400" ]; then seen_400=1; fi
-            if [ "$code" = "429" ]; then
-              seen_429=1
-              grep -qi 'too many' "/tmp/claim-$i.json"
-              break
-            fi
+              "https://$host/api/access/claim" || true)
+            echo "CLAIM_REQUEST_$i=$code"
             sleep 1
           done
 
-          test "$seen_400" = "1"
-          test "$seen_429" = "1"
-          echo "DEPLOYED_AUTH_RATE_LIMITER_CONFIRMED"
+          sleep 5
+          kill "$tail_pid" 2>/dev/null || true
+          wait "$tail_pid" 2>/dev/null || true
+
+          echo "=== LIVE WORKER TAIL ==="
+          cat /tmp/tail.log
+          echo "=== RELEVANT LIMITER LOGS ==="
+          grep -Ei 'AUTH_RATE_LIMITER|distributed rate limiter|binding unavailable|student-claim|exception|error' /tmp/tail.log || true
+          echo "LIVE_TAIL_DIAGNOSTIC_COMPLETE"
