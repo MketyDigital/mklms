@@ -1,4 +1,4 @@
-name: Diagnose MkLMS browser challenge behavior
+name: Diagnose MkLMS real-browser challenge
 
 on:
   push:
@@ -13,51 +13,42 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    timeout-minutes: 10
     steps:
-      - name: Browser-like request comparison and Ray lookup
+      - name: Test custom hostname with real headless Chrome
         shell: bash
         run: |
           set -euo pipefail
-          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
-          zone_name=mkety.com
-          host=learn.starpipsforex.com
-          worker=mklms.dry-glitter-7e16.workers.dev
-          zones=$(curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones?account.id=$CLOUDFLARE_ACCOUNT_ID&name=$zone_name")
-          zone_id=$(printf '%s' "$zones" | jq -r '.result[0].id // empty')
-          test -n "$zone_id"
-          ua='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36'
+          host=https://learn.starpipsforex.com
+          worker=https://mklms.dry-glitter-7e16.workers.dev
+          chrome=$(command -v google-chrome || command -v google-chrome-stable || command -v chromium-browser || command -v chromium || true)
+          echo "CHROME_BIN=${chrome:-none}"
+          if [ -z "$chrome" ]; then
+            echo "No Chrome/Chromium binary available on runner."
+            exit 0
+          fi
 
-          request() {
-            label="$1"; url="$2"; mode="$3"
+          run_browser() {
+            label="$1"; url="$2"
             echo "=== $label ==="
-            if [ "$mode" = browser ]; then
-              curl -sS -D /tmp/headers.txt -o /tmp/body.html --connect-timeout 8 --max-time 15 \
-                -H "User-Agent: $ua" \
-                -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8' \
-                -H 'Accept-Language: en-US,en;q=0.9' \
-                -H 'Sec-Fetch-Dest: document' -H 'Sec-Fetch-Mode: navigate' -H 'Sec-Fetch-Site: none' \
-                "$url" || true
-            else
-              curl -sS -D /tmp/headers.txt -o /tmp/body.html --connect-timeout 8 --max-time 15 "$url" || true
-            fi
-            grep -Ei '^(HTTP/|cf-|server:|location:|content-type:|set-cookie:)' /tmp/headers.txt || true
-            ray=$(awk 'BEGIN{IGNORECASE=1} /^cf-ray:/ {gsub("\r",""); print $2; exit}' /tmp/headers.txt | cut -d- -f1)
-            echo "RAY_ID=${ray:-none}"
-            if [ -n "${ray:-}" ]; then
-              echo "RAY_LOOKUP:"
-              curl -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/logs/rayids/$ray" | jq -c '{success,errors,messages,result}' || true
-            fi
-            echo "BODY_MARKERS:"
-            grep -Eio '<title>[^<]+|Just a moment|Attention Required|cf-chl|challenge-platform|MkLMS|Starpips' /tmp/body.html | head -10 || true
+            rm -rf /tmp/chrome-profile /tmp/chrome-dom.html
+            timeout 35s "$chrome" \
+              --headless=new \
+              --no-sandbox \
+              --disable-dev-shm-usage \
+              --disable-gpu \
+              --user-data-dir=/tmp/chrome-profile \
+              --virtual-time-budget=20000 \
+              --dump-dom "$url" > /tmp/chrome-dom.html 2>/tmp/chrome.err || true
+            echo "DOM_MARKERS:"
+            grep -Eio '<title>[^<]+|Just a moment|Verify you are human|challenge-platform|cf-chl|STARPIPSFOREX|MkLMS|Admin Login|Student Login' /tmp/chrome-dom.html | head -20 || true
+            echo "COOKIE_FILES:"
+            find /tmp/chrome-profile -type f 2>/dev/null | grep -Ei 'Cookies$' | head -5 || true
+            echo "ERROR_TAIL:"
+            tail -20 /tmp/chrome.err || true
           }
 
-          request 'CUSTOM HOST DEFAULT CURL' "https://$host/" default
-          request 'CUSTOM HOST CHROME-LIKE' "https://$host/" browser
-          request 'CUSTOM HOST LOGIN CHROME-LIKE' "https://$host/login" browser
-          request 'CUSTOM HOST ADMIN LOGIN CHROME-LIKE' "https://$host/admin-login" browser
-          request 'WORKERS.DEV CHROME-LIKE' "https://$worker/" browser
-          echo "READ_ONLY_BROWSER_CHALLENGE_DIAGNOSTIC_COMPLETE"
+          run_browser 'CUSTOM HOST ROOT' "$host/"
+          run_browser 'CUSTOM HOST LOGIN' "$host/login"
+          run_browser 'WORKERS.DEV ROOT' "$worker/"
+          echo "READ_ONLY_REAL_BROWSER_DIAGNOSTIC_COMPLETE"
