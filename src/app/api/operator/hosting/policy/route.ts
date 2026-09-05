@@ -61,6 +61,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "Invalid hosting policy." }, { status: 400 });
   }
 
-  const policy = await new PostgresManagedHostingRepository().upsertOperatorPolicy(parsed.data);
+  const policy = await new PostgresManagedHostingRepository().upsertOperatorPolicy({
+    enabled: parsed.data.enabled,
+    minimumMonthlyFeeUsd: parsed.data.minimumMonthlyFeeUsd,
+    maximumMonthlyFeeUsd: parsed.data.maximumMonthlyFeeUsd,
+    displayTitle: parsed.data.displayTitle,
+    displayDescription: parsed.data.displayDescription ?? null,
+    notice: parsed.data.notice ?? null,
+    overdueWarning: parsed.data.overdueWarning ?? null,
+    dueDaysAfterMonthEnd: parsed.data.dueDaysAfterMonthEnd,
+    graceDays: parsed.data.graceDays,
+    enforcementEnabled: parsed.data.enforcementEnabled,
+  });
   return NextResponse.json({ ok: true, policy });
 }
