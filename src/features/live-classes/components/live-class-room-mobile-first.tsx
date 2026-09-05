@@ -47,6 +47,7 @@ interface LiveRoomState {
 }
 
 type StagedChatMessage = LiveRoomState["chat"]["staged"][number];
+type SharedLiveComment = OwnLiveComment;
 
 type LiveChatStreamItem = {
   id: string;
@@ -71,6 +72,7 @@ interface PlaybackState {
 
 const SAFETY_STATE_REFRESH_MS = 5 * 60 * 1000;
 const CHAT_REFRESH_MS = 5 * 60 * 1000;
+const SHARED_CHAT_REFRESH_MS = 3_000;
 const LIVE_CHAT_INITIAL_CONTEXT = 10;
 const LIVE_CHAT_MAX_RENDERED = 80;
 const LIVE_CHAT_BOTTOM_THRESHOLD_PX = 48;
@@ -103,12 +105,12 @@ function stagedStreamItem(item: StagedChatMessage): LiveChatStreamItem {
   };
 }
 
-function viewerStreamItem(item: OwnLiveComment, fallbackName: string): LiveChatStreamItem {
+function viewerStreamItem(item: OwnLiveComment, fallbackName: string, mine = true): LiveChatStreamItem {
   return {
     id: `viewer-${item.id}`,
-    name: item.displayName || fallbackName || "You",
+    name: item.displayName || fallbackName || (mine ? "You" : "Viewer"),
     message: item.message,
-    mine: true,
+    mine,
     source: "viewer",
   };
 }
@@ -133,6 +135,7 @@ export function LiveClassRoomMobileFirst({
   const previousStorageKeyRef = useRef<string | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const seenStagedMessageIdsRef = useRef<Set<string>>(new Set());
+  const seenSharedMessageIdsRef = useRef<Set<string>>(new Set());
   const liveChatSessionRef = useRef<string | null>(null);
 
   const [roomState, setRoomState] = useState<LiveRoomState | null>(null);
@@ -147,6 +150,7 @@ export function LiveClassRoomMobileFirst({
   const [comment, setComment] = useState("");
   const [sending, setSending] = useState(false);
   const [ownComments, setOwnComments] = useState<OwnLiveComment[]>([]);
+  const [sharedComments, setSharedComments] = useState<SharedLiveComment[]>([]);
   const [stagedChat, setStagedChat] = useState<StagedChatMessage[]>([]);
   const [chatFeedLoaded, setChatFeedLoaded] = useState(false);
   const [liveChatStream, setLiveChatStream] = useState<LiveChatStreamItem[]>([]);
@@ -261,6 +265,34 @@ export function LiveClassRoomMobileFirst({
     return payload;
   }, [slug]);
 
+  const fetchSharedChat = useCallback(async () => {
+    const response = await fetch(`/api/live/${encodeURIComponent(slug)}/messages`, {
+      cache: "no-store",
+      credentials: "same-origin",
+    });
+    const payload = (await response.json()) as {
+      ok?: boolean;
+      sessionId?: string | null;
+      shared?: SharedLiveComment[];
+      message?: string;
+    };
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.message ?? "Viewer comments are temporarily unavailable.");
+    }
+
+    const currentState = roomStateRef.current;
+    const expectedSessionId = currentState?.state === "LIVE"
+      ? currentState.session?.id ?? null
+      : null;
+    if (!expectedSessionId || payload.sessionId !== expectedSessionId) {
+      setSharedComments([]);
+      return payload;
+    }
+
+    setSharedComments(Array.isArray(payload.shared) ? payload.shared : []);
+    return payload;
+  }, [slug]);
+
   const requestPlayback = useCallback(async () => {
     const response = await fetch(`/api/live/${encodeURIComponent(slug)}/playback`, {
       method: "POST",
@@ -311,6 +343,7 @@ export function LiveClassRoomMobileFirst({
     const refreshVisiblePlayback = () => {
       void fetchState().catch(() => undefined);
       void fetchChat().catch(() => undefined);
+      void fetchSharedChat().catch(() => undefined);
       if (roomStateRef.current?.state === "LIVE") {
         void requestPlayback().catch(() => setNeedsPlaybackGesture(true));
       }
@@ -329,7 +362,7 @@ export function LiveClassRoomMobileFirst({
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("pageshow", onPageShow);
     };
-  }, [fetchChat, fetchState, requestPlayback]);
+  }, [fetchChat, fetchSharedChat, fetchState, requestPlayback]);
 
   useEffect(() => {
     if (!roomState) return;
@@ -359,16 +392,21 @@ export function LiveClassRoomMobileFirst({
     const timer = window.setTimeout(() => {
       liveChatSessionRef.current = activeSessionId;
       seenStagedMessageIdsRef.current = new Set();
+      seenSharedMessageIdsRef.current = new Set();
       setStagedChat([]);
+      setSharedComments([]);
       setChatFeedLoaded(false);
       setLiveChatStream([]);
       setStreamSeeded(false);
       setIsFollowingLiveChat(true);
       setHasUnreadLiveChat(false);
-      if (activeSessionId) void fetchChat().catch(() => undefined);
+      if (activeSessionId) {
+        void fetchChat().catch(() => undefined);
+        void fetchSharedChat().catch(() => undefined);
+      }
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [activeSessionId, fetchChat]);
+  }, [activeSessionId, fetchChat, fetchSharedChat]);
 
   useEffect(() => {
     if (!activeSessionId) return;
@@ -378,6 +416,15 @@ export function LiveClassRoomMobileFirst({
     );
     return () => window.clearInterval(timer);
   }, [activeSessionId, fetchChat]);
+
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const timer = window.setInterval(
+      () => void fetchSharedChat().catch(() => undefined),
+      SHARED_CHAT_REFRESH_MS,
+    );
+    return () => window.clearInterval(timer);
+  }, [activeSessionId, fetchSharedChat]);
 
   useEffect(() => {
     if (roomState?.state !== "LIVE" || !roomSessionId) return;
@@ -492,6 +539,29 @@ export function LiveClassRoomMobileFirst({
     }, 0);
     return () => window.clearTimeout(timer);
   }, [displayName, ownComments, streamSeeded]);
+
+  useEffect(() => {
+    if (!streamSeeded || sharedComments.length === 0) return;
+    const ownIds = new Set(ownComments.map((item) => item.id));
+    const unseen = sharedComments.filter(
+      (item) => !ownIds.has(item.id) && !seenSharedMessageIdsRef.current.has(item.id),
+    );
+    if (unseen.length === 0) return;
+    unseen.forEach((item) => seenSharedMessageIdsRef.current.add(item.id));
+    const timer = window.setTimeout(() => {
+      setLiveChatStream((current) => {
+        const currentIds = new Set(current.map((item) => item.id));
+        const incoming = unseen
+          .map((item) => viewerStreamItem(item, item.displayName || "Viewer", false))
+          .filter((item) => !currentIds.has(item.id));
+        return incoming.length
+          ? [...current, ...incoming].slice(-LIVE_CHAT_MAX_RENDERED)
+          : current;
+      });
+      if (!isFollowingLiveChat) setHasUnreadLiveChat(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [isFollowingLiveChat, ownComments, sharedComments, streamSeeded]);
 
   const scrollChatToLive = useCallback((behavior: ScrollBehavior = "smooth") => {
     const node = chatScrollRef.current;
@@ -707,6 +777,7 @@ export function LiveClassRoomMobileFirst({
       const sentMessage = payload.message;
       const next = appendOwnLiveComment(ownComments, sentMessage);
       setOwnComments(next);
+      seenSharedMessageIdsRef.current.add(sentMessage.id);
       setLiveChatStream((current) => [
         ...current.filter((item) => item.id !== `viewer-${sentMessage.id}`),
         viewerStreamItem(sentMessage, displayName),
