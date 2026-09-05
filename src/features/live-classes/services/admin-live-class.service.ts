@@ -54,6 +54,7 @@ export interface AdminLiveClassRepository {
   createSession(batchId: string, input: Omit<AdminLiveSessionRecord, "id" | "batchId">): Promise<AdminLiveSessionRecord>;
   updateSession(sessionId: string, input: Omit<AdminLiveSessionRecord, "id" | "batchId" | "status">): Promise<void>;
   deleteSession(sessionId: string): Promise<void>;
+  findBatchById?(batchId: string): Promise<AdminLiveBatchRecord | null>;
   findSessionById?(sessionId: string): Promise<AdminLiveSessionRecord | null>;
   replaceTimelineMessages(sessionId: string, items: ImportedLiveChatItem[]): Promise<unknown>;
   getTimelineSummary(sessionId: string): Promise<LiveTimelineSummary>;
@@ -152,7 +153,14 @@ export class AdminLiveClassService {
   }
 
   async updateBatch(batchId: string, input: Parameters<typeof normalizeBatchInput>[0]): Promise<void> {
-    await this.repository.updateBatch(batchId, normalizeBatchInput(input));
+    const existing = input.attendeeChatVisibility === undefined
+      ? await this.repository.findBatchById?.(batchId)
+      : null;
+    await this.repository.updateBatch(batchId, normalizeBatchInput({
+      ...input,
+      attendeeChatVisibility:
+        input.attendeeChatVisibility ?? existing?.attendeeChatVisibility ?? "OWNER_ONLY",
+    }));
   }
 
   deleteBatch(batchId: string): Promise<void> { return this.repository.deleteBatch(batchId); }
