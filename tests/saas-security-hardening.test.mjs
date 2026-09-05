@@ -32,6 +32,17 @@ test('sensitive endpoints use the intended distributed rate limit binding', () =
   }
 });
 
+test('access claim keeps a local auth limiter before the distributed limiter', () => {
+  const source = read('src/app/api/access/claim/route.ts');
+  assert.match(source, /FixedWindowRateLimiter/);
+  assert.match(source, /new FixedWindowRateLimiter\(\{\s*limit:\s*10,\s*windowMs:\s*10 \* 60_000\s*\}\)/);
+  const localConsume = source.indexOf('limiter.consume(clientKey)');
+  const distributedConsume = source.indexOf('consumeDistributedRateLimit("AUTH_RATE_LIMITER", clientKey)');
+  assert.ok(localConsume >= 0, 'claim route must consume the local limiter');
+  assert.ok(distributedConsume >= 0, 'claim route must consume the distributed limiter');
+  assert.ok(localConsume < distributedConsume, 'local limiter must run before the distributed limiter');
+});
+
 test('free live state and playback remain outside the new distributed limiter', () => {
   const state = read('src/app/api/live/[slug]/state/route.ts');
   const playback = read('src/app/api/live/[slug]/playback/route.ts');
