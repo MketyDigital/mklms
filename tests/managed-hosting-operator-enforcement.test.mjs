@@ -23,6 +23,15 @@ test('existing managed-hosting accrual and usage calculation remains unchanged',
   }), 7.5);
 });
 
+test('operator can intentionally configure any non-negative monthly minimum while legacy default remains 15', () => {
+  const custom = hosting.normalizeManagedHostingPolicy({ enabled: true, minimumMonthlyFeeUsd: 3, maximumMonthlyFeeUsd: 20 });
+  assert.equal(custom.minimumMonthlyFeeUsd, 3);
+  assert.equal(custom.maximumMonthlyFeeUsd, 20);
+  const fallback = hosting.normalizeManagedHostingPolicy({ enabled: true, minimumMonthlyFeeUsd: Number.NaN, maximumMonthlyFeeUsd: Number.NaN });
+  assert.equal(fallback.minimumMonthlyFeeUsd, 15);
+  assert.equal(fallback.maximumMonthlyFeeUsd, 50);
+});
+
 test('billing standing supports due overdue restricted paid and waived states', () => {
   assert.equal(typeof hosting.resolveManagedHostingStanding, 'function');
   const resolve = hosting.resolveManagedHostingStanding;
