@@ -17,12 +17,14 @@ export interface ManagedHostingServiceAccess {
   warning?: string | null;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 function previousMonthStart(now: Date): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
 }
 
 function lastDayOfMonth(monthStart: Date): Date {
-  return new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 0, 12));
+  return new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 0, 23, 59, 59, 999));
 }
 
 export async function ensurePreviousManagedHostingInvoice(
@@ -46,20 +48,8 @@ export async function ensurePreviousManagedHostingInvoice(
     now: monthEnd,
   });
 
-  const nextMonthYear = monthStart.getUTCMonth() === 11
-    ? monthStart.getUTCFullYear() + 1
-    : monthStart.getUTCFullYear();
-  const nextMonth = (monthStart.getUTCMonth() + 1) % 12;
-  const dueAt = new Date(Date.UTC(
-    nextMonthYear,
-    nextMonth,
-    effective.dueDaysAfterMonthEnd,
-    23,
-    59,
-    59,
-    999,
-  ));
-  const graceEndsAt = new Date(dueAt.getTime() + effective.graceDays * 24 * 60 * 60 * 1000);
+  const dueAt = new Date(monthEnd.getTime() + effective.dueDaysAfterMonthEnd * DAY_MS);
+  const graceEndsAt = new Date(dueAt.getTime() + effective.graceDays * DAY_MS);
 
   return repository.finalizeMonthInvoice({
     monthKey,
