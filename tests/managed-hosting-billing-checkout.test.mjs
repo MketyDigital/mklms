@@ -20,5 +20,9 @@ test('hosting page prefers automatic checkout, preserves payment fallback, and e
   assert.match(panel, /ManagedHostingPayButton/);
   assert.match(panel, /policy\.paymentUrl/);
   assert.doesNotMatch(panel, /ManagedHostingMonthEditor/);
-  assert.match(panel, /paymentStatus === "PENDING"/);
+  assert.match(panel, /status === "PAID"/);
+  assert.match(panel, /status === "WAIVED"/);
+  assert.match(panel, /OVERDUE/);
+  assert.match(panel, /RESTRICTED/);
+  assert.doesNotMatch(panel, /Accrued minimum|Usage-derived amount/);
 });
