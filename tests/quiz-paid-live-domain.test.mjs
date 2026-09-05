@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { scoreQuizAttempt } from '../src/features/quizzes/services/quiz-scoring.service.ts';
 import { resolvePaidLiveState } from '../src/features/paid-live/services/paid-live-state.service.ts';
+import * as paidLiveDomain from '../src/features/paid-live/domain/model.ts';
 
 test('quiz scoring derives correctness only from the server quiz answer key', () => {
   const quiz = {
@@ -47,4 +48,16 @@ test('paid live state is time-window driven and separate from public webinar sta
   assert.equal(resolvePaidLiveState({ startsAt, endsAt, now: new Date('2026-09-05T17:59:59Z') }), 'UPCOMING');
   assert.equal(resolvePaidLiveState({ startsAt, endsAt, now: new Date('2026-09-05T18:00:00Z') }), 'LIVE');
   assert.equal(resolvePaidLiveState({ startsAt, endsAt, now: new Date('2026-09-05T20:00:00Z') }), 'ENDED');
+});
+
+test('paid Zoom live accepts only HTTPS zoom.us hosts', () => {
+  assert.equal(typeof paidLiveDomain.isAllowedZoomUrl, 'function');
+  const isAllowedZoomUrl = paidLiveDomain.isAllowedZoomUrl;
+
+  assert.equal(isAllowedZoomUrl('https://zoom.us/j/123456789'), true);
+  assert.equal(isAllowedZoomUrl('https://us06web.zoom.us/j/123456789?pwd=abc'), true);
+  assert.equal(isAllowedZoomUrl('http://zoom.us/j/123456789'), false);
+  assert.equal(isAllowedZoomUrl('https://example.com/zoom.us/j/123'), false);
+  assert.equal(isAllowedZoomUrl('https://zoom.us.evil.example/j/123'), false);
+  assert.equal(isAllowedZoomUrl('not a url'), false);
 });
