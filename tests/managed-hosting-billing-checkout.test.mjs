@@ -14,11 +14,11 @@ test('managed-hosting checkout derives amount from server usage and existing pol
   assert.doesNotMatch(checkout, /request\.json/);
 });
 
-test('hosting page prefers automatic checkout but preserves manual payment URL fallback and manual editor', () => {
+test('hosting page prefers automatic checkout, preserves payment fallback, and exposes no operator editor to tenant admin', () => {
   assert.match(page, /isManagedHostingBillingAutomationConfigured/);
   assert.match(page, /billingAutomationEnabled=\{billingAutomationEnabled\}/);
   assert.match(panel, /ManagedHostingPayButton/);
   assert.match(panel, /policy\.paymentUrl/);
-  assert.match(panel, /ManagedHostingMonthEditor/);
+  assert.doesNotMatch(panel, /ManagedHostingMonthEditor/);
   assert.match(panel, /paymentStatus === "PENDING"/);
 });
