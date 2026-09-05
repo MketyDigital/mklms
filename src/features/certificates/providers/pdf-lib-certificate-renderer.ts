@@ -1,6 +1,7 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 import type { StorageProvider } from "@/providers/storage-provider";
+import { REAL_CERTIFICATE_DEFAULT_LAYOUT } from "./default-certificate-layout";
 import type {
   CertificateRenderer,
   CertificateTemplateDefinition,
@@ -88,14 +89,14 @@ export class PdfLibCertificateRenderer implements CertificateRenderer {
     const { width, height } = page.getSize();
     const config = template.layoutConfig;
 
-    const nameFontSize = numberSetting(config, "nameFontSize", 28);
-    const dateFontSize = numberSetting(config, "dateFontSize", 11);
-    const idFontSize = numberSetting(config, "idFontSize", 9);
+    const nameFontSize = numberSetting(config, "nameFontSize", REAL_CERTIFICATE_DEFAULT_LAYOUT.nameFontSize);
+    const dateFontSize = numberSetting(config, "dateFontSize", REAL_CERTIFICATE_DEFAULT_LAYOUT.dateFontSize);
+    const idFontSize = numberSetting(config, "idFontSize", REAL_CERTIFICATE_DEFAULT_LAYOUT.idFontSize);
 
     const name = certificate.certificateNameSnapshot;
     const nameWidth = boldFont.widthOfTextAtSize(name, nameFontSize);
     const nameX = numberSetting(config, "nameX", centeredX(nameWidth, width));
-    const nameY = numberSetting(config, "nameY", height * 0.46);
+    const nameY = numberSetting(config, "nameY", height * REAL_CERTIFICATE_DEFAULT_LAYOUT.nameYRatio);
 
     page.drawText(name, {
       x: nameX,
@@ -105,18 +106,17 @@ export class PdfLibCertificateRenderer implements CertificateRenderer {
       color: rgb(0.08, 0.08, 0.08),
     });
 
-    const completionText = certificate.completionDate;
-    page.drawText(completionText, {
-      x: numberSetting(config, "dateX", width * 0.67),
-      y: numberSetting(config, "dateY", height * 0.18),
+    page.drawText(certificate.completionDate, {
+      x: numberSetting(config, "dateX", width * REAL_CERTIFICATE_DEFAULT_LAYOUT.dateXRatio),
+      y: numberSetting(config, "dateY", height * REAL_CERTIFICATE_DEFAULT_LAYOUT.dateYRatio),
       size: dateFontSize,
       font: regularFont,
       color: rgb(0.18, 0.18, 0.18),
     });
 
     page.drawText(certificate.certificateId, {
-      x: numberSetting(config, "idX", width * 0.08),
-      y: numberSetting(config, "idY", height * 0.08),
+      x: numberSetting(config, "idX", width * REAL_CERTIFICATE_DEFAULT_LAYOUT.idXRatio),
+      y: numberSetting(config, "idY", height * REAL_CERTIFICATE_DEFAULT_LAYOUT.idYRatio),
       size: idFontSize,
       font: regularFont,
       color: rgb(0.25, 0.25, 0.25),
