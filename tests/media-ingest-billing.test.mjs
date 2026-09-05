@@ -54,7 +54,7 @@ test("media ingest state machine allows one-way safe publishing flow", () => {
   assert.throws(() => nextMediaIngestState("DRAFT", "READY"));
 });
 
-test("managed hosting keeps a 15 USD month-end minimum while usage can scale higher", () => {
+test("managed hosting keeps its calculation while allowing an operator-defined minimum", () => {
   const policy = normalizeManagedHostingPolicy({
     enabled: true,
     minimumMonthlyFeeUsd: 3,
@@ -62,9 +62,17 @@ test("managed hosting keeps a 15 USD month-end minimum while usage can scale hig
     paymentUrl: "https://example.com/pay",
     notice: "Monthly managed service.",
   });
-  assert.equal(policy.minimumMonthlyFeeUsd, 15);
+  assert.equal(policy.minimumMonthlyFeeUsd, 3);
   assert.equal(calculateManagedHostingFee({ watchMinutes: 5000, policy }), 0);
   assert.equal(calculateManagedHostingFee({ watchMinutes: 200000, policy }), 50);
+
+  const fallback = normalizeManagedHostingPolicy({
+    enabled: true,
+    minimumMonthlyFeeUsd: Number.NaN,
+    maximumMonthlyFeeUsd: Number.NaN,
+  });
+  assert.equal(fallback.minimumMonthlyFeeUsd, 15);
+  assert.equal(fallback.maximumMonthlyFeeUsd, 50);
 });
 
 test("billing month key rolls automatically on the first day of a new UTC month", () => {
