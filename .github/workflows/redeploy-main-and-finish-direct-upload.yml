@@ -1,4 +1,4 @@
-name: Verify MkLMS exact preview diagnostic route
+name: Probe exact MkLMS limiter binding state
 
 on:
   push:
@@ -15,24 +15,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Assert exact commit preview diagnostic response
+      - name: Call exact commit preview binding probe
         shell: bash
         run: |
           set -euo pipefail
-          url='https://69890a6d-mklms.dry-glitter-7e16.workers.dev/api/_diagnostics/rate-limit'
-          headers=$(mktemp)
-          body=$(mktemp)
-          code=$(curl -sS -D "$headers" -o "$body" -w '%{http_code}' "$url")
-          content_type=$(awk 'BEGIN{IGNORECASE=1} /^content-type:/ {sub(/^content-type:[[:space:]]*/, ""); gsub("\r", ""); print}' "$headers" | tail -1)
-          echo "STATUS=$code"
-          echo "CONTENT_TYPE=$content_type"
-          echo -n "BODY_PREFIX="
-          head -c 500 "$body" | tr '\n' ' '
-          echo
-          if [ "$code" != "200" ]; then
-            echo "DIAGNOSTIC_ROUTE_NOT_AVAILABLE"
-            exit 2
-          fi
-          jq -e '.contextAvailable != null' "$body" >/dev/null
-          echo "DIAGNOSTIC_JSON=$(jq -c . "$body")"
-          echo "EXACT_PREVIEW_DIAGNOSTIC_VERIFIED"
+          url='https://c436c8e4-mklms.dry-glitter-7e16.workers.dev/api/debug-rate-limit-probe'
+          echo "=== EXACT PREVIEW DIRECT BINDING PROBE ==="
+          saw_false=0
+          for i in $(seq 1 15); do
+            body=$(mktemp)
+            code=$(curl -sS -o "$body" -w '%{http_code}' "$url")
+            printf 'probe=%02d status=%s response=' "$i" "$code"
+            head -c 500 "$body" | tr '\n' ' '
+            echo
+            test "$code" = "200"
+            jq -e '.contextAvailable != null' "$body" >/dev/null
+            if [ "$(jq -r '.success // empty' "$body")" = "false" ]; then saw_false=1; fi
+            rm -f "$body"
+          done
+          echo "SAW_SUCCESS_FALSE=$saw_false"
+          echo "EXACT_PREVIEW_BINDING_PROBE_COMPLETE"
