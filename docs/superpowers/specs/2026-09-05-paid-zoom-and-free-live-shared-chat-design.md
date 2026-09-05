@@ -101,7 +101,7 @@ A new migration `014_paid_zoom_and_free_live_chat_visibility.sql` will:
 
 - add `delivery_mode` to `paid_course_live_sessions`, default `MEDIA`, constrained to `MEDIA|ZOOM`;
 - add nullable `zoom_url` to `paid_course_live_sessions`;
-- add `attendee_chat_visibility` to `live_classes`, default `OWNER_ONLY`, constrained to `OWNER_ONLY|PUBLIC`.
+- add `attendee_chat_visibility` to `live_batches`, default `OWNER_ONLY`, constrained to `OWNER_ONLY|PUBLIC`.
 
 Existing rows therefore retain current behavior automatically.
 
