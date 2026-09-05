@@ -60,6 +60,7 @@ test("hosting page explains migration setup instead of hard-crashing", async () 
     new URL("../src/app/(admin)/admin/hosting/page.tsx", import.meta.url),
     "utf8",
   );
-  assert.match(source, /schemaMigrationHint/);
-  assert.match(source, /Run MkLMS DB migrations/);
+  assert.match(source, /setupError/);
+  assert.match(source, /MkLMS DB migrations GitHub Action/);
+  assert.match(source, /Hosting setup is not complete/);
 });
