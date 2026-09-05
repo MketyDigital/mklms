@@ -17,6 +17,34 @@ export interface ManagedHostingMonthOverride {
   minimumFloorUsd: number;
   operatorNote?: string | null;
   paymentStatus: "PENDING" | "PAID" | "WAIVED";
+  amountDueUsd?: number | null;
+  dueAt?: Date | null;
+  graceEndsAt?: Date | null;
+}
+
+export type ManagedHostingStandingStatus =
+  | "DUE"
+  | "OVERDUE"
+  | "RESTRICTED"
+  | "PAID"
+  | "WAIVED";
+
+export function resolveManagedHostingStanding(input: {
+  paymentStatus: "PENDING" | "PAID" | "WAIVED";
+  dueAt: Date;
+  graceEndsAt: Date;
+  enforcementEnabled: boolean;
+  now?: Date;
+}): { status: ManagedHostingStandingStatus; restricted: boolean } {
+  if (input.paymentStatus === "PAID") return { status: "PAID", restricted: false };
+  if (input.paymentStatus === "WAIVED") return { status: "WAIVED", restricted: false };
+
+  const now = input.now ?? new Date();
+  if (now <= input.dueAt) return { status: "DUE", restricted: false };
+  if (now <= input.graceEndsAt || !input.enforcementEnabled) {
+    return { status: "OVERDUE", restricted: false };
+  }
+  return { status: "RESTRICTED", restricted: true };
 }
 
 function roundUsd(value: number): number {
