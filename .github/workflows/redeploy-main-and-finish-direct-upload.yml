@@ -1,4 +1,4 @@
-name: Diagnose MkLMS production DNS
+name: Diagnose MkLMS public hostname
 
 on:
   push:
@@ -13,39 +13,26 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      EXPECTED_HOST: learn.starpipsforex.com
+    timeout-minutes: 8
     steps:
-      - name: Read-only DNS and TLS diagnostic
+      - name: Public DNS and HTTPS diagnostic only
         shell: bash
         run: |
-          set -euo pipefail
-          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
-          echo "=== ZONES ==="
-          curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones?account.id=$CLOUDFLARE_ACCOUNT_ID&per_page=100" > /tmp/zones.json
-          jq -r '.result[] | [.id,.name,.status] | @tsv' /tmp/zones.json
-
-          echo "=== DNS RECORDS MATCHING HOST ==="
-          found=0
-          jq -r '.result[] | [.id,.name] | @tsv' /tmp/zones.json | while IFS=$'\t' read -r zid zname; do
-            records=$(curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zid/dns_records?name=$EXPECTED_HOST&per_page=100")
-            count=$(printf '%s' "$records" | jq '.result | length')
-            if [ "$count" -gt 0 ]; then
-              echo "ZONE=$zname ID=$zid"
-              printf '%s' "$records" | jq -c '.result[] | {id,type,name,content,proxied,ttl}'
-            fi
-          done
-
-          echo "=== CERTIFICATES COVERING HOST ==="
-          jq -r '.result[] | [.id,.name] | @tsv' /tmp/zones.json | while IFS=$'\t' read -r zid zname; do
-            certs=$(curl -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zid/ssl/certificate_packs?status=all" || true)
-            matches=$(printf '%s' "$certs" | jq -c --arg host "$EXPECTED_HOST" '[.result[]? | select([.hosts[]?] | index($host)) | {id,status,type,hosts}]' 2>/dev/null || echo '[]')
-            if [ "$matches" != "[]" ]; then
-              echo "ZONE=$zname CERTS=$matches"
-            fi
-          done
-
-          echo "READ_ONLY_DNS_DIAGNOSTIC_COMPLETE"
+          set -u
+          host=learn.starpipsforex.com
+          worker=mklms.dry-glitter-7e16.workers.dev
+          echo "=== PUBLIC DNS VIA 1.1.1.1 ==="
+          dig +short @1.1.1.1 "$host" A || true
+          dig +short @1.1.1.1 "$host" AAAA || true
+          dig +short @1.1.1.1 "$host" CNAME || true
+          echo "=== PUBLIC DNS VIA 8.8.8.8 ==="
+          dig +short @8.8.8.8 "$host" A || true
+          dig +short @8.8.8.8 "$host" AAAA || true
+          dig +short @8.8.8.8 "$host" CNAME || true
+          echo "=== AUTHORITY ==="
+          dig +short NS starpipsforex.com || true
+          echo "=== HTTPS CUSTOM HOST ==="
+          curl -sSIL --connect-timeout 8 --max-time 15 "https://$host/" | head -30 || true
+          echo "=== HTTPS WORKERS.DEV ==="
+          curl -sSIL --connect-timeout 8 --max-time 15 "https://$worker/" | head -30 || true
+          echo "PUBLIC_HOSTNAME_DIAGNOSTIC_COMPLETE"
