@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Safely verify deployed claim limiter and public routes
+      - name: Safely verify sustained deployed claim limiter and public routes
         shell: bash
         run: |
           set -euo pipefail
@@ -27,21 +27,24 @@ jobs:
           test "$probe_code" = "403"
           grep -q 'STARPIPSFOREX' /tmp/root.html
 
-          echo "=== CLAIM LIMITER SMOKE TEST ==="
+          echo "=== SUSTAINED CLAIM LIMITER SMOKE TEST ==="
           seen_400=0
           seen_429=0
-          for i in $(seq 1 12); do
-            code=$(curl -sS -o "/tmp/claim-$i.json" -w '%{http_code}' \
+          for i in $(seq 1 30); do
+            code=$(curl -sS -D "/tmp/claim-$i.headers" -o "/tmp/claim-$i.json" -w '%{http_code}' \
               --connect-timeout 8 --max-time 15 \
               -H 'Content-Type: application/json' \
               --data '{}' \
               "https://$host/api/access/claim")
-            echo "CLAIM_REQUEST_$i=$code"
+            ray=$(grep -i '^cf-ray:' "/tmp/claim-$i.headers" | tr -d '\r' | awk '{print $2}' || true)
+            echo "CLAIM_REQUEST_$i=$code RAY=$ray"
             if [ "$code" = "400" ]; then seen_400=1; fi
             if [ "$code" = "429" ]; then
               seen_429=1
               grep -qi 'too many' "/tmp/claim-$i.json"
+              break
             fi
+            sleep 1
           done
 
           test "$seen_400" = "1"
