@@ -32,7 +32,11 @@ export type VideoProgressResult =
   | { ok: false; reason: "ENROLLMENT_INACTIVE" | "COURSE_NOT_FOUND" | "LESSON_LOCKED" | "VIDEO_PROGRESS_NOT_ALLOWED" | "VIDEO_PROGRESS_PERSISTENCE_UNAVAILABLE" };
 
 export class LearningProgressService {
-  constructor(private readonly repository: LearningProgressRepository) {}
+  private readonly repository: LearningProgressRepository;
+
+  constructor(repository: LearningProgressRepository) {
+    this.repository = repository;
+  }
 
   private async quizzesPassed(studentId: string, courseId: string): Promise<boolean> {
     return this.repository.allRequiredQuizzesPassed
