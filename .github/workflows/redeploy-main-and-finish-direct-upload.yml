@@ -1,4 +1,4 @@
-name: Probe MkLMS preview rate limit binding directly
+name: Verify MkLMS exact preview diagnostic route
 
 on:
   push:
@@ -15,16 +15,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Call isolated diagnostic endpoint repeatedly
+      - name: Assert exact commit preview diagnostic response
         shell: bash
         run: |
           set -euo pipefail
-          url='https://fix-rate-limit-runtime-diagnostics-2026-09-05-mklms.dry-glitter-7e16.workers.dev/api/_diagnostics/rate-limit'
-
-          echo "=== DIRECT RATE LIMIT BINDING PROBE ==="
-          for i in $(seq 1 15); do
-            printf 'probe=%02d response=' "$i"
-            curl -sS "$url"
-            echo
-          done
-          echo "DIRECT_RATE_LIMIT_BINDING_PROBE_COMPLETE"
+          url='https://69890a6d-mklms.dry-glitter-7e16.workers.dev/api/_diagnostics/rate-limit'
+          headers=$(mktemp)
+          body=$(mktemp)
+          code=$(curl -sS -D "$headers" -o "$body" -w '%{http_code}' "$url")
+          content_type=$(awk 'BEGIN{IGNORECASE=1} /^content-type:/ {sub(/^content-type:[[:space:]]*/, ""); gsub("\r", ""); print}' "$headers" | tail -1)
+          echo "STATUS=$code"
+          echo "CONTENT_TYPE=$content_type"
+          echo -n "BODY_PREFIX="
+          head -c 500 "$body" | tr '\n' ' '
+          echo
+          if [ "$code" != "200" ]; then
+            echo "DIAGNOSTIC_ROUTE_NOT_AVAILABLE"
+            exit 2
+          fi
+          jq -e '.contextAvailable != null' "$body" >/dev/null
+          echo "DIAGNOSTIC_JSON=$(jq -c . "$body")"
+          echo "EXACT_PREVIEW_DIAGNOSTIC_VERIFIED"
