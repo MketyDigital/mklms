@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getCurrentStudentSession } from "@/features/access/server/current-student";
+import { getManagedHostingServiceAccess } from "@/features/hosting/server/managed-hosting-access";
 import { PostgresPaidLiveRepository } from "@/features/paid-live/repositories/postgres-paid-live.repository";
 import { resolvePaidLiveState } from "@/features/paid-live/services/paid-live-state.service";
 import { getConfiguredMediaProvider } from "@/providers/signed-delivery-media-provider";
@@ -14,6 +15,18 @@ export async function POST(
   const studentSession = await getCurrentStudentSession();
   if (!studentSession) {
     return NextResponse.json({ ok: false, message: "Authentication required." }, { status: 401 });
+  }
+
+  const hostingAccess = await getManagedHostingServiceAccess();
+  if (!hostingAccess.allowed) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "HOSTING_PAYMENT_REQUIRED",
+        message: "Hosted paid-live video is temporarily unavailable because the site owner's managed hosting payment is overdue.",
+      },
+      { status: 402, headers: { "Cache-Control": "private, no-store" } },
+    );
   }
 
   const { courseId, sessionId } = await params;
