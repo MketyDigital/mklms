@@ -119,8 +119,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npx opennextjs-cloudflare deploy
-          echo "Exact merged/tested main tree redeployed to mklms."
+          npx wrangler deploy --config wrangler.jsonc
+          echo "Exact merged/tested main tree redeployed to mklms through Wrangler."
 
       - name: Confirm newest mklms version is now actively deployed at 100 percent
         shell: bash
