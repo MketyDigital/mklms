@@ -1,4 +1,4 @@
-name: Probe exact MkLMS limiter binding state
+name: Probe deployed MkLMS branch limiter binding state
 
 on:
   push:
@@ -15,12 +15,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Call exact commit preview binding probe
+      - name: Call deployed branch preview binding probe
         shell: bash
         run: |
           set -euo pipefail
-          url='https://c436c8e4-mklms.dry-glitter-7e16.workers.dev/api/debug-rate-limit-probe'
-          echo "=== EXACT PREVIEW DIRECT BINDING PROBE ==="
+          url='https://fix-rate-limit-runtime-diagnostics-2026-09-05-mklms.dry-glitter-7e16.workers.dev/api/debug-rate-limit-probe'
+          echo "=== BRANCH PREVIEW DIRECT BINDING PROBE ==="
           saw_false=0
           for i in $(seq 1 15); do
             body=$(mktemp)
@@ -34,4 +34,4 @@ jobs:
             rm -f "$body"
           done
           echo "SAW_SUCCESS_FALSE=$saw_false"
-          echo "EXACT_PREVIEW_BINDING_PROBE_COMPLETE"
+          echo "BRANCH_PREVIEW_BINDING_PROBE_COMPLETE"
