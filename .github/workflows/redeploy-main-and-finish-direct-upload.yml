@@ -1,4 +1,4 @@
-name: Inspect exact MkLMS preview ratelimit metadata
+name: Verify MkLMS production auth rate limiter
 
 on:
   push:
@@ -14,32 +14,32 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 8
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - name: Read preview version resources from Cloudflare audit
+      - name: Probe production workers.dev claim limiter with invalid code
         shell: bash
         run: |
           set -euo pipefail
-          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
-
-          curl -fsS "${auth[@]}" \
-            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/logs/audit?since=2026-09-05T19:48:00Z&before=2026-09-05T19:51:30Z&limit=200" \
-            > /tmp/audit.json
-          jq -e '.success == true' /tmp/audit.json >/dev/null
-
-          echo "=== MKLMS VERSION UPLOADS 19:48-19:51 UTC ==="
-          jq -c '.result[]? | select((.raw.uri // "") | contains("/workers/scripts/mklms/versions")) | {
-            time:.action.time,
-            version_id:.resource.response.id,
-            number:.resource.response.number,
-            source:.resource.response.metadata.source,
-            rate_limits:[.resource.response.resources.bindings[]? | select(.namespace_id != null and .simple != null) | {name,namespace_id,simple}]
-          }' /tmp/audit.json
-
-          echo "=== PREVIEW AUTH RATE LIMIT ASSERTION ==="
-          matching=$(jq -c '[.result[]? | select((.raw.uri // "") | contains("/workers/scripts/mklms/versions")) | select(.action.time >= "2026-09-05T19:49:30Z" and .action.time <= "2026-09-05T19:51:10Z") | {time:.action.time,id:.resource.response.id,bindings:[.resource.response.resources.bindings[]? | select(.name == "AUTH_RATE_LIMITER") | {name,namespace_id,simple}]}]' /tmp/audit.json)
-          echo "$matching"
-          jq -e 'any(.[]; any(.bindings[]?; .name == "AUTH_RATE_LIMITER" and .namespace_id == "51090501" and .simple.limit == 10 and .simple.period == 60))' <<< "$matching" >/dev/null
-          echo "PREVIEW_AUTH_RATE_LIMIT_METADATA_VERIFIED"
+          url='https://mklms.dry-glitter-7e16.workers.dev/api/access/claim'
+          body='{"email":"ratelimit-production-probe@example.invalid","certificateName":"Rate Limit Probe","claimCode":"INVALID-PROBE-CODE"}'
+          saw_429=0
+          first_429=0
+          echo "=== PRODUCTION WORKERS.DEV CLAIM RATE LIMIT PROBE ==="
+          for i in $(seq 1 40); do
+            headers=$(mktemp)
+            response=$(mktemp)
+            code=$(curl -sS -D "$headers" -o "$response" -w '%{http_code}' -X POST "$url" -H 'content-type: application/json' --data "$body")
+            ray=$(awk 'BEGIN{IGNORECASE=1} /^cf-ray:/ {gsub("\r", ""); print $2}' "$headers" | tail -1)
+            retry=$(awk 'BEGIN{IGNORECASE=1} /^retry-after:/ {gsub("\r", ""); print $2}' "$headers" | tail -1)
+            remaining=$(awk 'BEGIN{IGNORECASE=1} /^x-ratelimit-remaining:/ {gsub("\r", ""); print $2}' "$headers" | tail -1)
+            printf 'request=%02d status=%s retry_after=%s remaining=%s ray=%s\n' "$i" "$code" "${retry:-}" "${remaining:-}" "${ray:-none}"
+            if [ "$code" = "429" ] && [ "$saw_429" = "0" ]; then
+              saw_429=1
+              first_429=$i
+            fi
+            rm -f "$headers" "$response"
+            sleep 0.5
+          done
+          echo "SAW_429=$saw_429"
+          echo "FIRST_429_AT=$first_429"
+          test "$saw_429" = "1"
+          echo "PRODUCTION_AUTH_RATE_LIMIT_VERIFIED"
