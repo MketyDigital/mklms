@@ -1,4 +1,4 @@
-name: Diagnose MkLMS SaaS custom hostname
+name: Diagnose MkLMS Cloudflare challenge source
 
 on:
   push:
@@ -13,12 +13,12 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - name: Read-only SaaS custom-hostname diagnostic
+      - name: Read-only challenge source diagnostic
         shell: bash
         run: |
           set -euo pipefail
@@ -28,12 +28,44 @@ jobs:
           zones=$(curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones?account.id=$CLOUDFLARE_ACCOUNT_ID&name=$zone_name")
           zone_id=$(printf '%s' "$zones" | jq -r '.result[0].id // empty')
           test -n "$zone_id"
-          echo "ZONE=$zone_name"
-          echo "=== CUSTOM HOSTNAME RECORD ==="
-          curl -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/custom_hostnames?hostname=$host&per_page=50" > /tmp/custom-hostnames.json
-          jq -c '.result[]? | {id,hostname,status,ssl,custom_origin_server,custom_origin_sni,created_at}' /tmp/custom-hostnames.json || true
-          echo "=== FALLBACK ORIGIN ==="
-          curl -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/custom_hostnames/fallback_origin" | jq -c '.' || true
-          echo "=== CUSTOM HOSTNAME ERRORS ==="
-          jq -c '{success,errors,messages,result_info}' /tmp/custom-hostnames.json || true
-          echo "SAAS_CUSTOM_HOSTNAME_DIAGNOSTIC_COMPLETE"
+          echo "ZONE=$zone_name ID=$zone_id"
+
+          echo "=== ZONE SETTINGS OF INTEREST ==="
+          for setting in security_level browser_check challenge_ttl bot_fight_mode always_use_https ssl; do
+            curl -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/settings/$setting" | jq -c '{success,result:{id:.result.id,value:.result.value,editable:.result.editable},errors}' || true
+          done
+
+          echo "=== ZONE ENTRYPOINT RULESETS ==="
+          curl -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/rulesets" > /tmp/zone-rulesets.json
+          jq -c '.result[]? | {id,name,kind,phase,version,last_updated}' /tmp/zone-rulesets.json || true
+
+          echo "=== ZONE RULES THAT CAN BLOCK/CHALLENGE ==="
+          jq -r '.result[]? | [.id,.phase,.name] | @tsv' /tmp/zone-rulesets.json | while IFS=$'\t' read -r rid phase rname; do
+            case "$phase" in
+              http_request_firewall_custom|http_request_firewall_managed|http_ratelimit|http_request_sbfm|http_request_transform|http_request_origin|http_request_dynamic_redirect) ;;
+              *) continue ;;
+            esac
+            detail=$(curl -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/rulesets/$rid")
+            echo "RULESET=$rname PHASE=$phase ID=$rid"
+            printf '%s' "$detail" | jq -c '.result.rules[]? | select((.action|ascii_downcase|test("challenge|block|managed_challenge|js_challenge|skip")) or ((.expression // "") | contains("learn.starpipsforex.com")) or ((.expression // "") | contains("customers.mkety.com"))) | {id,version,action,enabled,description,expression,action_parameters}' || true
+          done
+
+          echo "=== LEGACY FIREWALL RULES ==="
+          curl -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/firewall/rules?per_page=100" | jq -c '.result[]? | select((.action|ascii_downcase|test("challenge|block|managed_challenge|js_challenge")) or ((.description // "") | contains("learn"))) | {id,action,priority,paused,description,filter}' || true
+
+          echo "=== ACCOUNT RULESETS OF INTEREST ==="
+          curl -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/rulesets" > /tmp/account-rulesets.json || true
+          jq -c '.result[]? | {id,name,kind,phase,version,last_updated}' /tmp/account-rulesets.json 2>/dev/null || true
+          jq -r '.result[]? | [.id,.phase,.name] | @tsv' /tmp/account-rulesets.json 2>/dev/null | while IFS=$'\t' read -r rid phase rname; do
+            case "$phase" in
+              http_request_firewall_custom|http_request_firewall_managed|http_ratelimit) ;;
+              *) continue ;;
+            esac
+            detail=$(curl -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/rulesets/$rid")
+            echo "ACCOUNT_RULESET=$rname PHASE=$phase ID=$rid"
+            printf '%s' "$detail" | jq -c '.result.rules[]? | select((.action|ascii_downcase|test("challenge|block|managed_challenge|js_challenge|skip")) or ((.expression // "") | contains("learn.starpipsforex.com")) or ((.expression // "") | contains("customers.mkety.com"))) | {id,version,action,enabled,description,expression,action_parameters}' || true
+          done
+
+          echo "=== HOST RESPONSE FINGERPRINT ==="
+          curl -sSI --connect-timeout 8 --max-time 15 "https://$host/" | grep -Ei '^(HTTP/|cf-|server:|location:|set-cookie:)' || true
+          echo "READ_ONLY_CHALLENGE_DIAGNOSTIC_COMPLETE"
