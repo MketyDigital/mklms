@@ -25,7 +25,7 @@ jobs:
           host=learn.starpipsforex.com
           : > /tmp/tail.log
 
-          timeout 40s npx --yes wrangler@4.127.1 tail mklms --format=json --sampling-rate=1 > /tmp/tail.log 2>&1 &
+          timeout 40s npx --yes wrangler@4.127.1 tail mklms --format=json --sampling-rate=0.99 > /tmp/tail.log 2>&1 &
           tail_pid=$!
           sleep 8
 
