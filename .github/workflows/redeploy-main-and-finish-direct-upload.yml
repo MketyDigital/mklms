@@ -1,4 +1,4 @@
-name: Inspect MkLMS deployed rate limit bindings
+name: Inspect MkLMS deployment binding overwrite
 
 on:
   push:
@@ -18,22 +18,30 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - name: Read live Worker rate-limit binding configuration
+      - name: Read deployment timeline and all live binding types
         shell: bash
         run: |
           set -euo pipefail
           auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
           script=mklms
 
+          echo "=== DEPLOYMENTS ==="
+          curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$script/deployments" > /tmp/deployments.json
+          jq -e '.success == true' /tmp/deployments.json >/dev/null
+          jq -c '.result.deployments // .result // [] | .[0:12] | .[]? | {id,created_on,source,annotations,versions}' /tmp/deployments.json
+
+          echo "=== CURRENT SCRIPT SETTINGS ==="
           curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$script/settings" > /tmp/settings.json
           jq -e '.success == true' /tmp/settings.json >/dev/null
+          jq -c '{compatibility_date:.result.compatibility_date,compatibility_flags:.result.compatibility_flags,binding_count:(.result.bindings|length),bindings:[.result.bindings[]? | {name,type,namespace_id,simple,bucket_name}]}' /tmp/settings.json
 
-          echo "=== LIVE RATE LIMIT BINDINGS ==="
-          jq -c '.result.bindings[]? | select(.type == "ratelimit") | {name,type,namespace_id,simple}' /tmp/settings.json
-          count=$(jq '[.result.bindings[]? | select(.type == "ratelimit")] | length' /tmp/settings.json)
-          echo "RATE_LIMIT_BINDING_COUNT=$count"
-          test "$count" = "5"
+          echo "=== BINDING TYPE COUNTS ==="
+          jq -r '.result.bindings[]?.type' /tmp/settings.json | sort | uniq -c
 
-          echo "=== FULL AUTH BINDING ==="
-          jq -c '.result.bindings[]? | select(.name == "AUTH_RATE_LIMITER")' /tmp/settings.json
-          echo "LIVE_RATE_LIMIT_BINDING_INSPECTION_COMPLETE"
+          echo "=== EXPECTED RATE LIMIT NAMES ==="
+          for name in AUTH_RATE_LIMITER ADMIN_RATE_LIMITER STUDENT_MUTATION_RATE_LIMITER PLAYBACK_RATE_LIMITER CERT_RATE_LIMITER; do
+            echo -n "$name="
+            jq -c --arg n "$name" '.result.bindings[]? | select(.name == $n)' /tmp/settings.json || true
+          done
+
+          echo "DEPLOYMENT_BINDING_OVERWRITE_INSPECTION_COMPLETE"
