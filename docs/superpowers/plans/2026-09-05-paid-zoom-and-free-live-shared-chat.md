@@ -51,7 +51,7 @@ Expected: only the newly added requirements fail; existing tests stay green.
 - Create: `db/migrations/014_paid_zoom_and_free_live_chat_visibility.sql`
 
 **Interfaces:**
-- Produces columns `paid_course_live_sessions.delivery_mode`, `paid_course_live_sessions.zoom_url`, `live_classes.attendee_chat_visibility`.
+- Produces columns `paid_course_live_sessions.delivery_mode`, `paid_course_live_sessions.zoom_url`, `live_batches.attendee_chat_visibility`.
 
 - [ ] **Step 1: Add migration 014**
 
@@ -144,10 +144,10 @@ UPCOMING shows schedule; LIVE ZOOM shows a button that fetches the join endpoint
 ### Task 6: Free-live optional shared real attendee comments
 
 **Files:**
-- Modify: free-live batch domain/model type where `live_classes` fields are represented.
+- Modify: free-live batch runtime/admin record types representing `live_batches`.
 - Modify: `src/features/live-classes/repositories/postgres-live-class.repository.ts`
 - Modify: `src/features/live-classes/services/live-room.service.ts`
-- Modify: `src/app/api/live/[slug]/chat/route.ts` only if necessary for dynamic shared attendee delivery.
+- Modify: the existing viewer-specific public chat endpoint that already returns staged + own attendee messages; leave the cacheable staged-timeline endpoint alone.
 - Modify: relevant free-live admin create/update route(s).
 - Modify: relevant free-live admin editor component.
 
@@ -164,9 +164,9 @@ Existing rows map to OWNER_ONLY through migration/default.
 
 When OWNER_ONLY, execute the same repository calls/output behavior as current production. When PUBLIC, fetch same-session attendee messages and filter out own IDs.
 
-- [ ] **Step 3: Wire public chat API without touching playback/state**
+- [ ] **Step 3: Wire the existing viewer-specific chat response without touching playback/state or the staged-timeline cache endpoint**
 
-Use the active session and batch visibility setting. Do not change `/playback` or `/state` routes.
+Use the active session and batch visibility setting. Do not change `/playback` or `/state` routes and do not repurpose the public-cacheable staged timeline endpoint.
 
 - [ ] **Step 4: Add one admin control**
 
