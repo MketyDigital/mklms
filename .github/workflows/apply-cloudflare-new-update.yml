@@ -1,0 +1,229 @@
+name: Apply MkLMS Cloudflare update setup
+
+on:
+  push:
+    branches:
+      - ops/cloudflare-new-update-setup-2026-09-05
+    paths:
+      - .github/workflows/apply-cloudflare-new-update.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mklms-cloudflare-production-setup
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.MKLMS_R2_DIRECT_UPLOAD_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.MKLMS_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY }}
+      EXPECTED_MAIN_WORKER: mklms
+      EXPECTED_MEDIA_WORKER: mklms-media-delivery
+      EXPECTED_BILLING_WORKER: mkety-managed-hosting-billing
+      EXPECTED_BUCKET: spf-media
+      EXPECTED_ZONE: mkety.com
+      EXPECTED_ROUTE: learn.starpipsforex.com/*
+      LMS_ORIGIN: https://learn.starpipsforex.com
+    steps:
+      - name: Guard - verify all required GitHub secrets exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing required secret backing $name; no changes made."
+              exit 1
+            fi
+          done
+          echo "Required GitHub secrets are present; values remain masked."
+
+      - name: Guard - verify exact account, Workers and R2 bucket
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
+
+          curl -fsS "${auth[@]}" "$api" > /tmp/account.json
+          jq -e '.success == true and .result.id != null' /tmp/account.json >/dev/null
+          echo "Verified Cloudflare account: $(jq -r '.result.name' /tmp/account.json)"
+
+          curl -fsS "${auth[@]}" "$api/workers/scripts" > /tmp/scripts.json
+          for worker in "$EXPECTED_MAIN_WORKER" "$EXPECTED_MEDIA_WORKER" "$EXPECTED_BILLING_WORKER"; do
+            jq -e --arg worker "$worker" '.result[] | select(.id == $worker)' /tmp/scripts.json >/dev/null || {
+              echo "Expected Worker missing: $worker; no changes made."
+              exit 1
+            }
+          done
+
+          curl -fsS "${auth[@]}" "$api/r2/buckets/$EXPECTED_BUCKET" > /tmp/bucket.json
+          jq -e '.success == true and .result.name == "spf-media"' /tmp/bucket.json >/dev/null || {
+            echo "Expected R2 bucket spf-media missing; no changes made."
+            exit 1
+          }
+          echo "Exact Workers and spf-media bucket verified."
+
+      - name: Guard - verify exact production route learn.starpipsforex.com to mklms
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones?account.id=$CLOUDFLARE_ACCOUNT_ID&name=$EXPECTED_ZONE" > /tmp/zones.json
+          zone_id=$(jq -r --arg zone "$EXPECTED_ZONE" '.result[] | select(.name == $zone) | .id' /tmp/zones.json | head -1)
+          if [ -z "$zone_id" ]; then
+            echo "Expected zone $EXPECTED_ZONE not found; no changes made."
+            exit 1
+          fi
+          curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/workers/routes" > /tmp/routes.json
+          jq -e --arg route "$EXPECTED_ROUTE" --arg worker "$EXPECTED_MAIN_WORKER" '.result[] | select(.pattern == $route and .script == $worker)' /tmp/routes.json >/dev/null || {
+            echo "Expected route $EXPECTED_ROUTE -> $EXPECTED_MAIN_WORKER not found; no changes made."
+            exit 1
+          }
+          echo "Verified production route: $EXPECTED_ROUTE -> $EXPECTED_MAIN_WORKER"
+
+      - name: Guard - verify existing critical bindings and bucket privacy
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          base="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts"
+
+          curl -fsS "${auth[@]}" "$base/$EXPECTED_MAIN_WORKER/settings" > /tmp/main-before.json
+          curl -fsS "${auth[@]}" "$base/$EXPECTED_MEDIA_WORKER/settings" > /tmp/media-before.json
+
+          jq -e '.result.bindings[] | select(.name == "APP_STORAGE_BUCKET" and .type == "r2_bucket" and .bucket_name == "spf-media")' /tmp/main-before.json >/dev/null
+          jq -e '.result.bindings[] | select(.name == "MEDIA_BUCKET" and .type == "r2_bucket" and .bucket_name == "spf-media")' /tmp/media-before.json >/dev/null
+
+          for binding in MKLMS_MEDIA_SIGNING_SECRET MKLMS_MEDIA_DELIVERY_BASE_URL MKLMS_MANAGED_HOSTING_OPERATOR_KEY MKLMS_BILLING_SERVICE_URL MKLMS_BILLING_INSTALLATION_ID MKLMS_BILLING_SHARED_SECRET; do
+            jq -e --arg name "$binding" '.result.bindings[] | select(.name == $name)' /tmp/main-before.json >/dev/null || {
+              echo "Existing critical binding missing: $binding; no changes made."
+              exit 1
+            }
+          done
+
+          curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/$EXPECTED_BUCKET/domains/managed" > /tmp/public.json
+          jq -e '.success == true and .result.enabled == false' /tmp/public.json >/dev/null || {
+            echo "spf-media public r2.dev access is not disabled; no changes made."
+            exit 1
+          }
+          echo "Existing critical bindings and private-bucket state verified."
+
+      - name: Guard - verify new R2 S3 credentials work on exact bucket
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.MKLMS_R2_DIRECT_UPLOAD_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MKLMS_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          set -euo pipefail
+          aws s3api list-objects-v2 \
+            --bucket "$EXPECTED_BUCKET" \
+            --max-items 1 \
+            --endpoint-url "https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com" \
+            >/dev/null
+          echo "New R2 S3 credentials verified against exact spf-media bucket."
+
+      - name: Apply exact-origin R2 CORS while preserving any unrelated rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json")
+          url="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/$EXPECTED_BUCKET/cors"
+
+          status=$(curl -sS -o /tmp/cors-before.json -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$url")
+          if [ "$status" = "200" ]; then
+            jq -e '.success == true' /tmp/cors-before.json >/dev/null
+            jq '.result // {rules: []}' /tmp/cors-before.json > /tmp/cors-policy.json
+          elif [ "$status" = "404" ]; then
+            printf '%s\n' '{"rules":[]}' > /tmp/cors-policy.json
+            echo "No existing R2 CORS policy found; creating the first rule."
+          else
+            echo "Unexpected CORS read status $status; refusing to write."
+            cat /tmp/cors-before.json | jq '{success,errors}' || true
+            exit 1
+          fi
+
+          if jq -e --arg origin "$LMS_ORIGIN" '[.rules[]? | select((.allowed.origins | index($origin)) != null and (.allowed.methods | index("PUT")) != null and ((.allowed.headers // []) | index("Content-Type")) != null)] | length > 0' /tmp/cors-policy.json >/dev/null; then
+            echo "A compatible CORS upload rule already exists; preserving it."
+            cp /tmp/cors-policy.json /tmp/cors-after.json
+          else
+            jq --arg origin "$LMS_ORIGIN" '.rules += [{id:"mklms-direct-upload",allowed:{origins:[$origin],methods:["PUT"],headers:["Content-Type"]},exposeHeaders:["ETag"],maxAgeSeconds:3600}]' /tmp/cors-policy.json > /tmp/cors-after.json
+            curl -fsS -X PUT "${auth[@]}" --data-binary @/tmp/cors-after.json "$url" > /tmp/cors-write.json
+            jq -e '.success == true' /tmp/cors-write.json >/dev/null
+            echo "Added exact-origin direct-upload CORS rule for $LMS_ORIGIN."
+          fi
+
+      - name: Apply four new direct-upload bindings to main mklms Worker only
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$EXPECTED_MAIN_WORKER/secrets"
+
+          put_secret() {
+            local name="$1"
+            local value="$2"
+            jq -n --arg name "$name" --arg text "$value" '{name:$name,text:$text,type:"secret_text"}' > /tmp/secret.json
+            curl -fsS -X PUT \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data-binary @/tmp/secret.json \
+              "$url" > /tmp/secret-response.json
+            jq -e --arg name "$name" '.success == true and .result.name == $name and .result.type == "secret_text"' /tmp/secret-response.json >/dev/null
+            echo "Configured binding: $name (value hidden)"
+          }
+
+          put_secret "MKLMS_R2_DIRECT_UPLOAD_BUCKET" "$EXPECTED_BUCKET"
+          put_secret "MKLMS_R2_DIRECT_UPLOAD_ENDPOINT" "https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com"
+          put_secret "MKLMS_R2_DIRECT_UPLOAD_ACCESS_KEY_ID" "$R2_ACCESS_KEY_ID"
+          put_secret "MKLMS_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY" "$R2_SECRET_ACCESS_KEY"
+
+      - name: Post-verify direct-upload bindings, CORS and existing production safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          base="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts"
+
+          curl -fsS "${auth[@]}" "$base/$EXPECTED_MAIN_WORKER/settings" > /tmp/main-after.json
+          curl -fsS "${auth[@]}" "$base/$EXPECTED_MEDIA_WORKER/settings" > /tmp/media-after.json
+
+          for binding in MKLMS_R2_DIRECT_UPLOAD_BUCKET MKLMS_R2_DIRECT_UPLOAD_ENDPOINT MKLMS_R2_DIRECT_UPLOAD_ACCESS_KEY_ID MKLMS_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY; do
+            jq -e --arg name "$binding" '.result.bindings[] | select(.name == $name and .type == "secret_text")' /tmp/main-after.json >/dev/null || {
+              echo "New direct-upload binding missing after write: $binding"
+              exit 1
+            }
+          done
+
+          for binding in MKLMS_MEDIA_SIGNING_SECRET MKLMS_MEDIA_DELIVERY_BASE_URL MKLMS_MANAGED_HOSTING_OPERATOR_KEY MKLMS_BILLING_SERVICE_URL MKLMS_BILLING_INSTALLATION_ID MKLMS_BILLING_SHARED_SECRET; do
+            jq -e --arg name "$binding" '.result.bindings[] | select(.name == $name)' /tmp/main-after.json >/dev/null || {
+              echo "Existing critical binding disappeared after update: $binding"
+              exit 1
+            }
+          done
+
+          jq -e '.result.bindings[] | select(.name == "APP_STORAGE_BUCKET" and .type == "r2_bucket" and .bucket_name == "spf-media")' /tmp/main-after.json >/dev/null
+          jq -e '.result.bindings[] | select(.name == "MEDIA_BUCKET" and .type == "r2_bucket" and .bucket_name == "spf-media")' /tmp/media-after.json >/dev/null
+
+          cors_status=$(curl -sS -o /tmp/cors-final.json -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/$EXPECTED_BUCKET/cors")
+          if [ "$cors_status" != "200" ]; then
+            echo "CORS verification returned HTTP $cors_status"
+            exit 1
+          fi
+          jq -e --arg origin "$LMS_ORIGIN" '[.result.rules[]? | select((.allowed.origins | index($origin)) != null and (.allowed.methods | index("PUT")) != null and ((.allowed.headers // []) | index("Content-Type")) != null)] | length > 0' /tmp/cors-final.json >/dev/null
+
+          curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/$EXPECTED_BUCKET/domains/managed" > /tmp/public-final.json
+          jq -e '.success == true and .result.enabled == false' /tmp/public-final.json >/dev/null
+
+          echo "Post-verification passed:"
+          echo "- four new direct-upload bindings exist on mklms only"
+          echo "- exact CORS origin is $LMS_ORIGIN"
+          echo "- APP_STORAGE_BUCKET remains spf-media"
+          echo "- MEDIA_BUCKET remains spf-media"
+          echo "- existing media/billing integration bindings remain present"
+          echo "- spf-media public r2.dev access remains disabled"
