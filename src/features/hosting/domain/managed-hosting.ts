@@ -54,11 +54,14 @@ function roundUsd(value: number): number {
 export function normalizeManagedHostingPolicy(
   input: ManagedHostingPolicy,
 ): ManagedHostingPolicy {
-  const minimumMonthlyFeeUsd = Math.max(15, Number(input.minimumMonthlyFeeUsd) || 15);
-  const maximumMonthlyFeeUsd = Math.max(
-    minimumMonthlyFeeUsd,
-    Number(input.maximumMonthlyFeeUsd) || 50,
-  );
+  const rawMinimum = Number(input.minimumMonthlyFeeUsd);
+  const minimumMonthlyFeeUsd = Number.isFinite(rawMinimum)
+    ? Math.max(0, rawMinimum)
+    : 15;
+  const rawMaximum = Number(input.maximumMonthlyFeeUsd);
+  const maximumMonthlyFeeUsd = Number.isFinite(rawMaximum)
+    ? Math.max(minimumMonthlyFeeUsd, rawMaximum)
+    : Math.max(minimumMonthlyFeeUsd, 50);
 
   return {
     enabled: Boolean(input.enabled),
