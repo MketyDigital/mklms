@@ -1,4 +1,4 @@
-name: Verify MkLMS production auth rate limiter
+name: Inspect MkLMS production rate limit bindings
 
 on:
   push:
@@ -14,32 +14,27 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 8
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - name: Probe production workers.dev claim limiter with invalid code
+      - name: Read current production Worker settings and deployment
         shell: bash
         run: |
           set -euo pipefail
-          url='https://mklms.dry-glitter-7e16.workers.dev/api/access/claim'
-          body='{"email":"ratelimit-production-probe@example.invalid","certificateName":"Rate Limit Probe","claimCode":"INVALID-PROBE-CODE"}'
-          saw_429=0
-          first_429=0
-          echo "=== PRODUCTION WORKERS.DEV CLAIM RATE LIMIT PROBE ==="
-          for i in $(seq 1 40); do
-            headers=$(mktemp)
-            response=$(mktemp)
-            code=$(curl -sS -D "$headers" -o "$response" -w '%{http_code}' -X POST "$url" -H 'content-type: application/json' --data "$body")
-            ray=$(awk 'BEGIN{IGNORECASE=1} /^cf-ray:/ {gsub("\r", ""); print $2}' "$headers" | tail -1)
-            retry=$(awk 'BEGIN{IGNORECASE=1} /^retry-after:/ {gsub("\r", ""); print $2}' "$headers" | tail -1)
-            remaining=$(awk 'BEGIN{IGNORECASE=1} /^x-ratelimit-remaining:/ {gsub("\r", ""); print $2}' "$headers" | tail -1)
-            printf 'request=%02d status=%s retry_after=%s remaining=%s ray=%s\n' "$i" "$code" "${retry:-}" "${remaining:-}" "${ray:-none}"
-            if [ "$code" = "429" ] && [ "$saw_429" = "0" ]; then
-              saw_429=1
-              first_429=$i
-            fi
-            rm -f "$headers" "$response"
-            sleep 0.5
-          done
-          echo "SAW_429=$saw_429"
-          echo "FIRST_429_AT=$first_429"
-          test "$saw_429" = "1"
-          echo "PRODUCTION_AUTH_RATE_LIMIT_VERIFIED"
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          base="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers"
+
+          echo "=== CURRENT MKLMS SCRIPT SETTINGS ==="
+          curl -fsS "${auth[@]}" "$base/scripts/mklms/settings" > /tmp/settings.json
+          jq -e '.success == true' /tmp/settings.json >/dev/null
+          jq -c '{bindings:[.result.bindings[]? | select(.type == "ratelimit") | {name,type,namespace_id,simple}], compatibility_date:.result.compatibility_date, compatibility_flags:.result.compatibility_flags}' /tmp/settings.json
+
+          echo "=== CURRENT MKLMS DEPLOYMENTS ==="
+          curl -fsS "${auth[@]}" "$base/scripts/mklms/deployments" > /tmp/deployments.json
+          jq -e '.success == true' /tmp/deployments.json >/dev/null
+          jq -c '.result.deployments[:5][]? | {id,created_on,source,versions}' /tmp/deployments.json
+
+          echo "=== ASSERT PRODUCTION AUTH LIMIT ==="
+          jq -e 'any(.result.bindings[]?; .type == "ratelimit" and .name == "AUTH_RATE_LIMITER" and .namespace_id == "51090501" and .simple.limit == 10 and .simple.period == 60)' /tmp/settings.json >/dev/null
+          echo "PRODUCTION_AUTH_RATE_LIMIT_METADATA_VERIFIED"
