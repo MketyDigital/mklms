@@ -30,6 +30,9 @@ export async function POST(
   if (!enrollment || !["ACTIVE", "COMPLETED"].includes(enrollment.status)) {
     return NextResponse.json({ ok: false, message: "Active course enrollment is required." }, { status: 403 });
   }
+  if (paidLive.deliveryMode !== "MEDIA") {
+    return NextResponse.json({ ok: false, message: "This paid live session is a Zoom class." }, { status: 409 });
+  }
 
   const now = new Date();
   const state = resolvePaidLiveState({ startsAt: paidLive.startsAt, endsAt: paidLive.endsAt, now });
