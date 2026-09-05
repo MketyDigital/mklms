@@ -38,7 +38,7 @@ export default async function AdminHostingPage() {
       /media_watch_credits|managed_hosting/i.test(message) ||
       /does not exist|undefined table|relation/i.test(message);
     setupError = looksLikeMissingSchema
-      ? "The hosting/usage database schema is not current. Run the current MkLMS database migrations, require verification to pass, then reload this page."
+      ? "The hosting/usage database schema is not current. Run npm run db:migrate against this deployment database (or the MkLMS DB migrations GitHub Action), require verification to pass, then reload this page."
       : "Hosting billing could not be loaded. Check the database connection and migration status in Settings & Integrations.";
   }
 
