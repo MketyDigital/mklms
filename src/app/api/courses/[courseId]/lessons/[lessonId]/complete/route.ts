@@ -4,6 +4,7 @@ import { getCurrentStudentSession } from "@/features/access/server/current-stude
 import { ensureCourseCertificate } from "@/features/certificates/server/ensure-course-certificate";
 import { PostgresLearningRepository } from "@/features/courses/repositories/postgres-learning.repository";
 import { LearningProgressService } from "@/features/courses/services/learning-progress.service";
+import { consumeDistributedRateLimit, rateLimitHeaders } from "@/lib/security/rate-limit";
 
 export async function POST(
   _request: Request,
@@ -17,6 +18,17 @@ export async function POST(
   }
 
   const { courseId, lessonId } = await context.params;
+  const limit = await consumeDistributedRateLimit(
+    "STUDENT_MUTATION_RATE_LIMITER",
+    `student:${session.studentId}:lesson-complete:${lessonId}`,
+  );
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { ok: false, message: "Too many completion requests. Please try again shortly." },
+      { status: 429, headers: rateLimitHeaders(limit) },
+    );
+  }
+
   const service = new LearningProgressService(new PostgresLearningRepository());
   const result = await service.completeLesson(session.studentId, courseId, lessonId);
 
