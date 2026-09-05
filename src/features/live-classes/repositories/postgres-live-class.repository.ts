@@ -10,6 +10,7 @@ import type {
 } from "../domain/live-session";
 import type { LiveTimelineMessage } from "../domain/live-timeline";
 import type {
+  AttendeeChatVisibility,
   LiveAttendeeMessageRecord,
   LiveRoomRepository,
 } from "../services/live-room.service";
@@ -29,6 +30,7 @@ export interface LiveBatchRuntimeRecord
   description?: string | null;
   expectedViewerBaseline: number;
   viewerDisplayMode: ViewerDisplayMode;
+  attendeeChatVisibility: AttendeeChatVisibility;
   endedMessage?: string | null;
   endedRedirectUrl?: string | null;
   notificationDestination?: string | null;
@@ -51,12 +53,13 @@ export class PostgresLiveClassRepository implements LiveRoomRepository {
       status: string;
       expected_viewer_baseline: number;
       viewer_display_mode: ViewerDisplayMode;
+      attendee_chat_visibility: AttendeeChatVisibility;
       ended_message: string | null;
       ended_redirect_url: string | null;
       notification_destination: string | null;
     }>(
       `SELECT id, slug, title, description, status,
-              expected_viewer_baseline, viewer_display_mode,
+              expected_viewer_baseline, viewer_display_mode, attendee_chat_visibility,
               ended_message, ended_redirect_url, notification_destination
        FROM live_batches
        WHERE slug = $1 AND status = 'ACTIVE'
@@ -75,6 +78,7 @@ export class PostgresLiveClassRepository implements LiveRoomRepository {
       status: batch.status,
       expectedViewerBaseline: batch.expected_viewer_baseline,
       viewerDisplayMode: batch.viewer_display_mode,
+      attendeeChatVisibility: batch.attendee_chat_visibility,
       endedMessage: batch.ended_message,
       endedRedirectUrl: batch.ended_redirect_url,
       notificationDestination: batch.notification_destination,
@@ -287,6 +291,29 @@ export class PostgresLiveClassRepository implements LiveRoomRepository {
        WHERE viewer_id = $1 AND session_id = $2
        ORDER BY created_at ASC`,
       [viewerId, sessionId],
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      sessionId: row.session_id,
+      displayName: row.display_name_snapshot,
+      message: row.message,
+      createdAt: row.created_at,
+    }));
+  }
+
+  async listSessionAttendeeMessages(sessionId: string): Promise<LiveAttendeeMessageRecord[]> {
+    const result = await this.pool.query<{
+      id: string;
+      session_id: string;
+      display_name_snapshot: string | null;
+      message: string;
+      created_at: Date;
+    }>(
+      `SELECT id, session_id, display_name_snapshot, message, created_at
+       FROM live_attendee_messages
+       WHERE session_id = $1
+       ORDER BY created_at ASC`,
+      [sessionId],
     );
     return result.rows.map((row) => ({
       id: row.id,
