@@ -8,7 +8,6 @@ import {
   type ManagedHostingMonthOverride,
   type ManagedHostingPolicy,
 } from "../domain/managed-hosting";
-import { ManagedHostingMonthEditor } from "./managed-hosting-month-editor";
 import { ManagedHostingPayButton } from "./managed-hosting-pay-button";
 
 export interface ManagedHostingUsageClientSummary {
@@ -69,13 +68,13 @@ export function ManagedHostingPanel({
               <CalendarClock className="size-5" /> Managed hosting · {monthKey}
             </CardTitle>
             <CardDescription>
-              The monthly operator floor is the minimum due. If usage calculates a higher managed-service charge, the higher amount is due instead.
+              The monthly minimum accrues through the month. If measured usage or an operator-set higher floor produces a larger charge, the larger amount is shown.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg border bg-muted/20 p-4">
-                <p className="text-xs text-muted-foreground">Monthly floor</p>
+                <p className="text-xs text-muted-foreground">Accrued minimum</p>
                 <p className="mt-1 text-2xl font-semibold">${billing.minimumFloorUsd.toFixed(2)}</p>
               </div>
               <div className="rounded-lg border bg-muted/20 p-4">
@@ -109,13 +108,6 @@ export function ManagedHostingPanel({
                 {paymentStatus === "PAID" ? "Payment received for this month." : "Payment has been waived for this month."}
               </p>
             )}
-
-            <ManagedHostingMonthEditor
-              monthKey={monthKey}
-              currentFloorUsd={billing.minimumFloorUsd}
-              currentStatus={paymentStatus}
-              currentNote={monthOverride?.operatorNote}
-            />
           </CardContent>
         </Card>
       ) : null}
