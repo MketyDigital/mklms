@@ -1,4 +1,4 @@
-name: Trace MkLMS rate limit binding removal
+name: Inspect active MkLMS production version
 
 on:
   push:
@@ -18,34 +18,29 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - name: Read Cloudflare audit around binding disappearance
+      - name: Read exact active deployed version resources
         shell: bash
         run: |
           set -euo pipefail
           auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
-          since='2026-09-05T19:15:00Z'
-          before='2026-09-05T19:30:00Z'
+          script=mklms
 
-          curl -fsS "${auth[@]}" \
-            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/logs/audit?since=$since&before=$before&limit=200" \
-            > /tmp/audit.json
-          jq -e '.success == true' /tmp/audit.json >/dev/null
+          curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$script/deployments" > /tmp/deployments.json
+          jq -e '.success == true' /tmp/deployments.json >/dev/null
+          active_version=$(jq -r '(.result.deployments // .result // [])[0].versions[]? | select(.percentage == 100) | .version_id' /tmp/deployments.json | head -1)
+          test -n "$active_version"
+          echo "ACTIVE_VERSION=$active_version"
 
-          echo "=== MKLMS WORKER AUDIT 19:15-19:30 UTC ==="
-          jq -c '.result[]? | select(
-            ((.raw.uri // "") | contains("/workers/scripts/mklms")) or
-            ((.resource.type // "") | startswith("scripts"))
-          ) | {
-            time:.action.time,
-            description:.action.description,
-            type:.action.type,
-            result:.action.result,
-            actor:{type:.actor.type,email:.actor.email,context:.actor.context,token_name:.actor.token_name},
-            raw:{method:.raw.method,status_code:.raw.status_code,uri:.raw.uri},
-            resource:{type:.resource.type,product:.resource.product,request:.resource.request,response:.resource.response}
-          }' /tmp/audit.json
+          curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$script/versions/$active_version" > /tmp/version.json
+          jq -e '.success == true' /tmp/version.json >/dev/null
 
-          echo "=== ALL AUDIT ACTIONS IN WINDOW ==="
-          jq -c '.result[]? | {time:.action.time,description:.action.description,type:.action.type,result:.action.result,actor:{type:.actor.type,email:.actor.email,context:.actor.context},raw:{method:.raw.method,status_code:.raw.status_code,uri:.raw.uri},resource_type:.resource.type}' /tmp/audit.json
+          echo "=== ACTIVE VERSION METADATA ==="
+          jq -c '.result | {id,number,metadata}' /tmp/version.json
 
-          echo "AUDIT_BINDING_REMOVAL_TRACE_COMPLETE"
+          echo "=== ACTIVE VERSION RATE LIMIT BINDINGS ==="
+          jq -c '.result.resources.bindings[]? | select(.namespace_id != null and .simple != null) | {name,namespace_id,simple}' /tmp/version.json
+          count=$(jq '[.result.resources.bindings[]? | select(.namespace_id != null and .simple != null)] | length' /tmp/version.json)
+          echo "ACTIVE_RATE_LIMIT_BINDING_COUNT=$count"
+          test "$count" = "5"
+
+          echo "ACTIVE_VERSION_BINDING_INSPECTION_COMPLETE"
