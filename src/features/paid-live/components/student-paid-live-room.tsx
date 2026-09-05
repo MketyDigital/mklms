@@ -68,9 +68,12 @@ export function StudentPaidLiveRoom({ session }: { session: PaidLiveRoomSession 
 
   useEffect(() => {
     if (session.deliveryMode !== "MEDIA" || state !== "LIVE") return;
-    void authorize();
+    const initialAuthorization = window.setTimeout(() => void authorize(), 0);
     const interval = window.setInterval(() => void authorize(), 240_000);
-    return () => window.clearInterval(interval);
+    return () => {
+      window.clearTimeout(initialAuthorization);
+      window.clearInterval(interval);
+    };
   }, [authorize, session.deliveryMode, state]);
 
   return (
