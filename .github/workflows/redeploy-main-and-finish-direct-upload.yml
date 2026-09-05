@@ -1,4 +1,4 @@
-name: Inspect active MkLMS production version
+name: Reproduce MkLMS auth limiter on preview
 
 on:
   push:
@@ -14,33 +14,31 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 8
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - name: Read exact active deployed version resources
+      - name: Exercise claim limiter on isolated PR preview
         shell: bash
         run: |
           set -euo pipefail
-          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
-          script=mklms
+          url='https://fix-rate-limit-runtime-diagnostics-2026-09-05-mklms.dry-glitter-7e16.workers.dev/api/access/claim'
+          body='{"identity":"ratelimit-preview-probe@example.invalid","claimCode":"INVALID-PROBE-CODE"}'
 
-          curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$script/deployments" > /tmp/deployments.json
-          jq -e '.success == true' /tmp/deployments.json >/dev/null
-          active_version=$(jq -r '(.result.deployments // .result // [])[0].versions[]? | select(.percentage == 100) | .version_id' /tmp/deployments.json | head -1)
-          test -n "$active_version"
-          echo "ACTIVE_VERSION=$active_version"
+          echo "=== PREVIEW AUTH LIMITER RESPONSES ==="
+          saw_429=0
+          for i in $(seq 1 15); do
+            headers=$(mktemp)
+            response=$(mktemp)
+            code=$(curl -sS -D "$headers" -o "$response" -w '%{http_code}' \
+              -X POST "$url" \
+              -H 'content-type: application/json' \
+              --data "$body")
+            retry=$(awk 'BEGIN{IGNORECASE=1} /^retry-after:/ {gsub("\r", "", $2); print $2}' "$headers" | tail -1)
+            remaining=$(awk 'BEGIN{IGNORECASE=1} /^x-ratelimit-remaining:/ {gsub("\r", "", $2); print $2}' "$headers" | tail -1)
+            printf 'request=%02d status=%s retry_after=%s remaining=%s body=' "$i" "$code" "${retry:-}" "${remaining:-}"
+            head -c 180 "$response" | tr '\n' ' '
+            echo
+            if [ "$code" = "429" ]; then saw_429=1; fi
+            rm -f "$headers" "$response"
+          done
 
-          curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$script/versions/$active_version" > /tmp/version.json
-          jq -e '.success == true' /tmp/version.json >/dev/null
-
-          echo "=== ACTIVE VERSION METADATA ==="
-          jq -c '.result | {id,number,metadata}' /tmp/version.json
-
-          echo "=== ACTIVE VERSION RATE LIMIT BINDINGS ==="
-          jq -c '.result.resources.bindings[]? | select(.namespace_id != null and .simple != null) | {name,namespace_id,simple}' /tmp/version.json
-          count=$(jq '[.result.resources.bindings[]? | select(.namespace_id != null and .simple != null)] | length' /tmp/version.json)
-          echo "ACTIVE_RATE_LIMIT_BINDING_COUNT=$count"
-          test "$count" = "5"
-
-          echo "ACTIVE_VERSION_BINDING_INSPECTION_COMPLETE"
+          echo "SAW_429=$saw_429"
+          echo "PREVIEW_RATE_LIMIT_REPRO_COMPLETE"
