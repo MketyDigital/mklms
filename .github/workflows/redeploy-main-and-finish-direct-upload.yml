@@ -1,4 +1,4 @@
-name: Reproduce MkLMS auth limiter on preview
+name: Probe MkLMS preview rate limit binding directly
 
 on:
   push:
@@ -15,30 +15,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Exercise claim limiter on isolated PR preview
+      - name: Call isolated diagnostic endpoint repeatedly
         shell: bash
         run: |
           set -euo pipefail
-          url='https://fix-rate-limit-runtime-diagnostics-2026-09-05-mklms.dry-glitter-7e16.workers.dev/api/access/claim'
-          body='{"identity":"ratelimit-preview-probe@example.invalid","claimCode":"INVALID-PROBE-CODE"}'
+          url='https://fix-rate-limit-runtime-diagnostics-2026-09-05-mklms.dry-glitter-7e16.workers.dev/api/_diagnostics/rate-limit'
 
-          echo "=== PREVIEW AUTH LIMITER RESPONSES ==="
-          saw_429=0
+          echo "=== DIRECT RATE LIMIT BINDING PROBE ==="
           for i in $(seq 1 15); do
-            headers=$(mktemp)
-            response=$(mktemp)
-            code=$(curl -sS -D "$headers" -o "$response" -w '%{http_code}' \
-              -X POST "$url" \
-              -H 'content-type: application/json' \
-              --data "$body")
-            retry=$(awk 'BEGIN{IGNORECASE=1} /^retry-after:/ {gsub("\r", "", $2); print $2}' "$headers" | tail -1)
-            remaining=$(awk 'BEGIN{IGNORECASE=1} /^x-ratelimit-remaining:/ {gsub("\r", "", $2); print $2}' "$headers" | tail -1)
-            printf 'request=%02d status=%s retry_after=%s remaining=%s body=' "$i" "$code" "${retry:-}" "${remaining:-}"
-            head -c 180 "$response" | tr '\n' ' '
+            printf 'probe=%02d response=' "$i"
+            curl -sS "$url"
             echo
-            if [ "$code" = "429" ]; then saw_429=1; fi
-            rm -f "$headers" "$response"
           done
-
-          echo "SAW_429=$saw_429"
-          echo "PREVIEW_RATE_LIMIT_REPRO_COMPLETE"
+          echo "DIRECT_RATE_LIMIT_BINDING_PROBE_COMPLETE"
