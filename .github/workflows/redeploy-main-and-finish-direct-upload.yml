@@ -1,4 +1,4 @@
-name: Recheck MkLMS SaaS WAF propagation
+name: Inventory MkLMS SaaS WAF coverage
 
 on:
   push:
@@ -18,36 +18,35 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - name: Read-only verify SaaS custom WAF behavior
+      - name: Read-only inventory SaaS custom hostnames and shared WAF
         shell: bash
         run: |
           set -euo pipefail
           auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
           zone_name=mkety.com
-          host=learn.starpipsforex.com
           description='Mkety block impossible exploit probes'
 
           zones=$(curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones?account.id=$CLOUDFLARE_ACCOUNT_ID&name=$zone_name")
           zone_id=$(printf '%s' "$zones" | jq -r '.result[0].id // empty')
           test -n "$zone_id"
 
-          echo "=== CURRENT RULE ==="
+          echo "=== SHARED CUSTOM WAF RULE ==="
           curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/rulesets/phases/http_request_firewall_custom/entrypoint" > /tmp/rules.json
+          jq -e --arg d "$description" '.success == true and any(.result.rules[]?; .description == $d and .action == "block" and .enabled == true)' /tmp/rules.json >/dev/null
           jq -c --arg d "$description" '.result.rules[]? | select(.description == $d) | {id,description,action,expression,enabled,last_updated}' /tmp/rules.json
 
-          echo "=== ROOT ==="
-          root_code=$(curl -sS -D /tmp/root.headers -o /tmp/root.html -w '%{http_code}' --connect-timeout 8 --max-time 15 "https://$host/")
-          echo "ROOT_HTTP=$root_code"
-          grep -Ei '^(cf-ray:|cf-mitigated:|server:)' /tmp/root.headers || true
-          echo "ROOT_TITLE=$(grep -oPm1 '(?<=<title>)[^<]+' /tmp/root.html || true)"
+          echo "=== CURRENT CLOUDFLARE FOR SAAS CUSTOM HOSTNAMES ==="
+          curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/custom_hostnames?per_page=50&page=1" > /tmp/hosts.json
+          jq -e '.success == true' /tmp/hosts.json >/dev/null
+          jq -c '.result[]? | {id,hostname,status,ssl_status:.ssl.status,custom_origin_server,custom_metadata}' /tmp/hosts.json
+          echo "CUSTOM_HOSTNAME_COUNT=$(jq '.result | length' /tmp/hosts.json)"
 
-          for path in '/.env' '/wp-login.php' '/.git/config' '/phpmyadmin/'; do
-            safe=$(printf '%s' "$path" | tr '/.' '__')
-            code=$(curl -sS -D "/tmp/${safe}.headers" -o "/tmp/${safe}.body" -w '%{http_code}' --connect-timeout 8 --max-time 15 "https://$host$path" || true)
-            echo "PROBE path=$path http=$code"
-            grep -Ei '^(cf-ray:|cf-mitigated:|server:)' "/tmp/${safe}.headers" || true
+          echo "=== SAFE HTTP CHECKS FOR EACH ACTIVE HOSTNAME ==="
+          jq -r '.result[]? | select(.status == "active") | .hostname' /tmp/hosts.json | while read -r host; do
+            [ -n "$host" ] || continue
+            root_code=$(curl -sS -o /tmp/root.html -w '%{http_code}' --connect-timeout 8 --max-time 15 "https://$host/" || true)
+            probe_code=$(curl -sS -o /tmp/probe.html -w '%{http_code}' --connect-timeout 8 --max-time 15 "https://$host/.env" || true)
+            echo "HOST=$host ROOT_HTTP=$root_code PROBE_ENV_HTTP=$probe_code"
           done
 
-          test "$root_code" = "200"
-          grep -q 'STARPIPSFOREX' /tmp/root.html
-          echo "READ_ONLY_SAAS_WAF_RECHECK_COMPLETE"
+          echo "READ_ONLY_SAAS_WAF_INVENTORY_COMPLETE"
