@@ -67,7 +67,9 @@ test('public free-live front end polls viewer-specific shared comments and dedup
   assert.match(room, /\/messages/);
   assert.match(room, /shared/);
   assert.match(room, /viewer-\$\{.*\.id\}/);
-  assert.match(room, /some\(.*\.id ===/s);
+  assert.match(room, /seenSharedMessageIdsRef/);
+  assert.match(room, /ownIds\.has\(item\.id\)/);
+  assert.match(room, /currentIds\.has\(item\.id\)/);
   assert.match(stagedRoute, /s-maxage=5/);
   assert.doesNotMatch(stagedRoute, /listSessionAttendeeMessages|attendee_chat_visibility/);
 });
