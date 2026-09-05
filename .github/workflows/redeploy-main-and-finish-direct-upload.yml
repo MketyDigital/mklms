@@ -1,4 +1,4 @@
-name: Inspect MkLMS deployment binding overwrite
+name: Trace MkLMS rate limit binding removal
 
 on:
   push:
@@ -18,30 +18,34 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - name: Read deployment timeline and all live binding types
+      - name: Read Cloudflare audit around binding disappearance
         shell: bash
         run: |
           set -euo pipefail
           auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
-          script=mklms
+          since='2026-09-05T19:15:00Z'
+          before='2026-09-05T19:30:00Z'
 
-          echo "=== DEPLOYMENTS ==="
-          curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$script/deployments" > /tmp/deployments.json
-          jq -e '.success == true' /tmp/deployments.json >/dev/null
-          jq -c '.result.deployments // .result // [] | .[0:12] | .[]? | {id,created_on,source,annotations,versions}' /tmp/deployments.json
+          curl -fsS "${auth[@]}" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/logs/audit?since=$since&before=$before&limit=200" \
+            > /tmp/audit.json
+          jq -e '.success == true' /tmp/audit.json >/dev/null
 
-          echo "=== CURRENT SCRIPT SETTINGS ==="
-          curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$script/settings" > /tmp/settings.json
-          jq -e '.success == true' /tmp/settings.json >/dev/null
-          jq -c '{compatibility_date:.result.compatibility_date,compatibility_flags:.result.compatibility_flags,binding_count:(.result.bindings|length),bindings:[.result.bindings[]? | {name,type,namespace_id,simple,bucket_name}]}' /tmp/settings.json
+          echo "=== MKLMS WORKER AUDIT 19:15-19:30 UTC ==="
+          jq -c '.result[]? | select(
+            ((.raw.uri // "") | contains("/workers/scripts/mklms")) or
+            ((.resource.type // "") | startswith("scripts"))
+          ) | {
+            time:.action.time,
+            description:.action.description,
+            type:.action.type,
+            result:.action.result,
+            actor:{type:.actor.type,email:.actor.email,context:.actor.context,token_name:.actor.token_name},
+            raw:{method:.raw.method,status_code:.raw.status_code,uri:.raw.uri},
+            resource:{type:.resource.type,product:.resource.product,request:.resource.request,response:.resource.response}
+          }' /tmp/audit.json
 
-          echo "=== BINDING TYPE COUNTS ==="
-          jq -r '.result.bindings[]?.type' /tmp/settings.json | sort | uniq -c
+          echo "=== ALL AUDIT ACTIONS IN WINDOW ==="
+          jq -c '.result[]? | {time:.action.time,description:.action.description,type:.action.type,result:.action.result,actor:{type:.actor.type,email:.actor.email,context:.actor.context},raw:{method:.raw.method,status_code:.raw.status_code,uri:.raw.uri},resource_type:.resource.type}' /tmp/audit.json
 
-          echo "=== EXPECTED RATE LIMIT NAMES ==="
-          for name in AUTH_RATE_LIMITER ADMIN_RATE_LIMITER STUDENT_MUTATION_RATE_LIMITER PLAYBACK_RATE_LIMITER CERT_RATE_LIMITER; do
-            echo -n "$name="
-            jq -c --arg n "$name" '.result.bindings[]? | select(.name == $n)' /tmp/settings.json || true
-          done
-
-          echo "DEPLOYMENT_BINDING_OVERWRITE_INSPECTION_COMPLETE"
+          echo "AUDIT_BINDING_REMOVAL_TRACE_COMPLETE"
