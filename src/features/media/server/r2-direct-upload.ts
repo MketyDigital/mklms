@@ -40,7 +40,7 @@ function getClient(config: DirectR2Config): S3Client {
   return new S3Client({
     region: "auto",
     endpoint: config.endpoint,
-    forcePathStyle: false,
+    forcePathStyle: true,
     credentials: {
       accessKeyId: config.accessKeyId,
       secretAccessKey: config.secretAccessKey,
@@ -60,7 +60,7 @@ export async function createDirectR2UploadAuthorization(input: {
     throw new Error("Only MP4 video files can be uploaded directly.");
   }
   if (!Number.isInteger(input.sizeBytes) || input.sizeBytes < 1 || input.sizeBytes > MAX_DIRECT_UPLOAD_BYTES) {
-    throw new Error("The selected MP4 has an invalid or unsupported file size.");
+    throw new Error("The selected MP4 has an invalid or unsupported file size. Direct single-file upload supports up to 5 GB.");
   }
 
   const config = getConfig();
