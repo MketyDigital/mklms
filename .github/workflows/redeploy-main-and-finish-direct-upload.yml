@@ -1,4 +1,4 @@
-name: Probe deployed MkLMS branch limiter binding state
+name: Stress MkLMS preview limiter consistency
 
 on:
   push:
@@ -15,23 +15,29 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Call deployed branch preview binding probe
+      - name: Sustain direct binding calls and record edge location
         shell: bash
         run: |
           set -euo pipefail
           url='https://fix-rate-limit-runtime-diagnostics-2026-09-05-mklms.dry-glitter-7e16.workers.dev/api/debug-rate-limit-probe'
-          echo "=== BRANCH PREVIEW DIRECT BINDING PROBE ==="
           saw_false=0
-          for i in $(seq 1 15); do
+          false_at=0
+          echo "=== SUSTAINED PREVIEW LIMITER PROBE ==="
+          for i in $(seq 1 40); do
+            headers=$(mktemp)
             body=$(mktemp)
-            code=$(curl -sS -o "$body" -w '%{http_code}' "$url")
-            printf 'probe=%02d status=%s response=' "$i" "$code"
-            head -c 500 "$body" | tr '\n' ' '
-            echo
+            code=$(curl -sS -D "$headers" -o "$body" -w '%{http_code}' "$url")
+            ray=$(awk 'BEGIN{IGNORECASE=1} /^cf-ray:/ {gsub("\r", ""); print $2}' "$headers" | tail -1)
+            success=$(jq -r '.success // "missing"' "$body" 2>/dev/null || echo invalid-json)
+            printf 'probe=%02d status=%s success=%s ray=%s\n' "$i" "$code" "$success" "${ray:-none}"
             test "$code" = "200"
-            jq -e '.contextAvailable != null' "$body" >/dev/null
-            if [ "$(jq -r '.success // empty' "$body")" = "false" ]; then saw_false=1; fi
-            rm -f "$body"
+            if [ "$success" = "false" ] && [ "$saw_false" = "0" ]; then
+              saw_false=1
+              false_at=$i
+            fi
+            rm -f "$headers" "$body"
+            sleep 0.5
           done
           echo "SAW_SUCCESS_FALSE=$saw_false"
-          echo "BRANCH_PREVIEW_BINDING_PROBE_COMPLETE"
+          echo "FIRST_FALSE_AT=$false_at"
+          echo "SUSTAINED_PREVIEW_LIMITER_PROBE_COMPLETE"
