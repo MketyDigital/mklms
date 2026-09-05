@@ -29,12 +29,12 @@ test('certificate renderer preserves uploaded background and overlays portal fie
   assert.match(renderer, /certificate\.certificateId/);
 });
 
-test('real certs/cert.png template renders a production-like certificate PDF', async () => {
-  const backgroundBytes = new Uint8Array(await readFile(new URL('../certs/cert.png', import.meta.url)));
+test('real certs/cert.jpeg template renders a production-like certificate PDF', async () => {
+  const backgroundBytes = new Uint8Array(await readFile(new URL('../certs/cert.jpeg', import.meta.url)));
   const storage = {
     async putObject() { return { assetId: 'unused' }; },
     async getObject(assetId) {
-      assert.equal(assetId, 'certs/cert.png');
+      assert.equal(assetId, 'certs/cert.jpeg');
       return { bytes: backgroundBytes, contentType: 'image/jpeg' };
     },
     async createReadAuthorization() { return { url: 'https://example.invalid', expiresAt: null }; },
@@ -56,7 +56,7 @@ test('real certs/cert.png template renders a production-like certificate PDF', a
     template: {
       id: 'real-cert-template',
       name: 'Production certificate proof',
-      backgroundAssetId: 'certs/cert.png',
+      backgroundAssetId: 'certs/cert.jpeg',
       signatureAssetId: null,
       layoutConfig: {},
     },
