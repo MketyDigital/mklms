@@ -25,7 +25,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
-      - run: npm ci
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
       - name: Focused security tests
         run: node --experimental-strip-types --test tests/rate-limit.test.mjs tests/saas-security-hardening.test.mjs
