@@ -6,11 +6,15 @@ const read = (path) => fs.readFileSync(path, 'utf8');
 
 const protectedRoutes = [
   ['src/app/api/access/login/route.ts', 'AUTH_RATE_LIMITER'],
+  ['src/app/api/access/claim/route.ts', 'AUTH_RATE_LIMITER'],
   ['src/app/api/admin/session/login/route.ts', 'AUTH_RATE_LIMITER'],
   ['src/app/api/admin/media/direct-upload/initiate/route.ts', 'ADMIN_RATE_LIMITER'],
   ['src/app/api/admin/media/direct-upload/finalize/route.ts', 'ADMIN_RATE_LIMITER'],
   ['src/app/api/admin/media/upload/route.ts', 'ADMIN_RATE_LIMITER'],
   ['src/app/api/courses/[courseId]/quizzes/[quizId]/attempt/route.ts', 'STUDENT_MUTATION_RATE_LIMITER'],
+  ['src/app/api/courses/[courseId]/lessons/[lessonId]/complete/route.ts', 'STUDENT_MUTATION_RATE_LIMITER'],
+  ['src/app/api/courses/[courseId]/lessons/[lessonId]/progress/route.ts', 'STUDENT_MUTATION_RATE_LIMITER'],
+  ['src/app/api/messages/route.ts', 'STUDENT_MUTATION_RATE_LIMITER'],
   ['src/app/api/courses/[courseId]/lessons/[lessonId]/playback/route.ts', 'PLAYBACK_RATE_LIMITER'],
   ['src/app/api/courses/[courseId]/paid-live/[sessionId]/join/route.ts', 'PLAYBACK_RATE_LIMITER'],
   ['src/app/api/courses/[courseId]/paid-live/[sessionId]/playback/route.ts', 'PLAYBACK_RATE_LIMITER'],
