@@ -106,7 +106,7 @@ test('paid live is course-owned and enrollment gated while free-live routes stay
 });
 
 test('real certificate template is wired into a production-like renderer test', () => {
-  assert.ok(fs.existsSync('certs/cert.png'));
+  assert.ok(fs.existsSync('certs/cert.jpeg'));
   assert.ok(fs.existsSync('src/features/certificates/providers/default-certificate-layout.ts'));
   const renderer = read('src/features/certificates/providers/pdf-lib-certificate-renderer.ts');
   const allTests = fs.readdirSync('tests')
@@ -114,6 +114,6 @@ test('real certificate template is wired into a production-like renderer test', 
     .map((name) => read(`tests/${name}`))
     .join('\n');
   assert.match(renderer, /REAL_CERTIFICATE_DEFAULT_LAYOUT/);
-  assert.match(allTests, /certs\/cert\.png/);
+  assert.match(allTests, /certs\/cert\.jpeg/);
   assert.match(allTests, /PdfLibCertificateRenderer/);
 });
