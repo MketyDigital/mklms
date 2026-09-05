@@ -1,0 +1,141 @@
+name: Finish MkLMS direct-upload Worker setup
+
+on:
+  push:
+    branches:
+      - ops/cloudflare-new-update-setup-2026-09-05
+    paths:
+      - .github/workflows/finish-cloudflare-new-update.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mklms-cloudflare-production-setup
+  cancel-in-progress: false
+
+jobs:
+  finish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.MKLMS_R2_DIRECT_UPLOAD_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.MKLMS_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY }}
+      EXPECTED_MAIN_WORKER: mklms
+      EXPECTED_MEDIA_WORKER: mklms-media-delivery
+      EXPECTED_BUCKET: spf-media
+      EXPECTED_ZONE: mkety.com
+      EXPECTED_ROUTE: learn.starpipsforex.com/*
+      LMS_ORIGIN: https://learn.starpipsforex.com
+    steps:
+      - name: Checkout exact ops branch
+        uses: actions/checkout@v4
+
+      - name: Guard exact account, route, bindings, CORS, privacy and R2 credentials
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.MKLMS_R2_DIRECT_UPLOAD_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MKLMS_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
+
+          curl -fsS "${auth[@]}" "$api" > /tmp/account.json
+          echo "Verified account: $(jq -r '.result.name' /tmp/account.json)"
+
+          curl -fsS "${auth[@]}" "$api/workers/scripts" > /tmp/scripts.json
+          jq -e '.result[] | select(.id == "mklms")' /tmp/scripts.json >/dev/null
+          jq -e '.result[] | select(.id == "mklms-media-delivery")' /tmp/scripts.json >/dev/null
+          jq -e '.result[] | select(.id == "mkety-managed-hosting-billing")' /tmp/scripts.json >/dev/null
+
+          curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones?account.id=$CLOUDFLARE_ACCOUNT_ID&name=$EXPECTED_ZONE" > /tmp/zones.json
+          zone_id=$(jq -r '.result[] | select(.name == "mkety.com") | .id' /tmp/zones.json | head -1)
+          test -n "$zone_id"
+          curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/workers/routes" > /tmp/routes.json
+          jq -e --arg route "$EXPECTED_ROUTE" '.result[] | select(.pattern == $route and .script == "mklms")' /tmp/routes.json >/dev/null
+
+          curl -fsS "${auth[@]}" "$api/workers/scripts/$EXPECTED_MAIN_WORKER/settings" > /tmp/main-before.json
+          curl -fsS "${auth[@]}" "$api/workers/scripts/$EXPECTED_MEDIA_WORKER/settings" > /tmp/media-before.json
+          jq -e '.result.bindings[] | select(.name == "APP_STORAGE_BUCKET" and .type == "r2_bucket" and .bucket_name == "spf-media")' /tmp/main-before.json >/dev/null
+          jq -e '.result.bindings[] | select(.name == "MEDIA_BUCKET" and .type == "r2_bucket" and .bucket_name == "spf-media")' /tmp/media-before.json >/dev/null
+          for binding in MKLMS_MEDIA_SIGNING_SECRET MKLMS_MEDIA_DELIVERY_BASE_URL MKLMS_MANAGED_HOSTING_OPERATOR_KEY MKLMS_BILLING_SERVICE_URL MKLMS_BILLING_INSTALLATION_ID MKLMS_BILLING_SHARED_SECRET; do
+            jq -e --arg name "$binding" '.result.bindings[] | select(.name == $name)' /tmp/main-before.json >/dev/null
+          done
+
+          curl -fsS "${auth[@]}" "$api/r2/buckets/$EXPECTED_BUCKET/domains/managed" > /tmp/public.json
+          jq -e '.result.enabled == false' /tmp/public.json >/dev/null
+
+          curl -fsS "${auth[@]}" "$api/r2/buckets/$EXPECTED_BUCKET/cors" > /tmp/cors.json
+          jq -e --arg origin "$LMS_ORIGIN" '[.result.rules[]? | select((.allowed.origins | index($origin)) != null and (.allowed.methods | index("PUT")) != null and ((.allowed.headers // []) | index("Content-Type")) != null)] | length > 0' /tmp/cors.json >/dev/null
+
+          aws s3api list-objects-v2 --bucket "$EXPECTED_BUCKET" --max-items 1 --endpoint-url "https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com" >/dev/null
+          echo "All guards passed. CORS is already present and R2 credentials work on spf-media."
+
+      - name: Add four new direct-upload secrets to mklms in one Wrangler operation
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg bucket "$EXPECTED_BUCKET" \
+            --arg endpoint "https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com" \
+            --arg access "$R2_ACCESS_KEY_ID" \
+            --arg secret "$R2_SECRET_ACCESS_KEY" \
+            '{
+              MKLMS_R2_DIRECT_UPLOAD_BUCKET:$bucket,
+              MKLMS_R2_DIRECT_UPLOAD_ENDPOINT:$endpoint,
+              MKLMS_R2_DIRECT_UPLOAD_ACCESS_KEY_ID:$access,
+              MKLMS_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY:$secret
+            }' > /tmp/mklms-direct-upload-secrets.json
+
+          npx --yes wrangler@4.127.1 secret bulk /tmp/mklms-direct-upload-secrets.json \
+            --name "$EXPECTED_MAIN_WORKER" \
+            --config wrangler.jsonc
+          rm -f /tmp/mklms-direct-upload-secrets.json
+          echo "Wrangler completed the four-secret update; values were never printed."
+
+      - name: Post-verify new bindings and prove existing configuration remained intact
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
+
+          curl -fsS "${auth[@]}" "$api/workers/scripts/$EXPECTED_MAIN_WORKER/settings" > /tmp/main-after.json
+          curl -fsS "${auth[@]}" "$api/workers/scripts/$EXPECTED_MEDIA_WORKER/settings" > /tmp/media-after.json
+
+          for binding in MKLMS_R2_DIRECT_UPLOAD_BUCKET MKLMS_R2_DIRECT_UPLOAD_ENDPOINT MKLMS_R2_DIRECT_UPLOAD_ACCESS_KEY_ID MKLMS_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY; do
+            jq -e --arg name "$binding" '.result.bindings[] | select(.name == $name and .type == "secret_text")' /tmp/main-after.json >/dev/null || {
+              echo "Missing new direct-upload binding: $binding"
+              exit 1
+            }
+          done
+
+          for binding in MKLMS_MEDIA_SIGNING_SECRET MKLMS_MEDIA_DELIVERY_BASE_URL MKLMS_MANAGED_HOSTING_OPERATOR_KEY MKLMS_BILLING_SERVICE_URL MKLMS_BILLING_INSTALLATION_ID MKLMS_BILLING_SHARED_SECRET; do
+            jq -e --arg name "$binding" '.result.bindings[] | select(.name == $name)' /tmp/main-after.json >/dev/null || {
+              echo "Existing binding missing after secret update: $binding"
+              exit 1
+            }
+          done
+
+          jq -e '.result.bindings[] | select(.name == "APP_STORAGE_BUCKET" and .type == "r2_bucket" and .bucket_name == "spf-media")' /tmp/main-after.json >/dev/null
+          jq -e '.result.bindings[] | select(.name == "MEDIA_BUCKET" and .type == "r2_bucket" and .bucket_name == "spf-media")' /tmp/media-after.json >/dev/null
+
+          curl -fsS "${auth[@]}" "$api/r2/buckets/$EXPECTED_BUCKET/cors" > /tmp/cors-final.json
+          jq -e --arg origin "$LMS_ORIGIN" '[.result.rules[]? | select((.allowed.origins | index($origin)) != null and (.allowed.methods | index("PUT")) != null and ((.allowed.headers // []) | index("Content-Type")) != null)] | length > 0' /tmp/cors-final.json >/dev/null
+          curl -fsS "${auth[@]}" "$api/r2/buckets/$EXPECTED_BUCKET/domains/managed" > /tmp/public-final.json
+          jq -e '.result.enabled == false' /tmp/public-final.json >/dev/null
+
+          echo "FINAL CLOUDFLARE CHECK PASSED"
+          echo "- main Worker: mklms"
+          echo "- production route: learn.starpipsforex.com/* -> mklms"
+          echo "- private bucket: spf-media"
+          echo "- APP_STORAGE_BUCKET remains spf-media"
+          echo "- MEDIA_BUCKET remains spf-media"
+          echo "- four new direct-upload secret bindings are present on mklms"
+          echo "- existing media/billing bindings remain present"
+          echo "- exact-origin PUT CORS remains configured for https://learn.starpipsforex.com"
+          echo "- r2.dev public access remains disabled"
