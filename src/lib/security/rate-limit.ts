@@ -97,7 +97,10 @@ export async function consumeRateLimitBinding(
   now = new Date(),
 ): Promise<RateLimitResult> {
   const normalizedKey = key.trim() || "unknown";
-  if (!binding) return fallback?.consume(normalizedKey, now) ?? failOpenResult(retryAfterSeconds);
+  if (!binding) {
+    console.warn("MkLMS distributed rate limiter binding is missing; using safe fallback");
+    return fallback?.consume(normalizedKey, now) ?? failOpenResult(retryAfterSeconds);
+  }
 
   try {
     const result = await binding.limit({ key: normalizedKey });
