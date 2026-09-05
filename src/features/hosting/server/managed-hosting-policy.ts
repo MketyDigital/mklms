@@ -3,6 +3,10 @@ import {
   normalizeManagedHostingPolicy,
   type ManagedHostingPolicy,
 } from "../domain/managed-hosting";
+import {
+  PostgresManagedHostingRepository,
+  type ManagedHostingOperatorPolicyRecord,
+} from "../repositories/postgres-managed-hosting.repository";
 
 function parseNumber(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
@@ -36,4 +40,62 @@ export function getManagedHostingPolicy(): ManagedHostingPolicy {
     paymentUrl,
     notice: process.env.MKLMS_MANAGED_HOSTING_NOTICE?.slice(0, 2000) ?? null,
   });
+}
+
+export interface EffectiveManagedHostingPolicy {
+  policy: ManagedHostingPolicy;
+  displayTitle: string;
+  displayDescription: string | null;
+  overdueWarning: string | null;
+  dueDaysAfterMonthEnd: number;
+  graceDays: number;
+  enforcementEnabled: boolean;
+  source: "OPERATOR" | "ENVIRONMENT";
+}
+
+const DEFAULT_DESCRIPTION =
+  "Managed video hosting, protected delivery, live-video infrastructure and platform maintenance.";
+const DEFAULT_OVERDUE_WARNING =
+  "Your managed video hosting and maintenance payment is overdue. Please pay to avoid interruption of hosted video services.";
+
+export async function getEffectiveManagedHostingPolicy(
+  repository = new PostgresManagedHostingRepository(),
+): Promise<EffectiveManagedHostingPolicy> {
+  const environment = getManagedHostingPolicy();
+  let operator: ManagedHostingOperatorPolicyRecord | null = null;
+  try {
+    operator = await repository.getOperatorPolicy();
+  } catch {
+    operator = null;
+  }
+
+  if (!operator?.configured) {
+    return {
+      policy: environment,
+      displayTitle: "Managed Video Hosting & Maintenance",
+      displayDescription: DEFAULT_DESCRIPTION,
+      overdueWarning: DEFAULT_OVERDUE_WARNING,
+      dueDaysAfterMonthEnd: 5,
+      graceDays: 5,
+      enforcementEnabled: true,
+      source: "ENVIRONMENT",
+    };
+  }
+
+  return {
+    policy: normalizeManagedHostingPolicy({
+      enabled: operator.enabled,
+      minimumMonthlyFeeUsd: operator.minimumMonthlyFeeUsd,
+      maximumMonthlyFeeUsd: operator.maximumMonthlyFeeUsd,
+      paymentUrl: environment.paymentUrl,
+      notice: operator.notice,
+    }),
+    displayTitle: operator.displayTitle,
+    displayDescription: operator.displayDescription || DEFAULT_DESCRIPTION,
+    overdueWarning: operator.overdueWarning || DEFAULT_OVERDUE_WARNING,
+    dueDaysAfterMonthEnd: operator.dueDaysAfterMonthEnd,
+    graceDays: operator.graceDays,
+    enforcementEnabled: operator.enforcementEnabled,
+    source: "OPERATOR",
+  };
 }
