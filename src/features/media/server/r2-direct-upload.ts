@@ -17,14 +17,27 @@ interface DirectR2Config {
 }
 
 function getConfig(): DirectR2Config {
-  const bucket = process.env.MKLMS_R2_DIRECT_UPLOAD_BUCKET?.trim();
-  const endpoint = process.env.MKLMS_R2_DIRECT_UPLOAD_ENDPOINT?.trim();
-  const accessKeyId = process.env.MKLMS_R2_DIRECT_UPLOAD_ACCESS_KEY_ID?.trim();
-  const secretAccessKey = process.env.MKLMS_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY?.trim();
+  const accountId = process.env.R2_ACCOUNT_ID?.trim();
+  const bucket =
+    process.env.MKLMS_R2_DIRECT_UPLOAD_BUCKET?.trim() ||
+    process.env.MKLMS_R2_MEDIA_BUCKET?.trim() ||
+    process.env.MKLMS_STORAGE_BUCKET?.trim();
+  const endpoint =
+    process.env.MKLMS_R2_DIRECT_UPLOAD_ENDPOINT?.trim() ||
+    process.env.MKLMS_STORAGE_ENDPOINT?.trim() ||
+    (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : "");
+  const accessKeyId =
+    process.env.MKLMS_R2_DIRECT_UPLOAD_ACCESS_KEY_ID?.trim() ||
+    process.env.MKLMS_STORAGE_ACCESS_KEY_ID?.trim() ||
+    process.env.R2_ACCESS_KEY_ID?.trim();
+  const secretAccessKey =
+    process.env.MKLMS_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY?.trim() ||
+    process.env.MKLMS_STORAGE_SECRET_ACCESS_KEY?.trim() ||
+    process.env.R2_SECRET_ACCESS_KEY?.trim();
 
   if (!bucket || !endpoint || !accessKeyId || !secretAccessKey) {
     throw new Error(
-      "Direct R2 upload is not configured. Set the direct-upload R2 bucket, endpoint and scoped credentials.",
+      "Direct R2 upload is not configured. Supply the R2 bucket, account endpoint and bucket-scoped S3 credentials to the main Worker.",
     );
   }
 
