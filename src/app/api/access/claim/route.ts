@@ -6,7 +6,12 @@ import { verifyClaimCode } from "@/features/access/domain/claim-code";
 import { PostgresAccessRepository } from "@/features/access/repositories/postgres-access.repository";
 import { AccessService } from "@/features/access/services/access.service";
 import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
-import { consumeDistributedRateLimit, getRequestClientKey, rateLimitHeaders } from "@/lib/security/rate-limit";
+import {
+  consumeDistributedRateLimit,
+  FixedWindowRateLimiter,
+  getRequestClientKey,
+  rateLimitHeaders,
+} from "@/lib/security/rate-limit";
 
 const claimSchema = z.object({
   email: z.string().email().optional(),
@@ -16,14 +21,21 @@ const claimSchema = z.object({
   claimCode: z.string().max(160).optional(),
 }).refine((value) => Boolean(value.email || value.phone), { message: "Email or phone is required." });
 
+const limiter = new FixedWindowRateLimiter({ limit: 10, windowMs: 10 * 60_000 });
 const NEUTRAL_FAILURE = "We couldn't verify access with those details.";
 const SERVICE_FAILURE = "Access could not be created right now. Please retry. If it continues, ask the administrator to cancel the pending authorization and create it again.";
 
 export async function POST(request: Request) {
-  const limit = await consumeDistributedRateLimit(
-    "AUTH_RATE_LIMITER",
-    getRequestClientKey(request, "student-claim"),
-  );
+  const clientKey = getRequestClientKey(request, "student-claim");
+  const localLimit = limiter.consume(clientKey);
+  if (!localLimit.allowed) {
+    return NextResponse.json(
+      { ok: false, message: "Too many access requests. Please try again later." },
+      { status: 429, headers: rateLimitHeaders(localLimit) },
+    );
+  }
+
+  const limit = await consumeDistributedRateLimit("AUTH_RATE_LIMITER", clientKey);
   if (!limit.allowed) {
     return NextResponse.json(
       { ok: false, message: "Too many access requests. Please try again shortly." },
