@@ -1,0 +1,46 @@
+name: Check MkLMS Worker versions
+
+on:
+  push:
+    branches:
+      - ops/cloudflare-new-update-setup-2026-09-05
+    paths:
+      - .github/workflows/check-mklms-versions.yml
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Compare active deployment with latest version
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          base="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/mklms"
+
+          curl -fsS "${auth[@]}" "$base/deployments" > /tmp/deployments.json
+          curl -fsS "${auth[@]}" "$base/versions?per_page=10" > /tmp/versions.json
+          jq -e '.success == true' /tmp/deployments.json >/dev/null
+          jq -e '.success == true' /tmp/versions.json >/dev/null
+
+          echo "Active deployment (safe metadata):"
+          jq '.result.deployments[0] | {id,created_on,source,strategy,versions,annotations}' /tmp/deployments.json
+          echo "Latest Worker versions (safe metadata):"
+          jq '[.result[] | {id,number,metadata:{created_on:.metadata.created_on,source:.metadata.source}}][0:5]' /tmp/versions.json
+
+          active=$(jq -r '.result.deployments[0].versions[] | select(.percentage == 100) | .version_id' /tmp/deployments.json | head -1)
+          latest=$(jq -r '.result[0].id' /tmp/versions.json)
+          echo "ACTIVE_VERSION=$active"
+          echo "LATEST_VERSION=$latest"
+          if [ "$active" = "$latest" ]; then
+            echo "Active deployment already uses latest version."
+          else
+            echo "Active deployment intentionally differs from latest version; no deployment change made."
+          fi
