@@ -33,7 +33,6 @@ test('operator can intentionally configure any non-negative monthly minimum whil
 });
 
 test('billing standing supports due overdue restricted paid and waived states', () => {
-  assert.equal(typeof hosting.resolveManagedHostingStanding, 'function');
   const resolve = hosting.resolveManagedHostingStanding;
   const dueAt = new Date('2026-10-05T23:59:59Z');
   const graceEndsAt = new Date('2026-10-10T23:59:59Z');
@@ -68,18 +67,23 @@ test('operator policy is database-backed and not exposed through tenant admin co
   assert.doesNotMatch(operatorApi, /hasValidAdminSession/);
 });
 
-test('non-payment restriction gates hosted uploads and protected paid media but leaves public free-live playback route untouched', async () => {
-  const restrictionPath = new URL('../src/features/hosting/server/managed-hosting-access.ts', import.meta.url);
-  assert.equal(existsSync(restrictionPath), true);
-  const restriction = await readFile(restrictionPath, 'utf8');
-  assert.match(restriction, /RESTRICTED/);
+test('non-payment restriction gates all hosted upload paths and protected paid media while leaving free-live and Zoom join untouched', async () => {
+  const restriction = await source('src/features/hosting/server/managed-hosting-access.ts');
+  assert.match(restriction, /resolveManagedHostingStanding/);
+  assert.match(restriction, /standing\.restricted/);
 
   const initiate = await source('src/app/api/admin/media/direct-upload/initiate/route.ts');
+  const finalize = await source('src/app/api/admin/media/direct-upload/finalize/route.ts');
+  const legacyUpload = await source('src/app/api/admin/media/upload/route.ts');
   const lessonPlayback = await source('src/app/api/courses/[courseId]/lessons/[lessonId]/playback/route.ts');
   const paidPlayback = await source('src/app/api/courses/[courseId]/paid-live/[sessionId]/playback/route.ts');
+  const paidZoomJoin = await source('src/app/api/courses/[courseId]/paid-live/[sessionId]/join/route.ts');
   const freePlayback = await source('src/app/api/live/[slug]/playback/route.ts');
   assert.match(initiate, /managed-hosting-access/);
+  assert.match(finalize, /managed-hosting-access/);
+  assert.match(legacyUpload, /managed-hosting-access/);
   assert.match(lessonPlayback, /managed-hosting-access/);
   assert.match(paidPlayback, /managed-hosting-access/);
+  assert.doesNotMatch(paidZoomJoin, /managed-hosting-access|HOSTING_PAYMENT_REQUIRED/);
   assert.doesNotMatch(freePlayback, /managed-hosting-access|RESTRICTED|hosting payment/i);
 });
