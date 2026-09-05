@@ -36,7 +36,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
 
       - name: Verify required GitHub secrets are present
         shell: bash
@@ -136,7 +135,7 @@ jobs:
           echo "LMS_ORIGIN=https://$hostname" >> "$GITHUB_ENV"
 
       - name: Install dependencies for R2 S3 credential verification
-        run: npm ci --no-audit --no-fund
+        run: npm install --no-audit --no-fund
 
       - name: Verify the new bucket-scoped R2 S3 credentials against spf-media
         shell: bash
