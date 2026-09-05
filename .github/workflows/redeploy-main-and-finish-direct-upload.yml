@@ -1,4 +1,4 @@
-name: Stress MkLMS preview limiter consistency
+name: Verify MkLMS claim route rate limiting
 
 on:
   push:
@@ -15,29 +15,31 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Sustain direct binding calls and record edge location
+      - name: Sustain claim attempts on isolated branch preview
         shell: bash
         run: |
           set -euo pipefail
-          url='https://fix-rate-limit-runtime-diagnostics-2026-09-05-mklms.dry-glitter-7e16.workers.dev/api/debug-rate-limit-probe'
-          saw_false=0
-          false_at=0
-          echo "=== SUSTAINED PREVIEW LIMITER PROBE ==="
+          url='https://fix-rate-limit-runtime-diagnostics-2026-09-05-mklms.dry-glitter-7e16.workers.dev/api/access/claim'
+          body='{"email":"ratelimit-preview-probe@example.invalid","certificateName":"Rate Limit Probe","claimCode":"INVALID-PROBE-CODE"}'
+          saw_429=0
+          first_429=0
+          echo "=== ACTUAL CLAIM ROUTE RATE LIMIT PROBE ==="
           for i in $(seq 1 40); do
             headers=$(mktemp)
-            body=$(mktemp)
-            code=$(curl -sS -D "$headers" -o "$body" -w '%{http_code}' "$url")
+            response=$(mktemp)
+            code=$(curl -sS -D "$headers" -o "$response" -w '%{http_code}' -X POST "$url" -H 'content-type: application/json' --data "$body")
             ray=$(awk 'BEGIN{IGNORECASE=1} /^cf-ray:/ {gsub("\r", ""); print $2}' "$headers" | tail -1)
-            success=$(jq -r '.success // "missing"' "$body" 2>/dev/null || echo invalid-json)
-            printf 'probe=%02d status=%s success=%s ray=%s\n' "$i" "$code" "$success" "${ray:-none}"
-            test "$code" = "200"
-            if [ "$success" = "false" ] && [ "$saw_false" = "0" ]; then
-              saw_false=1
-              false_at=$i
+            retry=$(awk 'BEGIN{IGNORECASE=1} /^retry-after:/ {gsub("\r", ""); print $2}' "$headers" | tail -1)
+            remaining=$(awk 'BEGIN{IGNORECASE=1} /^x-ratelimit-remaining:/ {gsub("\r", ""); print $2}' "$headers" | tail -1)
+            printf 'request=%02d status=%s retry_after=%s remaining=%s ray=%s\n' "$i" "$code" "${retry:-}" "${remaining:-}" "${ray:-none}"
+            if [ "$code" = "429" ] && [ "$saw_429" = "0" ]; then
+              saw_429=1
+              first_429=$i
             fi
-            rm -f "$headers" "$body"
+            rm -f "$headers" "$response"
             sleep 0.5
           done
-          echo "SAW_SUCCESS_FALSE=$saw_false"
-          echo "FIRST_FALSE_AT=$false_at"
-          echo "SUSTAINED_PREVIEW_LIMITER_PROBE_COMPLETE"
+          echo "SAW_429=$saw_429"
+          echo "FIRST_429_AT=$first_429"
+          test "$saw_429" = "1"
+          echo "CLAIM_ROUTE_RATE_LIMIT_VERIFIED"
