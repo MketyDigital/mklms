@@ -1,4 +1,4 @@
-name: Verify MkLMS claim route rate limiting
+name: Confirm MkLMS direct limiter false responses
 
 on:
   push:
@@ -15,31 +15,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Sustain claim attempts on isolated branch preview
+      - name: Read raw direct binding responses without false coalescing
         shell: bash
         run: |
           set -euo pipefail
-          url='https://fix-rate-limit-runtime-diagnostics-2026-09-05-mklms.dry-glitter-7e16.workers.dev/api/access/claim'
-          body='{"email":"ratelimit-preview-probe@example.invalid","certificateName":"Rate Limit Probe","claimCode":"INVALID-PROBE-CODE"}'
-          saw_429=0
-          first_429=0
-          echo "=== ACTUAL CLAIM ROUTE RATE LIMIT PROBE ==="
+          url='https://fix-rate-limit-runtime-diagnostics-2026-09-05-mklms.dry-glitter-7e16.workers.dev/api/debug-rate-limit-probe'
+          saw_false=0
+          first_false=0
+          echo "=== RAW DIRECT LIMITER RESPONSES ==="
           for i in $(seq 1 40); do
             headers=$(mktemp)
-            response=$(mktemp)
-            code=$(curl -sS -D "$headers" -o "$response" -w '%{http_code}' -X POST "$url" -H 'content-type: application/json' --data "$body")
+            body=$(mktemp)
+            code=$(curl -sS -D "$headers" -o "$body" -w '%{http_code}' "$url")
             ray=$(awk 'BEGIN{IGNORECASE=1} /^cf-ray:/ {gsub("\r", ""); print $2}' "$headers" | tail -1)
-            retry=$(awk 'BEGIN{IGNORECASE=1} /^retry-after:/ {gsub("\r", ""); print $2}' "$headers" | tail -1)
-            remaining=$(awk 'BEGIN{IGNORECASE=1} /^x-ratelimit-remaining:/ {gsub("\r", ""); print $2}' "$headers" | tail -1)
-            printf 'request=%02d status=%s retry_after=%s remaining=%s ray=%s\n' "$i" "$code" "${retry:-}" "${remaining:-}" "${ray:-none}"
-            if [ "$code" = "429" ] && [ "$saw_429" = "0" ]; then
-              saw_429=1
-              first_429=$i
+            json=$(cat "$body")
+            printf 'probe=%02d status=%s ray=%s response=%s\n' "$i" "$code" "${ray:-none}" "$json"
+            test "$code" = "200"
+            if jq -e 'has("success") and .success == false' "$body" >/dev/null; then
+              if [ "$saw_false" = "0" ]; then first_false=$i; fi
+              saw_false=1
             fi
-            rm -f "$headers" "$response"
+            rm -f "$headers" "$body"
             sleep 0.5
           done
-          echo "SAW_429=$saw_429"
-          echo "FIRST_429_AT=$first_429"
-          test "$saw_429" = "1"
-          echo "CLAIM_ROUTE_RATE_LIMIT_VERIFIED"
+          echo "SAW_SUCCESS_FALSE=$saw_false"
+          echo "FIRST_FALSE_AT=$first_false"
+          test "$saw_false" = "1"
+          echo "DIRECT_LIMITER_FALSE_CONFIRMED"
