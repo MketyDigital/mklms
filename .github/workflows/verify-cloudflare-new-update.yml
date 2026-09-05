@@ -116,23 +116,39 @@ jobs:
           fi
           echo "spf-media r2.dev public access is disabled."
 
-      - name: Discover the exact production LMS custom domain
+      - name: Discover exact production LMS origin
         shell: bash
         run: |
           set -euo pipefail
           auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
-          url="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/domains"
-          curl -fsS "${auth[@]}" "$url" > /tmp/worker-domains.json
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
+
+          curl -fsS "${auth[@]}" "$api/workers/domains" > /tmp/worker-domains.json
           jq -e '.success == true' /tmp/worker-domains.json >/dev/null
           count=$(jq --arg service "$EXPECTED_MAIN_WORKER" '[.result[] | select(.service == $service)] | length' /tmp/worker-domains.json)
-          if [ "$count" -ne 1 ]; then
-            echo "Expected exactly one custom domain attached to mklms; found $count. No changes made."
+
+          if [ "$count" -eq 1 ]; then
+            hostname=$(jq -r --arg service "$EXPECTED_MAIN_WORKER" '.result[] | select(.service == $service) | .hostname' /tmp/worker-domains.json)
+            origin="https://$hostname"
+            echo "Production LMS origin discovered from Worker Custom Domain: $origin"
+          elif [ "$count" -eq 0 ]; then
+            curl -fsS "${auth[@]}" "$api/workers/scripts/$EXPECTED_MAIN_WORKER/subdomain" > /tmp/script-subdomain.json
+            jq -e '.success == true and .result.enabled == true' /tmp/script-subdomain.json >/dev/null || {
+              echo "mklms has no custom domain and workers.dev is not enabled. No changes made."
+              exit 1
+            }
+            curl -fsS "${auth[@]}" "$api/workers/subdomain" > /tmp/account-subdomain.json
+            jq -e '.success == true and (.result.subdomain | length > 0)' /tmp/account-subdomain.json >/dev/null
+            workers_subdomain=$(jq -r '.result.subdomain' /tmp/account-subdomain.json)
+            origin="https://$EXPECTED_MAIN_WORKER.$workers_subdomain.workers.dev"
+            echo "Production LMS origin discovered from active workers.dev route: $origin"
+          else
+            echo "mklms has multiple custom domains ($count); refusing to choose one automatically. No changes made."
             jq -r --arg service "$EXPECTED_MAIN_WORKER" '.result[] | select(.service == $service) | .hostname' /tmp/worker-domains.json || true
             exit 1
           fi
-          hostname=$(jq -r --arg service "$EXPECTED_MAIN_WORKER" '.result[] | select(.service == $service) | .hostname' /tmp/worker-domains.json)
-          echo "Production LMS hostname discovered from Cloudflare: $hostname"
-          echo "LMS_ORIGIN=https://$hostname" >> "$GITHUB_ENV"
+
+          echo "LMS_ORIGIN=$origin" >> "$GITHUB_ENV"
 
       - name: Install dependencies for R2 S3 credential verification
         run: npm install --no-audit --no-fund
