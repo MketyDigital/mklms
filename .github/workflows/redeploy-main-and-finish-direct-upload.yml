@@ -1,4 +1,4 @@
-name: Diagnose MkLMS production routing
+name: Diagnose MkLMS production DNS
 
 on:
   push:
@@ -17,42 +17,35 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      EXPECTED_MAIN_WORKER: mklms
       EXPECTED_HOST: learn.starpipsforex.com
-      EXPECTED_ROUTE: learn.starpipsforex.com/*
     steps:
-      - name: Read-only Cloudflare routing diagnostic
+      - name: Read-only DNS and TLS diagnostic
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${CLOUDFLARE_API_TOKEN:-}"
-          test -n "${CLOUDFLARE_ACCOUNT_ID:-}"
           auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
-          account_api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
-
-          curl -fsS "${auth[@]}" "$account_api/workers/scripts" > /tmp/scripts.json
-          jq -e --arg worker "$EXPECTED_MAIN_WORKER" '.result[] | select(.id == $worker)' /tmp/scripts.json >/dev/null
-
-          curl -fsS "${auth[@]}" "$account_api/workers/scripts/$EXPECTED_MAIN_WORKER/deployments" > /tmp/deployments.json
-          active=$(jq -r '.result.deployments[0].versions[] | select(.percentage == 100) | .version_id' /tmp/deployments.json | head -1)
-          echo "ACTIVE_MKLMS_VERSION=$active"
-
-          echo "=== ACCOUNT CUSTOM DOMAINS ==="
-          curl -sS "${auth[@]}" "$account_api/workers/domains" > /tmp/domains.json || true
-          jq -c '.result[]? | {hostname,service,zone_id,environment}' /tmp/domains.json 2>/dev/null || cat /tmp/domains.json
-
-          echo "=== ZONES AND MATCHING WORKER ROUTES ==="
+          echo "=== ZONES ==="
           curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones?account.id=$CLOUDFLARE_ACCOUNT_ID&per_page=100" > /tmp/zones.json
+          jq -r '.result[] | [.id,.name,.status] | @tsv' /tmp/zones.json
+
+          echo "=== DNS RECORDS MATCHING HOST ==="
+          found=0
           jq -r '.result[] | [.id,.name] | @tsv' /tmp/zones.json | while IFS=$'\t' read -r zid zname; do
-            routes=$(curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zid/workers/routes")
-            matches=$(printf '%s' "$routes" | jq -c --arg host "$EXPECTED_HOST" --arg route "$EXPECTED_ROUTE" '[.result[]? | select((.pattern == $route) or (.pattern | contains($host)) or (.script == "mklms"))]')
-            if [ "$matches" != "[]" ]; then
-              echo "ZONE=$zname ID=$zid ROUTES=$matches"
+            records=$(curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zid/dns_records?name=$EXPECTED_HOST&per_page=100")
+            count=$(printf '%s' "$records" | jq '.result | length')
+            if [ "$count" -gt 0 ]; then
+              echo "ZONE=$zname ID=$zid"
+              printf '%s' "$records" | jq -c '.result[] | {id,type,name,content,proxied,ttl}'
             fi
           done
 
-          echo "=== CURRENT MAIN WORKER SETTINGS NAMES ONLY ==="
-          curl -fsS "${auth[@]}" "$account_api/workers/scripts/$EXPECTED_MAIN_WORKER/settings" > /tmp/settings.json
-          jq -r '.result.bindings[]? | [.name,.type, (.bucket_name // .id // "")] | @tsv' /tmp/settings.json | sort
+          echo "=== CERTIFICATES COVERING HOST ==="
+          jq -r '.result[] | [.id,.name] | @tsv' /tmp/zones.json | while IFS=$'\t' read -r zid zname; do
+            certs=$(curl -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zid/ssl/certificate_packs?status=all" || true)
+            matches=$(printf '%s' "$certs" | jq -c --arg host "$EXPECTED_HOST" '[.result[]? | select([.hosts[]?] | index($host)) | {id,status,type,hosts}]' 2>/dev/null || echo '[]')
+            if [ "$matches" != "[]" ]; then
+              echo "ZONE=$zname CERTS=$matches"
+            fi
+          done
 
-          echo "READ_ONLY_ROUTING_DIAGNOSTIC_COMPLETE"
+          echo "READ_ONLY_DNS_DIAGNOSTIC_COMPLETE"
