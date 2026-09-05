@@ -1,4 +1,4 @@
-name: Diagnose MkLMS real-browser challenge
+name: Diagnose MkLMS Cloudflare audit history
 
 on:
   push:
@@ -13,42 +13,23 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 8
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - name: Test custom hostname with real headless Chrome
+      - name: Read-only Cloudflare audit history
         shell: bash
         run: |
           set -euo pipefail
-          host=https://learn.starpipsforex.com
-          worker=https://mklms.dry-glitter-7e16.workers.dev
-          chrome=$(command -v google-chrome || command -v google-chrome-stable || command -v chromium-browser || command -v chromium || true)
-          echo "CHROME_BIN=${chrome:-none}"
-          if [ -z "$chrome" ]; then
-            echo "No Chrome/Chromium binary available on runner."
-            exit 0
-          fi
-
-          run_browser() {
-            label="$1"; url="$2"
-            echo "=== $label ==="
-            rm -rf /tmp/chrome-profile /tmp/chrome-dom.html
-            timeout 35s "$chrome" \
-              --headless=new \
-              --no-sandbox \
-              --disable-dev-shm-usage \
-              --disable-gpu \
-              --user-data-dir=/tmp/chrome-profile \
-              --virtual-time-budget=20000 \
-              --dump-dom "$url" > /tmp/chrome-dom.html 2>/tmp/chrome.err || true
-            echo "DOM_MARKERS:"
-            grep -Eio '<title>[^<]+|Just a moment|Verify you are human|challenge-platform|cf-chl|STARPIPSFOREX|MkLMS|Admin Login|Student Login' /tmp/chrome-dom.html | head -20 || true
-            echo "COOKIE_FILES:"
-            find /tmp/chrome-profile -type f 2>/dev/null | grep -Ei 'Cookies$' | head -5 || true
-            echo "ERROR_TAIL:"
-            tail -20 /tmp/chrome.err || true
-          }
-
-          run_browser 'CUSTOM HOST ROOT' "$host/"
-          run_browser 'CUSTOM HOST LOGIN' "$host/login"
-          run_browser 'WORKERS.DEV ROOT' "$worker/"
-          echo "READ_ONLY_REAL_BROWSER_DIAGNOSTIC_COMPLETE"
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          echo "=== AUDIT LOGS V2 SINCE 2026-08-30 ==="
+          curl -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/logs/audit?since=2026-08-30T00:00:00Z&before=2026-09-06T00:00:00Z&limit=200" > /tmp/audit.json || true
+          jq -c '{success,errors,messages,result_info}' /tmp/audit.json 2>/dev/null || cat /tmp/audit.json
+          echo "=== RELEVANT CHANGES ==="
+          jq -c '.result[]? | select(
+            ((.zone.name // "") == "mkety.com") or
+            ((.raw.uri // "") | test("workers|custom_hostnames|settings|rulesets|firewall|security"; "i")) or
+            ((.action.description // "") | test("worker|hostname|security|browser|firewall|rule|setting|route"; "i"))
+          ) | {time:.action.time,description:.action.description,type:.action.type,result:.action.result,actor:{type:.actor.type,email:.actor.email,context:.actor.context,token_name:.actor.token_name},zone:.zone.name,raw:{method:.raw.method,status_code:.raw.status_code,uri:.raw.uri},resource:{type:.resource.type,product:.resource.product,request:.resource.request,response:.resource.response}}' /tmp/audit.json 2>/dev/null | head -200 || true
+          echo "READ_ONLY_AUDIT_DIAGNOSTIC_COMPLETE"
