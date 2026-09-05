@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getCurrentStudentSession } from "@/features/access/server/current-student";
 import { PostgresMessageRepository } from "@/features/messages/repositories/postgres-message.repository";
 import {
+  consumeDistributedRateLimit,
   FixedWindowRateLimiter,
   getRequestClientKey,
   rateLimitHeaders,
@@ -33,6 +34,17 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { ok: false, message: "You are sending messages too quickly. Try again shortly." },
       { status: 429, headers: rateLimitHeaders(limit) },
+    );
+  }
+
+  const distributedLimit = await consumeDistributedRateLimit(
+    "STUDENT_MUTATION_RATE_LIMITER",
+    `student:${session.studentId}:messages`,
+  );
+  if (!distributedLimit.allowed) {
+    return NextResponse.json(
+      { ok: false, message: "You are sending messages too quickly. Try again shortly." },
+      { status: 429, headers: rateLimitHeaders(distributedLimit) },
     );
   }
 
