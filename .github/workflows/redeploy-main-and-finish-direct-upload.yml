@@ -1,4 +1,4 @@
-name: Diagnose MkLMS Cloudflare security event recheck
+name: Diagnose MkLMS Cloudflare challenge layers
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - name: Recheck fresh Cloudflare challenge Ray
+      - name: Read-only challenge layer inspection
         shell: bash
         run: |
           set -euo pipefail
@@ -30,13 +30,39 @@ jobs:
           test -n "$zone_id"
           echo "ZONE_ID=$zone_id"
 
-          curl -sS -D /tmp/headers.txt -o /tmp/body.html --connect-timeout 8 --max-time 15 "https://$host/" || true
-          grep -Ei '^(HTTP/|cf-|server:|content-type:)' /tmp/headers.txt || true
-          ray=$(awk 'BEGIN{IGNORECASE=1} /^cf-ray:/ {gsub("\r",""); print $2; exit}' /tmp/headers.txt | cut -d- -f1)
-          echo "RAY_ID=${ray:-none}"
-          test -n "${ray:-}"
+          echo "=== PUBLIC DNS ==="
+          dig +short CNAME "$host" || true
+          dig +short A "$host" || true
+          dig +short AAAA "$host" || true
 
-          echo "=== RAY LOOKUP ==="
-          curl -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/logs/rayids/$ray" > /tmp/ray.json || true
-          jq -c '{success,errors,messages}' /tmp/ray.json || cat /tmp/ray.json
-          jq -c '.result | {RayID,ClientIP,ClientCountry,ClientRequestHost,ClientRequestMethod,ClientRequestPath,ClientRequestUserAgent,EdgeResponseStatus,SecurityLevel,WAFAction,WAFRuleID,WAFRuleMessage,FirewallMatchesActions,FirewallMatchesRuleIDs,FirewallMatchesSources,BotScore,BotScoreSrc}' /tmp/ray.json 2>/dev/null || true
+          echo "=== CURRENT RESPONSE ==="
+          curl -sS -D /tmp/headers.txt -o /tmp/body.html --connect-timeout 8 --max-time 15 "https://$host/" || true
+          grep -Ei '^(HTTP/|cf-|server:|content-type:|set-cookie:|location:)' /tmp/headers.txt || true
+          echo "BODY_TITLE=$(grep -oPm1 '(?<=<title>)[^<]+' /tmp/body.html || true)"
+
+          echo "=== ZONE SETTINGS ==="
+          for setting in security_level browser_check challenge_ttl privacy_pass origin_error_page_pass_thru always_use_https min_tls_version opportunistic_encryption tls_1_3; do
+            printf '%s=' "$setting"
+            curl -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/settings/$setting" | jq -c '{success,result:{id:.result.id,value:.result.value,modified_on:.result.modified_on},errors}' || true
+          done
+
+          echo "=== BOT MANAGEMENT ==="
+          curl -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/bot_management" | jq -c '{success,result,errors}' || true
+
+          echo "=== ZONE RULESETS ==="
+          curl -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/rulesets" > /tmp/zrules.json || true
+          jq -c '{success,errors}' /tmp/zrules.json || true
+          jq -c '.result[]? | {id,name,kind,phase,version,last_updated}' /tmp/zrules.json || true
+          for id in $(jq -r '.result[]?.id' /tmp/zrules.json 2>/dev/null); do
+            curl -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/rulesets/$id" | jq -c '.result | {id,name,kind,phase,rules:[.rules[]? | {id,version,action,expression,description,enabled,action_parameters,ratelimit,logging}]}' || true
+          done
+
+          echo "=== ACCOUNT RULESETS ==="
+          curl -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/rulesets" > /tmp/arules.json || true
+          jq -c '{success,errors}' /tmp/arules.json || true
+          jq -c '.result[]? | {id,name,kind,phase,version,last_updated}' /tmp/arules.json || true
+
+          echo "=== CUSTOM HOSTNAME ==="
+          curl -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/custom_hostnames?hostname=$host" | jq -c '{success,errors,result:[.result[]? | {id,hostname,status,ssl,custom_origin_server,custom_metadata}]}' || true
+
+          echo "READ_ONLY_CHALLENGE_LAYER_INSPECTION_COMPLETE"
