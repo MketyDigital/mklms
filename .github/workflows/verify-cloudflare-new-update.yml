@@ -1,0 +1,198 @@
+name: Verify MkLMS Cloudflare update setup
+
+on:
+  push:
+    branches:
+      - ops/cloudflare-new-update-setup-2026-09-05
+    paths:
+      - .github/workflows/verify-cloudflare-new-update.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mklms-cloudflare-update-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.MKLMS_R2_DIRECT_UPLOAD_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.MKLMS_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY }}
+      EXPECTED_MAIN_WORKER: mklms
+      EXPECTED_MEDIA_WORKER: mklms-media-delivery
+      EXPECTED_BILLING_WORKER: mkety-managed-hosting-billing
+      EXPECTED_BUCKET: spf-media
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@v4
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Verify required GitHub secrets are present
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing required GitHub secret backing $name"
+              exit 1
+            fi
+          done
+          echo "All four required GitHub secrets are present. Values are not printed."
+
+      - name: Verify exact Cloudflare account contains MkLMS resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
+
+          curl -fsS "${auth[@]}" "$api" > /tmp/account.json
+          jq -e '.success == true and .result.id != null' /tmp/account.json >/dev/null
+          account_name=$(jq -r '.result.name' /tmp/account.json)
+          echo "Verified Cloudflare account: $account_name"
+
+          curl -fsS "${auth[@]}" "$api/workers/scripts" > /tmp/scripts.json
+          jq -e '.success == true' /tmp/scripts.json >/dev/null
+          for worker in "$EXPECTED_MAIN_WORKER" "$EXPECTED_MEDIA_WORKER" "$EXPECTED_BILLING_WORKER"; do
+            jq -e --arg worker "$worker" '.result[] | select(.id == $worker)' /tmp/scripts.json >/dev/null || {
+              echo "Expected Worker not found in this Cloudflare account: $worker"
+              exit 1
+            }
+            echo "Found expected Worker: $worker"
+          done
+
+          curl -fsS "${auth[@]}" "$api/r2/buckets/$EXPECTED_BUCKET" > /tmp/bucket.json
+          jq -e '.success == true and .result.name == "spf-media"' /tmp/bucket.json >/dev/null
+          echo "Found expected R2 bucket: $EXPECTED_BUCKET"
+
+      - name: Verify existing R2 Worker bindings are exactly where expected
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          base="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts"
+
+          curl -fsS "${auth[@]}" "$base/$EXPECTED_MAIN_WORKER/settings" > /tmp/main-settings.json
+          curl -fsS "${auth[@]}" "$base/$EXPECTED_MEDIA_WORKER/settings" > /tmp/media-settings.json
+
+          jq -e '.success == true' /tmp/main-settings.json >/dev/null
+          jq -e '.success == true' /tmp/media-settings.json >/dev/null
+
+          jq -e --arg bucket "$EXPECTED_BUCKET" '.result.bindings[] | select(.name == "APP_STORAGE_BUCKET" and .type == "r2_bucket" and .bucket_name == $bucket)' /tmp/main-settings.json >/dev/null || {
+            echo "Main Worker APP_STORAGE_BUCKET is not bound to spf-media. No changes made."
+            exit 1
+          }
+          jq -e --arg bucket "$EXPECTED_BUCKET" '.result.bindings[] | select(.name == "MEDIA_BUCKET" and .type == "r2_bucket" and .bucket_name == $bucket)' /tmp/media-settings.json >/dev/null || {
+            echo "Media Worker MEDIA_BUCKET is not bound to spf-media. No changes made."
+            exit 1
+          }
+          echo "Existing main/media R2 bindings are correct."
+
+          echo "Existing integration binding names on main Worker (values hidden):"
+          jq -r '.result.bindings[]?.name' /tmp/main-settings.json | sort | grep -E '^(MKLMS_MEDIA_SIGNING_SECRET|MKLMS_MEDIA_DELIVERY_BASE_URL|MKLMS_MANAGED_HOSTING_OPERATOR_KEY|MKLMS_BILLING_SERVICE_URL|MKLMS_BILLING_INSTALLATION_ID|MKLMS_BILLING_SHARED_SECRET)$' || true
+
+      - name: Verify spf-media is not public on r2.dev
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          url="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/$EXPECTED_BUCKET/domains/managed"
+          curl -fsS "${auth[@]}" "$url" > /tmp/r2-managed-domain.json
+          jq -e '.success == true' /tmp/r2-managed-domain.json >/dev/null
+          enabled=$(jq -r '.result.enabled' /tmp/r2-managed-domain.json)
+          if [ "$enabled" != "false" ]; then
+            echo "STOP: spf-media r2.dev public access is enabled. Verification refuses to continue."
+            exit 1
+          fi
+          echo "spf-media r2.dev public access is disabled."
+
+      - name: Discover the exact production LMS custom domain
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          url="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/domains"
+          curl -fsS "${auth[@]}" "$url" > /tmp/worker-domains.json
+          jq -e '.success == true' /tmp/worker-domains.json >/dev/null
+          count=$(jq --arg service "$EXPECTED_MAIN_WORKER" '[.result[] | select(.service == $service)] | length' /tmp/worker-domains.json)
+          if [ "$count" -ne 1 ]; then
+            echo "Expected exactly one custom domain attached to mklms; found $count. No changes made."
+            jq -r --arg service "$EXPECTED_MAIN_WORKER" '.result[] | select(.service == $service) | .hostname' /tmp/worker-domains.json || true
+            exit 1
+          fi
+          hostname=$(jq -r --arg service "$EXPECTED_MAIN_WORKER" '.result[] | select(.service == $service) | .hostname' /tmp/worker-domains.json)
+          echo "Production LMS hostname discovered from Cloudflare: $hostname"
+          echo "LMS_ORIGIN=https://$hostname" >> "$GITHUB_ENV"
+
+      - name: Install dependencies for R2 S3 credential verification
+        run: npm ci --no-audit --no-fund
+
+      - name: Verify the new bucket-scoped R2 S3 credentials against spf-media
+        shell: bash
+        run: |
+          set -euo pipefail
+          export MKLMS_R2_DIRECT_UPLOAD_BUCKET="$EXPECTED_BUCKET"
+          export MKLMS_R2_DIRECT_UPLOAD_ENDPOINT="https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com"
+          export MKLMS_R2_DIRECT_UPLOAD_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
+          export MKLMS_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
+          node --input-type=module <<'NODE'
+          import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3';
+          const client = new S3Client({
+            region: 'auto',
+            endpoint: process.env.MKLMS_R2_DIRECT_UPLOAD_ENDPOINT,
+            forcePathStyle: true,
+            credentials: {
+              accessKeyId: process.env.MKLMS_R2_DIRECT_UPLOAD_ACCESS_KEY_ID,
+              secretAccessKey: process.env.MKLMS_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY,
+            },
+          });
+          await client.send(new ListObjectsV2Command({
+            Bucket: process.env.MKLMS_R2_DIRECT_UPLOAD_BUCKET,
+            MaxKeys: 1,
+          }));
+          console.log('R2 S3 credentials can access the expected spf-media bucket.');
+          NODE
+
+      - name: Read current R2 CORS policy without changing it
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          url="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/$EXPECTED_BUCKET/cors"
+          curl -fsS "${auth[@]}" "$url" > /tmp/cors.json
+          jq -e '.success == true' /tmp/cors.json >/dev/null
+          echo "Current spf-media CORS policy (safe fields only):"
+          jq '{rules: [.result.rules[]? | {id, allowed, exposeHeaders, maxAgeSeconds}]}' /tmp/cors.json
+
+          has_required=$(jq --arg origin "$LMS_ORIGIN" '[.result.rules[]? | select((.allowed.origins | index($origin)) != null and (.allowed.methods | index("PUT")) != null and ((.allowed.headers // []) | index("Content-Type")) != null)] | length' /tmp/cors.json)
+          if [ "$has_required" -gt 0 ]; then
+            echo "Required direct-upload PUT CORS rule already exists for $LMS_ORIGIN."
+          else
+            echo "Required direct-upload PUT CORS rule is missing for $LMS_ORIGIN."
+            echo "CORS_UPDATE_REQUIRED=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Verification summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Cloudflare verification completed with zero production mutations."
+          echo "Account resource identity: verified"
+          echo "Workers: mklms, mklms-media-delivery, mkety-managed-hosting-billing verified"
+          echo "R2 bucket: spf-media verified"
+          echo "R2 bindings: verified"
+          echo "R2 public r2.dev access: disabled"
+          echo "R2 S3 direct-upload credentials: verified"
+          echo "Production LMS origin: $LMS_ORIGIN"
+          echo "CORS update required: ${CORS_UPDATE_REQUIRED:-false}"
