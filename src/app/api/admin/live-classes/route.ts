@@ -10,7 +10,8 @@ const optionalUrl = z.string().trim().max(2048).optional().nullable();
 const batchFields = {
   title: z.string().trim().min(1).max(200), slug: z.string().trim().max(200).optional().nullable(),
   description: z.string().trim().max(5000).optional().nullable(), expectedViewerBaseline: z.number().int().min(0).max(10_000_000).optional(),
-  viewerDisplayMode: z.enum(["CONFIGURED_BASELINE", "ACTIVE_ONLY", "BASELINE_PLUS_ACTIVE"]).optional(), endedMessage: z.string().trim().max(5000).optional().nullable(),
+  viewerDisplayMode: z.enum(["CONFIGURED_BASELINE", "ACTIVE_ONLY", "BASELINE_PLUS_ACTIVE"]).optional(),
+  attendeeChatVisibility: z.enum(["OWNER_ONLY", "PUBLIC"]).optional(), endedMessage: z.string().trim().max(5000).optional().nullable(),
   endedRedirectUrl: optionalUrl, notificationDestination: optionalShortText,
 };
 const sessionFields = {
