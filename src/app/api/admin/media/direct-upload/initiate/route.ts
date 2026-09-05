@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
+import { getManagedHostingServiceAccess } from "@/features/hosting/server/managed-hosting-access";
 import { createDirectR2UploadAuthorization } from "@/features/media/server/r2-direct-upload";
 
 const schema = z.object({
@@ -14,6 +15,18 @@ const schema = z.object({
 export async function POST(request: Request) {
   if (!(await hasValidAdminSession())) {
     return NextResponse.json({ ok: false, message: "Unauthorized." }, { status: 401 });
+  }
+
+  const hostingAccess = await getManagedHostingServiceAccess();
+  if (!hostingAccess.allowed) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "HOSTING_PAYMENT_REQUIRED",
+        message: "New hosted-video uploads are temporarily restricted because a managed hosting payment is overdue. Payment confirmation restores uploads automatically.",
+      },
+      { status: 402 },
+    );
   }
 
   const parsed = schema.safeParse(await request.json().catch(() => null));
