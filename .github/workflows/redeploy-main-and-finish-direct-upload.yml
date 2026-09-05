@@ -1,4 +1,4 @@
-name: Inventory MkLMS SaaS WAF coverage
+name: Verify MkLMS production worker after security merge
 
 on:
   push:
@@ -18,35 +18,48 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - name: Read-only inventory SaaS custom hostnames and shared WAF
+      - name: Read-only verify production Worker and SaaS edge
         shell: bash
         run: |
           set -euo pipefail
           auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          script=mklms
           zone_name=mkety.com
+          host=learn.starpipsforex.com
           description='Mkety block impossible exploit probes'
+
+          echo "=== ACTIVE WORKER DEPLOYMENTS ==="
+          curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$script/deployments" > /tmp/deployments.json
+          jq -e '.success == true' /tmp/deployments.json >/dev/null
+          jq -c '.result.deployments // .result // [] | .[0:5] | .[]? | {id,created_on,source,annotations,versions}' /tmp/deployments.json
+
+          echo "=== WORKER SETTINGS/BINDINGS ==="
+          curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$script/settings" > /tmp/settings.json
+          jq -e '.success == true' /tmp/settings.json >/dev/null
+          jq -c '{compatibility_date:.result.compatibility_date,compatibility_flags:.result.compatibility_flags,bindings:[.result.bindings[]? | {name,type,bucket_name,namespace_id}]}' /tmp/settings.json
 
           zones=$(curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones?account.id=$CLOUDFLARE_ACCOUNT_ID&name=$zone_name")
           zone_id=$(printf '%s' "$zones" | jq -r '.result[0].id // empty')
           test -n "$zone_id"
 
-          echo "=== SHARED CUSTOM WAF RULE ==="
+          echo "=== SHARED WAF ==="
           curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/rulesets/phases/http_request_firewall_custom/entrypoint" > /tmp/rules.json
           jq -e --arg d "$description" '.success == true and any(.result.rules[]?; .description == $d and .action == "block" and .enabled == true)' /tmp/rules.json >/dev/null
-          jq -c --arg d "$description" '.result.rules[]? | select(.description == $d) | {id,description,action,expression,enabled,last_updated}' /tmp/rules.json
+          jq -c --arg d "$description" '.result.rules[]? | select(.description == $d) | {id,description,action,enabled,last_updated}' /tmp/rules.json
 
-          echo "=== CURRENT CLOUDFLARE FOR SAAS CUSTOM HOSTNAMES ==="
-          curl -fsS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/$zone_id/custom_hostnames?per_page=50&page=1" > /tmp/hosts.json
-          jq -e '.success == true' /tmp/hosts.json >/dev/null
-          jq -c '.result[]? | {id,hostname,status,ssl_status:.ssl.status,custom_origin_server,custom_metadata}' /tmp/hosts.json
-          echo "CUSTOM_HOSTNAME_COUNT=$(jq '.result | length' /tmp/hosts.json)"
-
-          echo "=== SAFE HTTP CHECKS FOR EACH ACTIVE HOSTNAME ==="
-          jq -r '.result[]? | select(.status == "active") | .hostname' /tmp/hosts.json | while read -r host; do
-            [ -n "$host" ] || continue
-            root_code=$(curl -sS -o /tmp/root.html -w '%{http_code}' --connect-timeout 8 --max-time 15 "https://$host/" || true)
-            probe_code=$(curl -sS -o /tmp/probe.html -w '%{http_code}' --connect-timeout 8 --max-time 15 "https://$host/.env" || true)
-            echo "HOST=$host ROOT_HTTP=$root_code PROBE_ENV_HTTP=$probe_code"
-          done
-
-          echo "READ_ONLY_SAAS_WAF_INVENTORY_COMPLETE"
+          echo "=== LIVE HTTP ==="
+          root_code=$(curl -sS -D /tmp/root.headers -o /tmp/root.html -w '%{http_code}' --connect-timeout 8 --max-time 15 "https://$host/")
+          login_code=$(curl -sS -D /tmp/login.headers -o /tmp/login.html -w '%{http_code}' --connect-timeout 8 --max-time 15 "https://$host/login")
+          admin_code=$(curl -sS -D /tmp/admin.headers -o /tmp/admin.html -w '%{http_code}' --connect-timeout 8 --max-time 15 "https://$host/admin-login")
+          probe_code=$(curl -sS -o /tmp/probe.html -w '%{http_code}' --connect-timeout 8 --max-time 15 "https://$host/.env" || true)
+          worker_code=$(curl -sS -o /tmp/worker.html -w '%{http_code}' --connect-timeout 8 --max-time 15 "https://mklms.dry-glitter-7e16.workers.dev/" || true)
+          echo "ROOT_HTTP=$root_code LOGIN_HTTP=$login_code ADMIN_LOGIN_HTTP=$admin_code PROBE_ENV_HTTP=$probe_code WORKERS_DEV_HTTP=$worker_code"
+          echo "ROOT_TITLE=$(grep -oPm1 '(?<=<title>)[^<]+' /tmp/root.html || true)"
+          grep -Ei '^(cf-ray:|cf-mitigated:|server:)' /tmp/root.headers || true
+          test "$root_code" = "200"
+          test "$login_code" = "200"
+          test "$admin_code" = "200"
+          test "$probe_code" = "403"
+          test "$worker_code" = "200"
+          grep -q 'STARPIPSFOREX' /tmp/root.html
+          echo "READ_ONLY_PRODUCTION_SECURITY_VERIFY_COMPLETE"
