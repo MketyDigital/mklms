@@ -1,4 +1,4 @@
-name: Confirm MkLMS direct limiter false responses
+name: Inspect exact MkLMS preview ratelimit metadata
 
 on:
   push:
@@ -14,31 +14,40 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 8
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - name: Read raw direct binding responses without false coalescing
+      - name: Read preview version resources around ecd061e deployment
         shell: bash
         run: |
           set -euo pipefail
-          url='https://fix-rate-limit-runtime-diagnostics-2026-09-05-mklms.dry-glitter-7e16.workers.dev/api/debug-rate-limit-probe'
-          saw_false=0
-          first_false=0
-          echo "=== RAW DIRECT LIMITER RESPONSES ==="
-          for i in $(seq 1 40); do
-            headers=$(mktemp)
-            body=$(mktemp)
-            code=$(curl -sS -D "$headers" -o "$body" -w '%{http_code}' "$url")
-            ray=$(awk 'BEGIN{IGNORECASE=1} /^cf-ray:/ {gsub("\r", ""); print $2}' "$headers" | tail -1)
-            json=$(cat "$body")
-            printf 'probe=%02d status=%s ray=%s response=%s\n' "$i" "$code" "${ray:-none}" "$json"
-            test "$code" = "200"
-            if jq -e 'has("success") and .success == false' "$body" >/dev/null; then
-              if [ "$saw_false" = "0" ]; then first_false=$i; fi
-              saw_false=1
-            fi
-            rm -f "$headers" "$body"
-            sleep 0.5
-          done
-          echo "SAW_SUCCESS_FALSE=$saw_false"
-          echo "FIRST_FALSE_AT=$first_false"
-          test "$saw_false" = "1"
-          echo "DIRECT_LIMITER_FALSE_CONFIRMED"
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          script=mklms
+
+          echo "=== RECENT MKLMS VERSIONS ==="
+          curl -fsS "${auth[@]}" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$script/versions" \
+            > /tmp/versions.json
+          jq -e '.success == true' /tmp/versions.json >/dev/null
+          jq -c '(.result // [])[:20][]? | {id,number,metadata}' /tmp/versions.json
+
+          echo "=== AUDIT UPLOADS 19:48-19:51 UTC ==="
+          curl -fsS "${auth[@]}" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/logs/audit?since=2026-09-05T19:48:00Z&before=2026-09-05T19:51:30Z&limit=200" \
+            > /tmp/audit.json
+          jq -e '.success == true' /tmp/audit.json >/dev/null
+          jq -c '.result[]? | select((.raw.uri // "") | contains("/workers/scripts/mklms/versions")) | {
+            time:.action.time,
+            uri:.raw.uri,
+            version_id:.resource.response.id,
+            number:.resource.response.number,
+            source:.resource.response.metadata.source,
+            bindings:[.resource.response.resources.bindings[]? | select(.namespace_id != null and .simple != null) | {name,namespace_id,simple}]
+          }' /tmp/audit.json
+
+          echo "=== PREVIEW RATE LIMIT ASSERTION ==="
+          matching=$(jq -c '[.result[]? | select((.raw.uri // "") | contains("/workers/scripts/mklms/versions")) | select(.action.time >= "2026-09-05T19:49:30Z" and .action.time <= "2026-09-05T19:51:10Z") | {time:.action.time,id:.resource.response.id,bindings:[.resource.response.resources.bindings[]? | select(.name == "AUTH_RATE_LIMITER") | {name,namespace_id,simple}]}]' /tmp/audit.json)
+          echo "$matching"
+          jq -e 'any(.[]; any(.bindings[]?; .name == "AUTH_RATE_LIMITER" and .namespace_id == "51090501" and .simple.limit == 10 and .simple.period == 60))' <<< "$matching" >/dev/null
+          echo "PREVIEW_AUTH_RATE_LIMIT_METADATA_VERIFIED"
