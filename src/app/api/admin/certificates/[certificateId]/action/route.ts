@@ -7,6 +7,7 @@ import { PostgresCertificateRepository } from "@/features/certificates/repositor
 import { CertificateDeliveryService } from "@/features/certificates/services/certificate-delivery.service";
 import { PostgresMessageRepository } from "@/features/messages/repositories/postgres-message.repository";
 import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { consumeDistributedRateLimit, getRequestClientKey, rateLimitHeaders } from "@/lib/security/rate-limit";
 import { getConfiguredEmailProvider } from "@/providers/smtp-email-provider";
 import { getConfiguredStorageProvider } from "@/providers/s3-compatible-storage-provider";
 
@@ -22,12 +23,23 @@ export async function POST(
     return NextResponse.json({ ok: false, message: "Unauthorized." }, { status: 401 });
   }
 
+  const { certificateId } = await context.params;
+  const limit = await consumeDistributedRateLimit(
+    "CERT_RATE_LIMITER",
+    `${getRequestClientKey(request, "admin-certificate")}:${certificateId}`,
+  );
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { ok: false, message: "Too many certificate requests. Please try again shortly." },
+      { status: 429, headers: rateLimitHeaders(limit) },
+    );
+  }
+
   const parsed = actionSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ ok: false, message: "Invalid certificate action." }, { status: 400 });
   }
 
-  const { certificateId } = await context.params;
   const repository = new PostgresCertificateRepository();
   const certificate = await repository.findListItemById(certificateId);
   if (!certificate) {

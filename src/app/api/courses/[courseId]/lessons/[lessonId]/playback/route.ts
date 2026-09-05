@@ -4,6 +4,7 @@ import { getCurrentStudentSession } from "@/features/access/server/current-stude
 import { getManagedHostingServiceAccess } from "@/features/hosting/server/managed-hosting-access";
 import { PostgresMediaPlaybackRepository } from "@/features/media/repositories/postgres-media-playback.repository";
 import { MediaPlaybackService } from "@/features/media/services/media-playback.service";
+import { consumeDistributedRateLimit, rateLimitHeaders } from "@/lib/security/rate-limit";
 import { getConfiguredMediaProvider } from "@/providers/signed-delivery-media-provider";
 
 export async function POST(
@@ -17,6 +18,18 @@ export async function POST(
     return NextResponse.json({ ok: false, message: "Unauthorized." }, { status: 401 });
   }
 
+  const { courseId, lessonId } = await context.params;
+  const limit = await consumeDistributedRateLimit(
+    "PLAYBACK_RATE_LIMITER",
+    `student:${session.studentId}:lesson-playback:${lessonId}`,
+  );
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { ok: false, message: "Too many playback requests. Please try again shortly." },
+      { status: 429, headers: { ...rateLimitHeaders(limit), "Cache-Control": "private, no-store" } },
+    );
+  }
+
   const hostingAccess = await getManagedHostingServiceAccess();
   if (!hostingAccess.allowed) {
     return NextResponse.json(
@@ -28,8 +41,6 @@ export async function POST(
       { status: 402, headers: { "Cache-Control": "private, no-store" } },
     );
   }
-
-  const { courseId, lessonId } = await context.params;
 
   try {
     const service = new MediaPlaybackService(

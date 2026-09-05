@@ -29,5 +29,32 @@
       "binding": "APP_STORAGE_BUCKET",
       "bucket_name": "spf-media"
     }
+  ],
+  "ratelimits": [
+    {
+      "name": "AUTH_RATE_LIMITER",
+      "namespace_id": "51090501",
+      "simple": { "limit": 10, "period": 60 }
+    },
+    {
+      "name": "ADMIN_RATE_LIMITER",
+      "namespace_id": "51090502",
+      "simple": { "limit": 30, "period": 60 }
+    },
+    {
+      "name": "STUDENT_MUTATION_RATE_LIMITER",
+      "namespace_id": "51090503",
+      "simple": { "limit": 20, "period": 60 }
+    },
+    {
+      "name": "PLAYBACK_RATE_LIMITER",
+      "namespace_id": "51090504",
+      "simple": { "limit": 60, "period": 60 }
+    },
+    {
+      "name": "CERT_RATE_LIMITER",
+      "namespace_id": "51090505",
+      "simple": { "limit": 10, "period": 60 }
+    }
   ]
 }

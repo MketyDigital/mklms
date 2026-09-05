@@ -5,6 +5,7 @@ import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
 import { getManagedHostingServiceAccess } from "@/features/hosting/server/managed-hosting-access";
 import { PostgresAdminMediaRepository } from "@/features/media/repositories/postgres-admin-media.repository";
 import { verifyDirectR2Object } from "@/features/media/server/r2-direct-upload";
+import { consumeDistributedRateLimit, getRequestClientKey, rateLimitHeaders } from "@/lib/security/rate-limit";
 
 const schema = z.object({
   title: z.string().trim().min(1).max(300),
@@ -15,6 +16,17 @@ const schema = z.object({
 export async function POST(request: Request) {
   if (!(await hasValidAdminSession())) {
     return NextResponse.json({ ok: false, message: "Unauthorized." }, { status: 401 });
+  }
+
+  const limit = await consumeDistributedRateLimit(
+    "ADMIN_RATE_LIMITER",
+    getRequestClientKey(request, "admin-upload-finalize"),
+  );
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { ok: false, message: "Too many upload requests. Please try again shortly." },
+      { status: 429, headers: rateLimitHeaders(limit) },
+    );
   }
 
   const hostingAccess = await getManagedHostingServiceAccess();

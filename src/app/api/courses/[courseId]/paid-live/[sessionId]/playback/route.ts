@@ -4,6 +4,7 @@ import { getCurrentStudentSession } from "@/features/access/server/current-stude
 import { getManagedHostingServiceAccess } from "@/features/hosting/server/managed-hosting-access";
 import { PostgresPaidLiveRepository } from "@/features/paid-live/repositories/postgres-paid-live.repository";
 import { resolvePaidLiveState } from "@/features/paid-live/services/paid-live-state.service";
+import { consumeDistributedRateLimit, rateLimitHeaders } from "@/lib/security/rate-limit";
 import { getConfiguredMediaProvider } from "@/providers/signed-delivery-media-provider";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +16,18 @@ export async function POST(
   const studentSession = await getCurrentStudentSession();
   if (!studentSession) {
     return NextResponse.json({ ok: false, message: "Authentication required." }, { status: 401 });
+  }
+
+  const { courseId, sessionId } = await params;
+  const limit = await consumeDistributedRateLimit(
+    "PLAYBACK_RATE_LIMITER",
+    `student:${studentSession.studentId}:paid-live-playback:${sessionId}`,
+  );
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { ok: false, message: "Too many playback requests. Please try again shortly." },
+      { status: 429, headers: { ...rateLimitHeaders(limit), "Cache-Control": "private, no-store" } },
+    );
   }
 
   const hostingAccess = await getManagedHostingServiceAccess();
@@ -29,7 +42,6 @@ export async function POST(
     );
   }
 
-  const { courseId, sessionId } = await params;
   const repository = new PostgresPaidLiveRepository();
   const [paidLive, enrollment, courseStatus] = await Promise.all([
     repository.getSession(sessionId),

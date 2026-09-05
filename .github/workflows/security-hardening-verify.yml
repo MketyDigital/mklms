@@ -1,0 +1,62 @@
+name: Verify SaaS security hardening
+
+on:
+  push:
+    branches:
+      - feat/saas-security-hardening-2026-09-05
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Focused security tests
+        run: node --experimental-strip-types --test tests/rate-limit.test.mjs tests/saas-security-hardening.test.mjs
+
+      - name: Domain tests
+        run: npm test
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Next.js production build
+        env:
+          DATABASE_URL: postgresql://user:pass@127.0.0.1:5432/mklms
+          MKLMS_ADMIN_ACCESS_KEY: ci-admin-key
+          MKLMS_ADMIN_SESSION_SECRET: ci-admin-session-secret
+        run: npm run build
+
+      - name: Cloudflare OpenNext build
+        env:
+          DATABASE_URL: postgresql://user:pass@127.0.0.1:5432/mklms
+          MKLMS_ADMIN_ACCESS_KEY: ci-admin-key
+          MKLMS_ADMIN_SESSION_SECRET: ci-admin-session-secret
+        run: npm run cf:build
+
+      - name: Main Worker packaging dry run
+        env:
+          DATABASE_URL: postgresql://user:pass@127.0.0.1:5432/mklms
+          MKLMS_ADMIN_ACCESS_KEY: ci-admin-key
+          MKLMS_ADMIN_SESSION_SECRET: ci-admin-session-secret
+        run: npx wrangler deploy --dry-run --outdir .wrangler-dry-run
+
+      - name: Protected media Worker packaging dry run
+        run: npx wrangler deploy --dry-run --config workers/media-delivery/wrangler.jsonc --outdir .media-worker-dry-run
+
+      - name: External billing Worker packaging dry run
+        run: npx wrangler deploy --dry-run --config workers/billing/wrangler.jsonc --outdir .billing-worker-dry-run

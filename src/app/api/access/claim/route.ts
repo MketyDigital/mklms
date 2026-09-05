@@ -6,6 +6,7 @@ import { verifyClaimCode } from "@/features/access/domain/claim-code";
 import { PostgresAccessRepository } from "@/features/access/repositories/postgres-access.repository";
 import { AccessService } from "@/features/access/services/access.service";
 import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { consumeDistributedRateLimit, getRequestClientKey, rateLimitHeaders } from "@/lib/security/rate-limit";
 
 const claimSchema = z.object({
   email: z.string().email().optional(),
@@ -19,6 +20,17 @@ const NEUTRAL_FAILURE = "We couldn't verify access with those details.";
 const SERVICE_FAILURE = "Access could not be created right now. Please retry. If it continues, ask the administrator to cancel the pending authorization and create it again.";
 
 export async function POST(request: Request) {
+  const limit = await consumeDistributedRateLimit(
+    "AUTH_RATE_LIMITER",
+    getRequestClientKey(request, "student-claim"),
+  );
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { ok: false, message: "Too many access requests. Please try again shortly." },
+      { status: 429, headers: rateLimitHeaders(limit) },
+    );
+  }
+
   const parsed = claimSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ ok: false, message: NEUTRAL_FAILURE }, { status: 400 });
 

@@ -4,6 +4,7 @@ import { getCurrentStudentSession } from "@/features/access/server/current-stude
 import { isAllowedZoomUrl } from "@/features/paid-live/domain/model";
 import { PostgresPaidLiveRepository } from "@/features/paid-live/repositories/postgres-paid-live.repository";
 import { resolvePaidLiveState } from "@/features/paid-live/services/paid-live-state.service";
+import { consumeDistributedRateLimit, rateLimitHeaders } from "@/lib/security/rate-limit";
 
 const PRIVATE_NO_STORE = {
   "Cache-Control": "private, no-store, max-age=0",
@@ -20,6 +21,17 @@ export async function POST(
   }
 
   const { courseId, sessionId } = await params;
+  const limit = await consumeDistributedRateLimit(
+    "PLAYBACK_RATE_LIMITER",
+    `student:${student.studentId}:paid-live-join:${sessionId}`,
+  );
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { ok: false, message: "Too many join requests. Please try again shortly." },
+      { status: 429, headers: { ...PRIVATE_NO_STORE, ...rateLimitHeaders(limit) } },
+    );
+  }
+
   const repository = new PostgresPaidLiveRepository();
   const [liveSession, enrollment, courseStatus] = await Promise.all([
     repository.getSession(sessionId),

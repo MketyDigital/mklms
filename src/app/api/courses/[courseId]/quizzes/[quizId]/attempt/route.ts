@@ -6,6 +6,7 @@ import { calculateCourseProgress } from "@/features/courses/domain/progress";
 import { PostgresLearningRepository } from "@/features/courses/repositories/postgres-learning.repository";
 import { PostgresQuizRepository } from "@/features/quizzes/repositories/postgres-quiz.repository";
 import { scoreQuizAttempt } from "@/features/quizzes/services/quiz-scoring.service";
+import { consumeDistributedRateLimit, rateLimitHeaders } from "@/lib/security/rate-limit";
 
 const schema = z.object({
   answers: z.array(z.object({ questionId: z.string().min(1), choiceId: z.string().min(1) })).max(200),
@@ -18,6 +19,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ cou
   if (!parsed.success) return NextResponse.json({ ok: false, message: "Invalid quiz answers." }, { status: 400 });
 
   const { courseId, quizId } = await params;
+  const limit = await consumeDistributedRateLimit(
+    "STUDENT_MUTATION_RATE_LIMITER",
+    `student:${session.studentId}:quiz:${quizId}`,
+  );
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { ok: false, message: "Too many quiz attempts. Please try again shortly." },
+      { status: 429, headers: rateLimitHeaders(limit) },
+    );
+  }
+
   const quizzes = new PostgresQuizRepository();
   const learning = new PostgresLearningRepository();
   const [quiz, enrollment, course] = await Promise.all([
