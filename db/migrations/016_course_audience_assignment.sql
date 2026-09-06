@@ -33,6 +33,10 @@ BEGIN
     END IF;
   END IF;
 
+  -- Serialize student activation with course-audience changes so a concurrent
+  -- switch to ALL_ACTIVE_STUDENTS cannot miss this student.
+  PERFORM pg_advisory_xact_lock(764551001);
+
   INSERT INTO enrollments (
     id, student_id, course_id, status, authorized_at, activated_at
   )
