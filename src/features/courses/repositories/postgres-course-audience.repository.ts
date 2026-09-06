@@ -1,5 +1,4 @@
-import { randomUUID } from "node:crypto";
-import type { Pool, PoolClient } from "pg";
+import type { Pool } from "pg";
 
 import { getPostgresPool } from "@/lib/postgres";
 import type { CourseAssignmentMode } from "../domain/model";
@@ -8,31 +7,6 @@ export type CourseAudienceState = {
   mode: CourseAssignmentMode;
   enrolledStudentIds: string[];
 };
-
-async function activateEnrollment(
-  client: PoolClient,
-  studentId: string,
-  courseId: string,
-): Promise<void> {
-  await client.query(
-    `INSERT INTO enrollments (
-       id, student_id, course_id, status, authorized_at, activated_at
-     )
-     VALUES ($1, $2, $3, 'ACTIVE', NOW(), NOW())
-     ON CONFLICT (student_id, course_id)
-     DO UPDATE SET
-       status = CASE
-         WHEN enrollments.status = 'COMPLETED' THEN 'COMPLETED'
-         ELSE 'ACTIVE'
-       END,
-       activated_at = CASE
-         WHEN enrollments.status = 'COMPLETED' THEN enrollments.activated_at
-         ELSE NOW()
-       END,
-       updated_at = NOW()`,
-    [randomUUID(), studentId, courseId],
-  );
-}
 
 export class PostgresCourseAudienceRepository {
   private readonly pool: Pool;
@@ -89,30 +63,65 @@ export class PostgresCourseAudienceRepository {
       );
 
       if (mode === "ALL_ACTIVE_STUDENTS") {
-        const activeStudents = await client.query<{ id: string }>(
-          `SELECT id
-           FROM students
-           WHERE status = 'ACTIVE'
-           ORDER BY created_at ASC, id ASC`,
+        await client.query(
+          `INSERT INTO enrollments (
+             id, student_id, course_id, status, authorized_at, activated_at
+           )
+           SELECT
+             md5(student.id || ':' || $1 || ':course-audience'),
+             student.id,
+             $1,
+             'ACTIVE',
+             NOW(),
+             NOW()
+           FROM students student
+           WHERE student.status = 'ACTIVE'
+           ON CONFLICT (student_id, course_id)
+           DO UPDATE SET
+             status = CASE
+               WHEN enrollments.status = 'COMPLETED' THEN 'COMPLETED'
+               ELSE 'ACTIVE'
+             END,
+             activated_at = CASE
+               WHEN enrollments.status = 'COMPLETED' THEN enrollments.activated_at
+               ELSE NOW()
+             END,
+             updated_at = NOW()`,
+          [courseId],
         );
-        for (const student of activeStudents.rows) {
-          await activateEnrollment(client, student.id, courseId);
-        }
       } else {
         const uniqueIds = Array.from(new Set(selectedStudentIds));
         if (uniqueIds.length) {
-          const activeStudents = await client.query<{ id: string }>(
-            `SELECT id
-             FROM students
-             WHERE status = 'ACTIVE'
-               AND id = ANY($1::text[])`,
-            [uniqueIds],
+          const activated = await client.query<{ student_id: string }>(
+            `INSERT INTO enrollments (
+               id, student_id, course_id, status, authorized_at, activated_at
+             )
+             SELECT
+               md5(student.id || ':' || $1 || ':course-audience'),
+               student.id,
+               $1,
+               'ACTIVE',
+               NOW(),
+               NOW()
+             FROM students student
+             WHERE student.status = 'ACTIVE'
+               AND student.id = ANY($2::text[])
+             ON CONFLICT (student_id, course_id)
+             DO UPDATE SET
+               status = CASE
+                 WHEN enrollments.status = 'COMPLETED' THEN 'COMPLETED'
+                 ELSE 'ACTIVE'
+               END,
+               activated_at = CASE
+                 WHEN enrollments.status = 'COMPLETED' THEN enrollments.activated_at
+                 ELSE NOW()
+               END,
+               updated_at = NOW()
+             RETURNING student_id`,
+            [courseId, uniqueIds],
           );
-          if (activeStudents.rows.length !== uniqueIds.length) {
+          if (activated.rows.length !== uniqueIds.length) {
             throw new Error("One or more selected students are not active.");
-          }
-          for (const student of activeStudents.rows) {
-            await activateEnrollment(client, student.id, courseId);
           }
         }
 
