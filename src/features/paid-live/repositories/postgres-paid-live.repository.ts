@@ -22,6 +22,14 @@ type PaidLiveRow = {
   status: PaidLiveStatus;
 };
 
+type StudentPaidLiveRow = PaidLiveRow & {
+  course_title: string;
+};
+
+export type StudentPaidLiveSession = PaidCourseLiveSession & {
+  courseTitle: string;
+};
+
 const SESSION_SELECT = `SELECT id, course_id, media_asset_id, zoom_url, delivery_mode,
   title, description, starts_at, ends_at, status`;
 
@@ -56,6 +64,42 @@ export class PostgresPaidLiveRepository {
       [courseId, publishedOnly],
     );
     return result.rows.map(mapSession);
+  }
+
+  async listForStudent(
+    studentId: string,
+    options: { includeEnded?: boolean } = {},
+  ): Promise<StudentPaidLiveSession[]> {
+    const result = await this.pool.query<StudentPaidLiveRow>(
+      `SELECT
+         live.id,
+         live.course_id,
+         live.media_asset_id,
+         live.zoom_url,
+         live.delivery_mode,
+         live.title,
+         live.description,
+         live.starts_at,
+         live.ends_at,
+         live.status,
+         course.title AS course_title
+       FROM paid_course_live_sessions live
+       JOIN courses course ON course.id = live.course_id
+       JOIN enrollments enrollment
+         ON enrollment.course_id = live.course_id
+        AND enrollment.student_id = $1
+       WHERE enrollment.status IN ('ACTIVE', 'COMPLETED')
+         AND course.status = 'PUBLISHED'
+         AND live.status = 'PUBLISHED'
+         AND ($2::boolean = TRUE OR live.ends_at >= NOW())
+       ORDER BY live.starts_at ASC, live.id ASC`,
+      [studentId, options.includeEnded ?? false],
+    );
+
+    return result.rows.map((row) => ({
+      ...mapSession(row),
+      courseTitle: row.course_title,
+    }));
   }
 
   async getSession(sessionId: string): Promise<PaidCourseLiveSession | null> {
