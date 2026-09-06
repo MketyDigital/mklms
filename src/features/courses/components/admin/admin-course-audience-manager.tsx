@@ -31,6 +31,10 @@ export function AdminCourseAudienceManager({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  const activeStudentIds = useMemo(
+    () => new Set(students.map((student) => student.id)),
+    [students],
+  );
   const allSelected = useMemo(
     () => students.length > 0 && students.every((student) => selectedIds.has(student.id)),
     [students, selectedIds],
@@ -70,7 +74,13 @@ export function AdminCourseAudienceManager({
         throw new Error(payload?.message || "Course audience could not be saved.");
       }
       if (payload.audience?.enrolledStudentIds) {
-        setSelectedIds(new Set(payload.audience.enrolledStudentIds));
+        setSelectedIds(
+          new Set(
+            payload.audience.enrolledStudentIds.filter((studentId) =>
+              activeStudentIds.has(studentId),
+            ),
+          ),
+        );
       }
       setMessage("Course audience saved.");
     } catch (error) {
