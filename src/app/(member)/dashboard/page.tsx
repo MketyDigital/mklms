@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Radio } from "lucide-react";
 import { redirect } from "next/navigation";
 
 import { AppLayout } from "@/components/layout/app-layout";
@@ -9,6 +10,8 @@ import { Progress } from "@/components/ui/progress";
 import { getCurrentStudentSession } from "@/features/access/server/current-student";
 import { PostgresLearningRepository } from "@/features/courses/repositories/postgres-learning.repository";
 import { StudentLearningService } from "@/features/courses/services/student-learning.service";
+import { PostgresPaidLiveRepository } from "@/features/paid-live/repositories/postgres-paid-live.repository";
+import { resolvePaidLiveState } from "@/features/paid-live/services/paid-live-state.service";
 
 export const dynamic = "force-dynamic";
 
@@ -16,12 +19,14 @@ export default async function DashboardPage() {
   const session = await getCurrentStudentSession();
   if (!session) redirect("/login");
 
-  const courses = await new StudentLearningService(
-    new PostgresLearningRepository(),
-  ).listMyCourses(session.studentId);
+  const [courses, paidLiveSessions] = await Promise.all([
+    new StudentLearningService(new PostgresLearningRepository()).listMyCourses(session.studentId),
+    new PostgresPaidLiveRepository().listForStudent(session.studentId),
+  ]);
   const completedCourses = courses.filter(
     (course) => course.enrollmentStatus === "COMPLETED",
   ).length;
+  const now = new Date();
 
   return (
     <AppLayout
@@ -106,14 +111,51 @@ export default async function DashboardPage() {
           ) : null}
         </div>
 
-        <Card className="mt-8">
-          <CardHeader>
-            <CardTitle className="text-base">Member live sessions</CardTitle>
-            <CardDescription>
-              Paid-student live sessions will appear here only when a member live-session module is configured. Public free classes use a separate external live-class page and are not connected to this dashboard.
-            </CardDescription>
-          </CardHeader>
-        </Card>
+        <div className="mt-8 space-y-3">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Member live sessions</h2>
+            <p className="text-sm text-muted-foreground">
+              Upcoming and currently live sessions from your paid courses appear here. Public free classes remain separate.
+            </p>
+          </div>
+
+          {paidLiveSessions.map((liveSession) => {
+            const state = resolvePaidLiveState({
+              startsAt: liveSession.startsAt,
+              endsAt: liveSession.endsAt,
+              now,
+            });
+            return (
+              <Card key={liveSession.id}>
+                <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Radio className="size-4" />
+                      <p className="font-medium">{liveSession.title}</p>
+                      <Badge variant={state === "LIVE" ? "default" : "outline"}>{state}</Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {liveSession.courseTitle} · {liveSession.startsAt.toLocaleString()} — {liveSession.endsAt.toLocaleString()}
+                    </p>
+                  </div>
+                  <Button size="sm" variant={state === "LIVE" ? "default" : "outline"} asChild>
+                    <Link href={`/courses/${liveSession.courseId}/live/${liveSession.id}`}>
+                      {state === "LIVE" ? "Join live" : "View session"}
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })}
+
+          {!paidLiveSessions.length ? (
+            <Card>
+              <CardContent className="py-8 text-center text-sm text-muted-foreground">
+                No upcoming paid live session is scheduled for your courses yet.
+              </CardContent>
+            </Card>
+          ) : null}
+        </div>
       </div>
     </AppLayout>
   );
