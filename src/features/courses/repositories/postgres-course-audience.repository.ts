@@ -75,6 +75,7 @@ export class PostgresCourseAudienceRepository {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(764551001)");
 
       const course = await client.query<{ id: string }>(
         `SELECT id FROM courses WHERE id = $1 FOR UPDATE`,
