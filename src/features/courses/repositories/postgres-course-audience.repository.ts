@@ -8,11 +8,38 @@ export type CourseAudienceState = {
   enrolledStudentIds: string[];
 };
 
+export type CourseAudienceStudent = {
+  id: string;
+  displayName: string;
+  email: string | null;
+  phone: string | null;
+};
+
 export class PostgresCourseAudienceRepository {
   private readonly pool: Pool;
 
   constructor(pool: Pool = getPostgresPool()) {
     this.pool = pool;
+  }
+
+  async listActiveStudents(): Promise<CourseAudienceStudent[]> {
+    const result = await this.pool.query<{
+      id: string;
+      display_name: string;
+      email: string | null;
+      phone: string | null;
+    }>(
+      `SELECT id, display_name, email, phone
+       FROM students
+       WHERE status = 'ACTIVE'
+       ORDER BY display_name ASC, created_at ASC, id ASC`,
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      displayName: row.display_name,
+      email: row.email,
+      phone: row.phone,
+    }));
   }
 
   async getCourseAudience(courseId: string): Promise<CourseAudienceState | null> {
