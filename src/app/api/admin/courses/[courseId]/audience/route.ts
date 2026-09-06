@@ -51,8 +51,21 @@ export async function PATCH(
 
     return NextResponse.json({ ok: true, audience });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Course audience could not be updated.";
-    const status = /not found/i.test(message) ? 404 : /not active/i.test(message) ? 400 : 500;
-    return NextResponse.json({ ok: false, message }, { status });
+    const message = error instanceof Error ? error.message : "";
+    if (/not found/i.test(message)) {
+      return NextResponse.json({ ok: false, message: "Course not found." }, { status: 404 });
+    }
+    if (/not active/i.test(message)) {
+      return NextResponse.json(
+        { ok: false, message: "One or more selected students are no longer active. Refresh and try again." },
+        { status: 400 },
+      );
+    }
+
+    console.error("MkLMS course audience update failed", error);
+    return NextResponse.json(
+      { ok: false, message: "Course audience could not be updated right now." },
+      { status: 500 },
+    );
   }
 }
