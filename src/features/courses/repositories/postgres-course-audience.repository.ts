@@ -2,8 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 
 import { getPostgresPool } from "@/lib/postgres";
-
-export type CourseAssignmentMode = "SELECTED_STUDENTS" | "ALL_ACTIVE_STUDENTS";
+import type { CourseAssignmentMode } from "../domain/model";
 
 export type CourseAudienceState = {
   mode: CourseAssignmentMode;
