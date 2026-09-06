@@ -5,7 +5,6 @@ import { notFound } from "next/navigation";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { PostgresAdminAccessRepository } from "@/features/access/repositories/postgres-admin-access.repository";
 import { AdminCourseAudienceManager } from "@/features/courses/components/admin/admin-course-audience-manager";
 import { AdminCourseBuilder } from "@/features/courses/components/admin/admin-course-builder";
 import { PostgresCourseAudienceRepository } from "@/features/courses/repositories/postgres-course-audience.repository";
@@ -25,14 +24,15 @@ export default async function AdminCourseBuilderPage({
   params: Promise<{ courseId: string }>;
 }) {
   const { courseId } = await params;
-  const [course, mediaAssets, settings, quizzes, paidLiveSessions, students, audience] = await Promise.all([
+  const audienceRepository = new PostgresCourseAudienceRepository();
+  const [course, mediaAssets, settings, quizzes, paidLiveSessions, activeStudents, audience] = await Promise.all([
     new PostgresLearningRepository().getCourseStructure(courseId),
     new PostgresAdminMediaRepository().listAssets(),
     new PostgresSettingsRepository().getPlatformSettings(),
     new PostgresQuizRepository().listByCourse(courseId),
     new PostgresPaidLiveRepository().listByCourse(courseId),
-    new PostgresAdminAccessRepository().listStudents(5000),
-    new PostgresCourseAudienceRepository().getCourseAudience(courseId),
+    audienceRepository.listActiveStudents(),
+    audienceRepository.getCourseAudience(courseId),
   ]);
 
   if (!course || !audience) notFound();
@@ -44,14 +44,6 @@ export default async function AdminCourseBuilderPage({
     durationSeconds: asset.durationSeconds ?? null,
     status: asset.status,
   }));
-  const activeStudents = students
-    .filter((student) => student.status === "ACTIVE")
-    .map((student) => ({
-      id: student.id,
-      displayName: student.displayName,
-      email: student.email ?? null,
-      phone: student.phone ?? null,
-    }));
   const activeStudentIds = new Set(activeStudents.map((student) => student.id));
   const selectedActiveStudentIds = audience.enrolledStudentIds.filter((studentId) =>
     activeStudentIds.has(studentId),
