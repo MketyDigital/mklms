@@ -1,197 +1,124 @@
 # MkLMS Course Audience / Enrollment / Paid Live Handoff — 2026-09-06
 
-## Why this change exists
+## Problem and root cause
+Active students could see no course because every member surface (`/dashboard`, `/courses`, `/progress`) ultimately reads `enrollments`. Publishing a course did not create enrollment rows. Admin preauthorization could assign one course during claim, but there was no course-level audience control for existing students and no persistent rule for future students. The dashboard also had only placeholder copy for member paid-live sessions.
 
-Students could have an active MkLMS account but see no course on `/dashboard` because course visibility is intentionally driven by `enrollments`. Publishing a course did not create enrollment rows. The admin could associate one course with a preauthorization, but there was no course-level tool to assign an existing course to all students or selected existing students, and there was no persistent rule for future students.
+## Final access model
+`enrollments` remains the single source of truth for paid-course access. This feature does not make a published course globally readable and does not weaken any student, lesson, quiz, media, or paid-live authorization check.
 
-The student dashboard also contained only placeholder text for member live sessions. Real paid-course live sessions existed and were enrollment-gated inside each course, but were not surfaced on the dashboard.
-
-## Final architecture
-
-`enrollments` remains the single source of truth for paid-course access. This feature does not make published courses globally readable and does not bypass enrollment checks.
-
-Each course has an `assignment_mode`:
-
-- `SELECTED_STUDENTS` — safe default. Only explicitly assigned ACTIVE students plus preserved COMPLETED enrollments can see the published course.
-- `ALL_ACTIVE_STUDENTS` — all current ACTIVE students are enrolled immediately, and future students are enrolled automatically whenever their account becomes ACTIVE.
+Every course has an `assignment_mode`:
+- `SELECTED_STUDENTS` — safe default. Admin explicitly chooses active students. COMPLETED enrollment/history is preserved.
+- `ALL_ACTIVE_STUDENTS` — all current ACTIVE students are enrolled immediately; every student who later becomes ACTIVE is enrolled automatically.
 
 FREE LIVE remains a separate public webinar subsystem.
 
-## Database migration
+## Migration 016
+New file: `db/migrations/016_course_audience_assignment.sql`.
 
-New migration:
+It adds `courses.assignment_mode TEXT NOT NULL DEFAULT 'SELECTED_STUDENTS'`, a table-scoped check constraint for the two modes, and an `(assignment_mode, status)` index.
 
-`db/migrations/016_course_audience_assignment.sql`
+It also creates `mklms_enroll_active_student_in_all_courses()` and trigger `mklms_students_all_active_course_enrollment` (`AFTER INSERT OR UPDATE OF status ON students`). The trigger:
+- exits unless `NEW.status = ACTIVE`;
+- on UPDATE, exits if status did not actually change;
+- never references `OLD` for an INSERT event;
+- inserts the student into every `ALL_ACTIVE_STUDENTS` course with `ON CONFLICT (student_id, course_id)`;
+- preserves `COMPLETED` enrollment state instead of resetting it.
 
-It:
+This database-level rule intentionally covers first-time student creation, admin reactivation, and future application paths that make a student ACTIVE.
 
-1. Adds `courses.assignment_mode TEXT NOT NULL DEFAULT 'SELECTED_STUDENTS'`.
-2. Adds a check constraint allowing only `SELECTED_STUDENTS` and `ALL_ACTIVE_STUDENTS`.
-3. Adds an `(assignment_mode, status)` index.
-4. Creates `mklms_enroll_active_student_in_all_courses()`.
-5. Creates trigger `mklms_students_all_active_course_enrollment` on `students` after INSERT or status UPDATE.
-
-The trigger runs only when the new student status is `ACTIVE` and the student is newly inserted or changed to ACTIVE. INSERT handling does not reference `OLD`, and UPDATE handling exits when the status did not actually change. It inserts an ACTIVE enrollment for every course currently set to `ALL_ACTIVE_STUDENTS` using `ON CONFLICT (student_id, course_id)`.
-
-If an enrollment is already `COMPLETED`, the trigger preserves `COMPLETED`; it never resets course completion.
-
-### Why the trigger is used
-
-The rule is tied to the database event “student becomes ACTIVE,” not to one particular API route. This means first-time claims, admin reactivation, and future activation pathways all receive the same behavior atomically.
-
-## Admin course audience controls
-
-New repository:
-
-`src/features/courses/repositories/postgres-course-audience.repository.ts`
+## Current-student assignment
+New repository: `src/features/courses/repositories/postgres-course-audience.repository.ts`.
 
 It provides:
+- `listActiveStudents()` — complete ACTIVE population, without the generic member-list cap;
+- `getCourseAudience(courseId)`;
+- `setCourseAudience(courseId, mode, selectedStudentIds)`.
 
-- `listActiveStudents()` — complete ACTIVE-student list for course assignment, with no unrelated generic-member-list cap.
-- `getCourseAudience(courseId)` — current assignment mode plus ACTIVE/COMPLETED enrolled student IDs.
-- `setCourseAudience(courseId, mode, selectedStudentIds)` — transactional synchronization.
+`ALL_ACTIVE_STUDENTS` uses a single bulk `INSERT ... SELECT ... ON CONFLICT` for current active students.
 
-### ALL_ACTIVE_STUDENTS save behavior
+`SELECTED_STUDENTS`:
+- deduplicates submitted IDs;
+- accepts only currently ACTIVE student accounts;
+- bulk inserts/reactivates selected students;
+- changes only unchecked ACTIVE course enrollments to `REVOKED`;
+- never revokes `COMPLETED` enrollment rows;
+- does not delete progress, quizzes, certificates, or history.
 
-One bulk `INSERT ... SELECT` enrolls every current ACTIVE student. `ON CONFLICT` reactivates non-completed enrollment rows and preserves completed rows. This avoids one database round trip per student.
-
-### SELECTED_STUDENTS save behavior
-
-- Submitted IDs are deduplicated.
-- Only students whose account status is currently ACTIVE are accepted.
-- Checked students are bulk inserted/reactivated.
-- Unchecked `ACTIVE` enrollment rows for the course become `REVOKED`.
-- `COMPLETED` enrollments are never revoked by audience synchronization.
-- Lesson progress, quiz history, certificates, and other course history are not deleted.
-
-## Admin API
-
-New route:
-
-`PATCH /api/admin/courses/[courseId]/audience`
-
-Request body:
-
-```json
-{
-  "mode": "SELECTED_STUDENTS | ALL_ACTIVE_STUDENTS",
-  "studentIds": ["student-id", "..."]
-}
-```
+## Admin API and UI
+New API: `PATCH /api/admin/courses/[courseId]/audience`.
 
 Protection:
-
-- valid admin session required;
+- valid admin session;
 - Zod input validation;
-- existing `ADMIN_RATE_LIMITER` used;
-- non-active selected student IDs are rejected;
-- transaction rolls back on failure.
+- existing `ADMIN_RATE_LIMITER`;
+- transaction rollback on failure;
+- known validation/not-found errors only; unexpected database errors are logged server-side and returned as a generic 500.
 
-For `ALL_ACTIVE_STUDENTS`, `studentIds` is ignored and the database selects the current ACTIVE population itself.
+New UI: `src/features/courses/components/admin/admin-course-audience-manager.tsx`, rendered at the top of `/admin/courses/[courseId]`.
 
-## Admin UI
+Admin can choose:
+1. **All active students** — explicitly states current + future active students are included.
+2. **Selected students** — complete active-student checkbox list with search by name/email/phone and Select all / Clear all.
 
-New component:
-
-`src/features/courses/components/admin/admin-course-audience-manager.tsx`
-
-It is rendered at the top of:
-
-`/admin/courses/[courseId]`
-
-Admin choices:
-
-1. **All active students** — UI explains that current active students are enrolled now and future active students will be auto-enrolled.
-2. **Selected students** — checkbox list of all current ACTIVE students, with search by name/email/phone plus Select all / Clear all.
-
-The page obtains the complete active-student list directly from the course-audience repository instead of using the generic limited member listing.
+The UI keeps saved selected state scoped to currently active students, avoiding hidden suspended/completed IDs being accidentally resubmitted.
 
 ## Existing courses after migration
+Migration 016 deliberately defaults existing courses to `SELECTED_STUDENTS`. Applying the migration alone does not expose courses to everyone.
 
-Migration 016 intentionally defaults every existing course to `SELECTED_STUDENTS`. Applying the migration alone therefore does **not** suddenly expose a course to everyone.
+For an existing course that everybody should see:
+1. Admin -> Courses -> open course.
+2. Course audience -> **All active students**.
+3. **Save course audience**.
 
-For an existing course that should be visible to everybody:
+All current ACTIVE students are enrolled immediately. Future ACTIVE students are then enrolled automatically by the trigger.
 
-1. Open Admin -> Courses -> that course.
-2. In **Course audience**, choose **All active students**.
-3. Click **Save course audience**.
+For a restricted course, choose **Selected students**, search/check the intended active students, and save.
 
-That immediately creates/repairs the required enrollment rows for all current ACTIVE students. Future ACTIVE students will then be added automatically by the database trigger.
+## Pre-existing completed-enrollment bug fixed during audit
+`src/features/access/repositories/postgres-access.repository.ts` had two older enrollment-upsert paths that used `DO UPDATE SET status = 'ACTIVE'`. Reassigning/preauthorizing a student to a course they had already completed could therefore downgrade `COMPLETED` to `ACTIVE`.
 
-If only some students should receive the course, choose **Selected students**, check them, and save.
+Both `activateEnrollment()` and the transactional `completeVerifiedClaim()` course upsert now preserve `COMPLETED` status and its original activation time. This aligns legacy enrollment paths with the new audience system and protects completion/certificate history.
 
-## Student dashboard behavior
+## Member course surfaces
+`StudentLearningService.listMyCourses()` is intentionally unchanged: it still requires a real ACTIVE/COMPLETED enrollment and a PUBLISHED course.
 
-Existing course behavior remains:
+Therefore the same corrected enrollment data automatically fixes:
+- `/dashboard`;
+- `/courses`;
+- `/progress`;
+- direct course view authorization.
 
-`StudentLearningService.listMyCourses()` only returns:
+There is no dashboard-only bypass.
 
-- courses with a real ACTIVE or COMPLETED enrollment; and
-- published course content.
+## Paid-live dashboard visibility
+`PostgresPaidLiveRepository.listForStudent(studentId)` now returns only sessions where:
+- student enrollment is ACTIVE or COMPLETED;
+- course is PUBLISHED;
+- paid-live session is PUBLISHED;
+- session has not ended, unless a future caller explicitly requests ended sessions.
 
-The new assignment system fixes missing enrollment rows instead of bypassing that service.
+`/dashboard` now shows real **Member live sessions** cards with course title, session title, UPCOMING/LIVE state, schedule, and `/courses/{courseId}/live/{sessionId}` link.
 
-The dashboard now also calls:
+The existing course-detail **Paid live sessions** section remains in place.
 
-`PostgresPaidLiveRepository.listForStudent(studentId)`
+## Paid-live authorization audit
+Dashboard visibility does not grant access.
 
-It returns only paid-live sessions where:
+Existing Zoom join endpoint still independently requires authenticated student, matching course/session, PUBLISHED course/session, ACTIVE/COMPLETED enrollment, LIVE time window, and valid Zoom URL.
 
-- the student has ACTIVE or COMPLETED enrollment in the course;
-- the course is PUBLISHED;
-- the paid-live session is PUBLISHED;
-- the session has not already ended (unless explicitly requested by a future caller).
-
-Dashboard cards show:
-
-- session title;
-- course title;
-- UPCOMING/LIVE state;
-- scheduled start/end;
-- a link to `/courses/{courseId}/live/{sessionId}`.
-
-Course detail retains its existing Paid live sessions section.
-
-## Paid-live security audit
-
-Surfacing a paid-live link on the dashboard does not grant access by itself.
-
-The existing Zoom join endpoint independently requires:
-
-- authenticated student session;
-- matching course/session;
-- PUBLISHED session;
-- PUBLISHED course;
-- ACTIVE or COMPLETED course enrollment;
-- LIVE time window;
-- valid Zoom URL.
-
-The hosted-video playback endpoint independently requires:
-
-- authenticated student session;
-- PUBLISHED course/session;
-- ACTIVE or COMPLETED enrollment;
-- permitted managed-hosting state;
-- LIVE time window;
-- ready protected media;
-- short-lived playback authorization.
+Existing protected-video playback endpoint still independently requires authenticated student, PUBLISHED course/session, ACTIVE/COMPLETED enrollment, allowed managed-hosting state, LIVE time window, READY protected media, and a short-lived playback authorization.
 
 ## FREE LIVE isolation
-
-This feature does not modify:
-
+No FREE LIVE file or behavior is modified. In particular this feature does not change:
 - `/live/[slug]`;
 - `/api/live/[slug]/state`;
 - `/api/live/[slug]/playback`;
 - free-live batch/session tables;
-- free-live viewer/chat timing logic.
+- public viewer/chat/playback timing.
 
-FREE LIVE remains public/standalone. Paid live remains course-owned and enrollment-gated.
+FREE LIVE stays public/standalone. Paid live stays course-owned/enrollment-gated.
 
-## Files added/changed
-
-Added:
-
+## Files added
 - `db/migrations/016_course_audience_assignment.sql`
 - `src/features/courses/repositories/postgres-course-audience.repository.ts`
 - `src/features/courses/components/admin/admin-course-audience-manager.tsx`
@@ -201,35 +128,30 @@ Added:
 - `docs/superpowers/plans/2026-09-06-course-audience-enrollment.md`
 - `docs/handoff/course-audience-enrollment-2026-09-06.md`
 
-Modified:
-
+## Files modified
+- `src/features/access/repositories/postgres-access.repository.ts`
 - `src/features/courses/domain/model.ts`
 - `src/features/paid-live/repositories/postgres-paid-live.repository.ts`
 - `src/app/(admin)/admin/courses/[courseId]/page.tsx`
 - `src/app/(member)/dashboard/page.tsx`
 
-The temporary feature-branch verification workflow used while diagnosing GitHub Actions was removed before merge readiness review.
+No DNS, SSL, Cloudflare Worker route, Worker secret, R2, Hyperdrive, billing, or FREE LIVE file is changed. The temporary branch verification workflow was removed before merge-readiness review.
 
-## Deployment order — important
-
-Do not deploy the application code and then leave migration 016 unapplied. The admin course page expects `courses.assignment_mode`.
+## Deployment order — mandatory
+Do not deploy the new admin application code while leaving migration 016 unapplied because the course admin page reads `courses.assignment_mode`.
 
 Safe order:
-
-1. Complete code verification on the feature branch.
-2. Ensure migration 016 is available to the migration runner.
-3. Apply pending migration 016 to the production database.
-4. Verify migration status is current.
+1. Run the full verification commands below on a working runner/local checkout.
+2. Make migration 016 available to the production migration runner.
+3. Run `.github/workflows/run-db-migrations.yml` on the ref containing migration 016 with input `MIGRATE`.
+4. Confirm `npm run db:status` is current.
 5. Merge/deploy the application code.
-6. Smoke-test admin course page and student dashboard.
-7. For each existing course, explicitly choose `All active students` or `Selected students` and save.
+6. Smoke-test admin and student surfaces.
+7. Explicitly choose an audience for each existing course.
 
-The existing migration workflow is `.github/workflows/run-db-migrations.yml`; it checks out the selected workflow ref and runs `npm run db:status`, `npm run db:migrate`, then `npm run db:status`. Run it with confirmation value `MIGRATE` on the ref that contains migration 016.
+The migration workflow itself runs `db:status -> db:migrate -> db:status` and uses the protected migration database secrets.
 
 ## Verification commands
-
-Run from repository root:
-
 ```bash
 npm install --no-audit --no-fund
 npm test
@@ -241,32 +163,30 @@ npx wrangler deploy --dry-run --config workers/media-delivery/wrangler.jsonc --o
 npx wrangler deploy --dry-run --config workers/billing/wrangler.jsonc --outdir .billing-worker-dry-run
 ```
 
-Then verify migration state:
-
+Then:
 ```bash
 npm run db:status
 ```
 
-## Current verification limitation
+## Verification status at handoff
+GitHub Actions is currently failing before job step 1 for both the normal PR workflow and the temporary minimal workflow. The failed runs contain no executed steps/log body. This is a runner/platform execution failure, not a test assertion/build failure, but it also means this branch must **not** be described as fully runtime-verified yet.
 
-At the time of handoff, both the repository's normal PR workflow and the temporary minimal branch workflow were failing on GitHub before any job step started; the jobs contained no executable steps/log body. That is an Actions runner/platform failure, not a test assertion or build result. Do not describe the feature as fully verified until the commands above run successfully on a working runner or local checkout.
+Do not merge solely on the static audit. Run the commands above on a functioning runner or local checkout first.
 
-## Required production smoke tests
-
+## Required production smoke test
 After migration + deployment:
+1. Admin course page loads.
+2. Selected mode: selected active student sees published course; unselected active student does not.
+3. All-active mode: all current active test students see published course.
+4. Create/activate a new test student after all-active is saved: course appears automatically.
+5. Suspend student: existing account controls block access.
+6. Reactivate student: all-active courses are restored automatically.
+7. Paid live appears on dashboard and inside the enrolled course.
+8. Unenrolled student cannot join/play the paid live route.
+9. `/courses` and `/progress` agree with dashboard course visibility.
+10. FREE LIVE state/playback behaves exactly as before.
 
-1. Admin course page loads without database error.
-2. Save one test course as Selected students with a known active student -> that student sees it, an unselected active student does not.
-3. Switch that test course to All active students -> all active test students see it.
-4. Activate/create a new test student after the course is All active -> new student automatically sees the published course.
-5. Suspend a student -> student login/session access remains blocked by existing account controls.
-6. Reactivate the student -> all-active courses are restored automatically.
-7. Published paid-live session appears on the enrolled student's dashboard and course detail.
-8. Unenrolled student cannot join/play that paid-live route.
-9. FREE LIVE root/state/playback continue behaving exactly as before.
+## Rollback
+Prefer forward fixes; do not casually edit/drop an applied migration.
 
-## Rollback notes
-
-Application rollback is straightforward because old application code ignores `courses.assignment_mode` and the trigger only affects enrollment creation/reactivation. Do not drop migration 016 casually after it has run; forward migrations are preferred.
-
-If the audience UI must be disabled temporarily, courses can remain `SELECTED_STUDENTS` and existing enrollments continue to be the source of access. If automatic future enrollment must be stopped without deleting history, set affected courses back to `SELECTED_STUDENTS`; the trigger then finds no matching all-active course and creates no new enrollment for those courses.
+If automatic future assignment must be stopped, set affected courses to `SELECTED_STUDENTS`. The trigger then has no matching all-active course and creates no new enrollment for it. Existing course/progress/certificate history remains intact.
