@@ -21,6 +21,7 @@ It also creates `mklms_enroll_active_student_in_all_courses()` and trigger `mklm
 - exits unless `NEW.status = ACTIVE`;
 - on UPDATE, exits if status did not actually change;
 - never references `OLD` for an INSERT event;
+- takes the same transaction-scoped PostgreSQL advisory lock used by course-audience updates, so a student activation racing an admin switch to `ALL_ACTIVE_STUDENTS` cannot be missed;
 - inserts the student into every `ALL_ACTIVE_STUDENTS` course with `ON CONFLICT (student_id, course_id)`;
 - preserves `COMPLETED` enrollment state instead of resetting it.
 
@@ -33,6 +34,8 @@ It provides:
 - `listActiveStudents()` — complete ACTIVE population, without the generic member-list cap;
 - `getCourseAudience(courseId)`;
 - `setCourseAudience(courseId, mode, selectedStudentIds)`.
+
+`setCourseAudience()` takes the matching transaction-scoped advisory lock before changing assignment mode or synchronizing enrollments. Together with the student trigger, this closes the concurrency window between “student becomes ACTIVE” and “course becomes ALL_ACTIVE_STUDENTS.”
 
 `ALL_ACTIVE_STUDENTS` uses a single bulk `INSERT ... SELECT ... ON CONFLICT` for current active students.
 
@@ -135,7 +138,7 @@ FREE LIVE stays public/standalone. Paid live stays course-owned/enrollment-gated
 - `src/app/(admin)/admin/courses/[courseId]/page.tsx`
 - `src/app/(member)/dashboard/page.tsx`
 
-No DNS, SSL, Cloudflare Worker route, Worker secret, R2, Hyperdrive, billing, or FREE LIVE file is changed. The temporary branch verification workflow was removed before merge-readiness review.
+The PR currently contains 13 changed files total (8 added and 5 modified). No DNS, SSL, Cloudflare Worker route, Worker secret, R2, Hyperdrive, billing, or FREE LIVE file is changed. The temporary branch verification workflow was removed before merge-readiness review.
 
 ## Deployment order — mandatory
 Do not deploy the new admin application code while leaving migration 016 unapplied because the course admin page reads `courses.assignment_mode`.
@@ -169,7 +172,9 @@ npm run db:status
 ```
 
 ## Verification status at handoff
-GitHub Actions is currently failing before job step 1 for both the normal PR workflow and the temporary minimal workflow. The failed runs contain no executed steps/log body. This is a runner/platform execution failure, not a test assertion/build failure, but it also means this branch must **not** be described as fully runtime-verified yet.
+GitHub Actions is currently failing before job step 1 for the normal PR workflow (the job receives no runner and reports no executed steps). This is a runner/platform execution failure, not a test assertion/build failure, but it also means this branch must **not** be described as fully runtime-verified yet.
+
+Cloudflare's branch builds for the MkLMS application, media worker, and billing worker have succeeded, which provides compile/deployment-build evidence but does not replace `npm test`, lint, or database integration verification.
 
 Do not merge solely on the static audit. Run the commands above on a functioning runner or local checkout first.
 
@@ -179,12 +184,13 @@ After migration + deployment:
 2. Selected mode: selected active student sees published course; unselected active student does not.
 3. All-active mode: all current active test students see published course.
 4. Create/activate a new test student after all-active is saved: course appears automatically.
-5. Suspend student: existing account controls block access.
-6. Reactivate student: all-active courses are restored automatically.
-7. Paid live appears on dashboard and inside the enrolled course.
-8. Unenrolled student cannot join/play the paid live route.
-9. `/courses` and `/progress` agree with dashboard course visibility.
-10. FREE LIVE state/playback behaves exactly as before.
+5. Exercise a concurrent activation/audience-change test once: a student becoming ACTIVE while the course is switched to all-active must still receive the enrollment.
+6. Suspend student: existing account controls block access.
+7. Reactivate student: all-active courses are restored automatically.
+8. Paid live appears on dashboard and inside the enrolled course.
+9. Unenrolled student cannot join/play the paid live route.
+10. `/courses` and `/progress` agree with dashboard course visibility.
+11. FREE LIVE state/playback behaves exactly as before.
 
 ## Rollback
 Prefer forward fixes; do not casually edit/drop an applied migration.
