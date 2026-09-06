@@ -60,7 +60,8 @@ test("deleting a live class cascades through sessions imported chat viewers and 
 test("paid student dashboard keeps member live sessions separate from public free live classes", async () => {
   const dashboard = await source("src/app/(member)/dashboard/page.tsx");
   assert.match(dashboard, /Member live sessions/);
-  assert.doesNotMatch(dashboard, /\/live\/\$\{/);
+  assert.match(dashboard, /\/courses\/\$\{liveSession\.courseId\}\/live\/\$\{liveSession\.id\}/);
+  assert.doesNotMatch(dashboard, /href=\{`\/live\/\$\{/);
   assert.doesNotMatch(dashboard, /PostgresLiveClassRepository/);
 });
 
