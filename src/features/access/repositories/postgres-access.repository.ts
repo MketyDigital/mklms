@@ -191,7 +191,16 @@ export class PostgresAccessRepository implements AccessRepository {
        )
        VALUES ($1, $2, $3, 'ACTIVE', NOW(), NOW())
        ON CONFLICT (student_id, course_id)
-       DO UPDATE SET status = 'ACTIVE', activated_at = NOW(), updated_at = NOW()`,
+       DO UPDATE SET
+         status = CASE
+           WHEN enrollments.status = 'COMPLETED' THEN 'COMPLETED'
+           ELSE 'ACTIVE'
+         END,
+         activated_at = CASE
+           WHEN enrollments.status = 'COMPLETED' THEN enrollments.activated_at
+           ELSE NOW()
+         END,
+         updated_at = NOW()`,
       [randomUUID(), studentId, courseId],
     );
   }
@@ -321,7 +330,16 @@ export class PostgresAccessRepository implements AccessRepository {
            )
            VALUES ($1, $2, $3, 'ACTIVE', NOW(), NOW())
            ON CONFLICT (student_id, course_id)
-           DO UPDATE SET status = 'ACTIVE', activated_at = NOW(), updated_at = NOW()`,
+           DO UPDATE SET
+             status = CASE
+               WHEN enrollments.status = 'COMPLETED' THEN 'COMPLETED'
+               ELSE 'ACTIVE'
+             END,
+             activated_at = CASE
+               WHEN enrollments.status = 'COMPLETED' THEN enrollments.activated_at
+               ELSE NOW()
+             END,
+             updated_at = NOW()`,
           [randomUUID(), student.id, input.courseId],
         );
       }
