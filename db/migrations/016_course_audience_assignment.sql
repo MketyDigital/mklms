@@ -9,6 +9,7 @@ BEGIN
     SELECT 1
     FROM pg_constraint
     WHERE conname = 'courses_assignment_mode_check'
+      AND conrelid = 'courses'::regclass
   ) THEN
     ALTER TABLE courses
       ADD CONSTRAINT courses_assignment_mode_check
