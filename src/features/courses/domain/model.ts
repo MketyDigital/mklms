@@ -1,4 +1,5 @@
 export type CourseStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+export type CourseAssignmentMode = "SELECTED_STUDENTS" | "ALL_ACTIVE_STUDENTS";
 export type LessonStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
 export type LessonCompletionMode = "MANUAL" | "VIDEO_PROGRESS" | "CUSTOM";
 
