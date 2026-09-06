@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import type { CourseAssignmentMode } from "@/features/courses/domain/model";
 
 type StudentOption = {
@@ -28,6 +29,7 @@ export function AdminCourseAudienceManager({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
     () => new Set(initiallyEnrolledStudentIds),
   );
+  const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -35,6 +37,14 @@ export function AdminCourseAudienceManager({
     () => new Set(students.map((student) => student.id)),
     [students],
   );
+  const filteredStudents = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return students;
+    return students.filter((student) =>
+      [student.displayName, student.email ?? "", student.phone ?? ""]
+        .some((value) => value.toLowerCase().includes(normalized)),
+    );
+  }, [query, students]);
   const allSelected = useMemo(
     () => students.length > 0 && students.every((student) => selectedIds.has(student.id)),
     [students, selectedIds],
@@ -149,8 +159,17 @@ export function AdminCourseAudienceManager({
               ) : null}
             </div>
 
+            {students.length ? (
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search by name, email or phone"
+                aria-label="Search active students"
+              />
+            ) : null}
+
             <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
-              {students.map((student) => (
+              {filteredStudents.map((student) => (
                 <label key={student.id} className="flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2">
                   <input
                     type="checkbox"
@@ -165,6 +184,9 @@ export function AdminCourseAudienceManager({
                   </span>
                 </label>
               ))}
+              {students.length > 0 && !filteredStudents.length ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">No active student matches your search.</p>
+              ) : null}
               {!students.length ? (
                 <p className="py-4 text-sm text-muted-foreground">No active students are available yet.</p>
               ) : null}
