@@ -51,6 +51,13 @@ test('admin audience repository bulk synchronizes active enrollments and preserv
   assert.match(repo, /UPDATE enrollments[\s\S]*SET status = 'REVOKED'[\s\S]*AND status = 'ACTIVE'/i);
 });
 
+test('legacy course enrollment activation cannot downgrade a completed enrollment', () => {
+  const repo = read('src/features/access/repositories/postgres-access.repository.ts');
+  const completedPreservation = /WHEN enrollments\.status = 'COMPLETED' THEN 'COMPLETED'/g;
+  assert.equal((repo.match(completedPreservation) ?? []).length >= 2, true);
+  assert.doesNotMatch(repo, /DO UPDATE SET status = 'ACTIVE', activated_at = NOW\(\), updated_at = NOW\(\)/);
+});
+
 test('course audience API is admin-only, rate-limited, and validates assignment mode', () => {
   const route = read('src/app/api/admin/courses/[courseId]/audience/route.ts');
   assert.match(route, /hasValidAdminSession/);
@@ -61,11 +68,15 @@ test('course audience API is admin-only, rate-limited, and validates assignment 
   assert.doesNotMatch(route, /max\(5000\)/);
 });
 
-test('student learning remains published-course and enrollment gated', () => {
+test('student learning remains published-course and enrollment gated across member surfaces', () => {
   const service = read('src/features/courses/services/student-learning.service.ts');
+  const coursesPage = read('src/app/(member)/courses/page.tsx');
+  const progressPage = read('src/app/(member)/progress/page.tsx');
   assert.match(service, /getPublishedCourseStructure/);
   assert.match(service, /\["ACTIVE", "COMPLETED"\]\.includes\(enrollment\.status\)/);
   assert.doesNotMatch(service, /assignment_mode/);
+  assert.match(coursesPage, /listMyCourses\(session\.studentId\)/);
+  assert.match(progressPage, /listMyCourses\(session\.studentId\)/);
 });
 
 test('student dashboard surfaces real published paid live sessions from enrolled courses', () => {
