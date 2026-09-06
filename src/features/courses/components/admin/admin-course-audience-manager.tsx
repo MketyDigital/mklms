@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type { CourseAssignmentMode } from "@/features/courses/repositories/postgres-course-audience.repository";
+import type { CourseAssignmentMode } from "@/features/courses/domain/model";
 
 type StudentOption = {
   id: string;
