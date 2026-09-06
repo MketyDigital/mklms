@@ -52,6 +52,10 @@ export default async function AdminCourseBuilderPage({
       email: student.email ?? null,
       phone: student.phone ?? null,
     }));
+  const activeStudentIds = new Set(activeStudents.map((student) => student.id));
+  const selectedActiveStudentIds = audience.enrolledStudentIds.filter((studentId) =>
+    activeStudentIds.has(studentId),
+  );
 
   return (
     <AppLayout
@@ -86,7 +90,7 @@ export default async function AdminCourseBuilderPage({
             courseId={course.id}
             initialMode={audience.mode}
             students={activeStudents}
-            initiallyEnrolledStudentIds={audience.enrolledStudentIds}
+            initiallyEnrolledStudentIds={selectedActiveStudentIds}
           />
           <AdminCourseBuilder course={course} mediaAssets={mediaOptions} />
           <AdminQuizEditor
