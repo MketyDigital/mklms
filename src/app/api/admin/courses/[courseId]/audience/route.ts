@@ -11,7 +11,7 @@ import {
 
 const schema = z.object({
   mode: z.enum(["SELECTED_STUDENTS", "ALL_ACTIVE_STUDENTS"]),
-  studentIds: z.array(z.string().min(1)).max(5000).default([]),
+  studentIds: z.array(z.string().min(1)).default([]),
 });
 
 export async function PATCH(
