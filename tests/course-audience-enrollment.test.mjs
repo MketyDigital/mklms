@@ -27,6 +27,13 @@ test('future active students are enrolled into all-active courses by a database 
   assert.match(migration, /WHEN enrollments\.status = 'COMPLETED' THEN 'COMPLETED'/i);
 });
 
+test('all-active course transition is serialized with concurrent student activation', () => {
+  const migration = read('db/migrations/016_course_audience_assignment.sql');
+  const repo = read('src/features/courses/repositories/postgres-course-audience.repository.ts');
+  assert.match(migration, /pg_advisory_xact_lock\(764551001\)/i);
+  assert.match(repo, /pg_advisory_xact_lock\(764551001\)/i);
+});
+
 test('admin course page exposes an audience manager for all-active or selected students', () => {
   const page = read('src/app/(admin)/admin/courses/[courseId]/page.tsx');
   const component = read('src/features/courses/components/admin/admin-course-audience-manager.tsx');
