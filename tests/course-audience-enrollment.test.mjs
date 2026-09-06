@@ -19,7 +19,8 @@ test('future active students are enrolled into all-active courses by a database 
   const migration = read('db/migrations/016_course_audience_assignment.sql');
   assert.match(migration, /CREATE OR REPLACE FUNCTION mklms_enroll_active_student_in_all_courses/i);
   assert.match(migration, /AFTER INSERT OR UPDATE OF status ON students/i);
-  assert.match(migration, /NEW\.status\s*=\s*'ACTIVE'/i);
+  assert.match(migration, /IF NEW\.status <> 'ACTIVE' THEN[\s\S]*RETURN NEW/i);
+  assert.match(migration, /IF TG_OP = 'UPDATE' THEN[\s\S]*OLD\.status IS NOT DISTINCT FROM NEW\.status/i);
   assert.match(migration, /INSERT INTO enrollments[\s\S]*SELECT[\s\S]*FROM courses c/i);
   assert.match(migration, /c\.assignment_mode\s*=\s*'ALL_ACTIVE_STUDENTS'/i);
   assert.match(migration, /ON CONFLICT \(student_id, course_id\)/i);
@@ -34,6 +35,7 @@ test('admin course page exposes an audience manager for all-active or selected s
   assert.match(component, /All active students/i);
   assert.match(component, /Selected students/i);
   assert.match(component, /future students/i);
+  assert.match(component, /Search by name, email or phone/i);
   assert.doesNotMatch(page, /listStudents\(5000\)/);
 });
 
@@ -46,8 +48,7 @@ test('admin audience repository bulk synchronizes active enrollments and preserv
   assert.match(repo, /INSERT INTO enrollments[\s\S]*SELECT/i);
   assert.match(repo, /ON CONFLICT \(student_id, course_id\)/i);
   assert.match(repo, /WHEN enrollments\.status = 'COMPLETED' THEN 'COMPLETED'/i);
-  assert.match(repo, /SET status = 'REVOKED'[\s\S]*status = 'ACTIVE'/i);
-  assert.doesNotMatch(repo, /status = 'COMPLETED'[\s\S]*SET status = 'REVOKED'/i);
+  assert.match(repo, /UPDATE enrollments[\s\S]*SET status = 'REVOKED'[\s\S]*AND status = 'ACTIVE'/i);
 });
 
 test('course audience API is admin-only, rate-limited, and validates assignment mode', () => {
@@ -57,6 +58,7 @@ test('course audience API is admin-only, rate-limited, and validates assignment 
   assert.match(route, /SELECTED_STUDENTS/);
   assert.match(route, /ALL_ACTIVE_STUDENTS/);
   assert.match(route, /setCourseAudience/);
+  assert.doesNotMatch(route, /max\(5000\)/);
 });
 
 test('student learning remains published-course and enrollment gated', () => {
