@@ -31,7 +31,7 @@ It:
 4. Creates `mklms_enroll_active_student_in_all_courses()`.
 5. Creates trigger `mklms_students_all_active_course_enrollment` on `students` after INSERT or status UPDATE.
 
-The trigger runs only when the new student status is `ACTIVE` and the student is newly inserted or changed to ACTIVE. It inserts an ACTIVE enrollment for every course currently set to `ALL_ACTIVE_STUDENTS` using `ON CONFLICT (student_id, course_id)`.
+The trigger runs only when the new student status is `ACTIVE` and the student is newly inserted or changed to ACTIVE. INSERT handling does not reference `OLD`, and UPDATE handling exits when the status did not actually change. It inserts an ACTIVE enrollment for every course currently set to `ALL_ACTIVE_STUDENTS` using `ON CONFLICT (student_id, course_id)`.
 
 If an enrollment is already `COMPLETED`, the trigger preserves `COMPLETED`; it never resets course completion.
 
@@ -47,7 +47,7 @@ New repository:
 
 It provides:
 
-- `listActiveStudents()` — complete ACTIVE-student list for course assignment, with no unrelated 5,000-member admin-list cap.
+- `listActiveStudents()` — complete ACTIVE-student list for course assignment, with no unrelated generic-member-list cap.
 - `getCourseAudience(courseId)` — current assignment mode plus ACTIVE/COMPLETED enrolled student IDs.
 - `setCourseAudience(courseId, mode, selectedStudentIds)` — transactional synchronization.
 
@@ -102,7 +102,7 @@ It is rendered at the top of:
 Admin choices:
 
 1. **All active students** — UI explains that current active students are enrolled now and future active students will be auto-enrolled.
-2. **Selected students** — checkbox list of all current ACTIVE students, with Select all / Clear all.
+2. **Selected students** — checkbox list of all current ACTIVE students, with search by name/email/phone plus Select all / Clear all.
 
 The page obtains the complete active-student list directly from the course-audience repository instead of using the generic limited member listing.
 
@@ -208,7 +208,7 @@ Modified:
 - `src/app/(admin)/admin/courses/[courseId]/page.tsx`
 - `src/app/(member)/dashboard/page.tsx`
 
-A temporary feature-branch Actions workflow may exist while verification is being attempted; it must be removed before merge.
+The temporary feature-branch verification workflow used while diagnosing GitHub Actions was removed before merge readiness review.
 
 ## Deployment order — important
 
@@ -246,6 +246,10 @@ Then verify migration state:
 ```bash
 npm run db:status
 ```
+
+## Current verification limitation
+
+At the time of handoff, both the repository's normal PR workflow and the temporary minimal branch workflow were failing on GitHub before any job step started; the jobs contained no executable steps/log body. That is an Actions runner/platform failure, not a test assertion or build result. Do not describe the feature as fully verified until the commands above run successfully on a working runner or local checkout.
 
 ## Required production smoke tests
 
