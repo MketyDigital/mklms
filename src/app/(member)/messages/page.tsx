@@ -33,10 +33,10 @@ export default async function MessagesPage() {
       isAdmin={false}
       unreadMessages={0}
     >
-      <div className="flex h-[calc(100dvh-3.5rem)] flex-col lg:h-dvh">
+      <div className="flex h-[calc(100dvh-3.5rem)] min-w-0 flex-col lg:h-dvh">
         <div className="border-b px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-3">
-            <Avatar size="sm">
+          <div className="flex min-w-0 items-center gap-3">
+            <Avatar size="sm" className="shrink-0">
               <AvatarFallback>
                 {supportName
                   .split(/\s+/)
@@ -46,17 +46,17 @@ export default async function MessagesPage() {
                   .join("") || "A"}
               </AvatarFallback>
             </Avatar>
-            <div>
-              <p className="text-sm font-medium">{supportName}</p>
-              <p className="text-xs text-muted-foreground">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{supportName}</p>
+              <p className="break-words text-xs text-muted-foreground">
                 Course support and administration
               </p>
             </div>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
-          <div className="mx-auto max-w-2xl space-y-4">
+        <div className="min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6">
+          <div className="mx-auto min-w-0 max-w-2xl space-y-4">
             {messages.map((message) => (
               <MessageBubble key={message.id} message={message} />
             ))}

@@ -77,32 +77,32 @@ export function StudentPaidLiveRoom({ session }: { session: PaidLiveRoomSession 
   }, [authorize, session.deliveryMode, state]);
 
   return (
-    <Card>
+    <Card className="overflow-hidden">
       <CardHeader>
-        <div className="flex flex-wrap items-center gap-2"><CardTitle>{session.title}</CardTitle><Badge variant="outline">{state}</Badge><Badge variant="secondary">{session.deliveryMode === "ZOOM" ? "Zoom" : "Video"}</Badge></div>
-        <CardDescription>{session.description || `${new Date(session.startsAt).toLocaleString()} — ${new Date(session.endsAt).toLocaleString()}`}</CardDescription>
+        <div className="flex min-w-0 flex-wrap items-center gap-2"><CardTitle className="min-w-0 break-words">{session.title}</CardTitle><Badge variant="outline">{state}</Badge><Badge variant="secondary">{session.deliveryMode === "ZOOM" ? "Zoom" : "Video"}</Badge></div>
+        <CardDescription className="break-words">{session.description || `${new Date(session.startsAt).toLocaleString()} — ${new Date(session.endsAt).toLocaleString()}`}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {session.deliveryMode === "ZOOM" ? (
-          <div className="flex aspect-video flex-col items-center justify-center gap-4 rounded-lg border bg-muted/20 p-6 text-center">
-            <p className="text-sm text-muted-foreground">
+          <div className="flex aspect-video min-h-56 flex-col items-center justify-center gap-4 rounded-lg border bg-muted/20 p-4 text-center sm:p-6">
+            <p className="break-words text-sm text-muted-foreground">
               {state === "UPCOMING"
                 ? `This paid Zoom class starts ${new Date(session.startsAt).toLocaleString()}.`
                 : state === "ENDED"
                   ? "This paid Zoom class has ended."
                   : "The paid Zoom class is live now."}
             </p>
-            {state === "LIVE" ? <Button disabled={busy} onClick={() => void joinZoom()}>{busy ? "Opening Zoom…" : "Join live class on Zoom"}</Button> : null}
+            {state === "LIVE" ? <Button className="w-full sm:w-auto" disabled={busy} onClick={() => void joinZoom()}>{busy ? "Opening Zoom…" : "Join live class on Zoom"}</Button> : null}
           </div>
         ) : state === "LIVE" && playbackUrl ? (
           <video key={playbackUrl} className="aspect-video w-full rounded-lg bg-black" src={playbackUrl} controls playsInline autoPlay />
         ) : (
-          <div className="flex aspect-video items-center justify-center rounded-lg border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
-            {state === "UPCOMING" ? `This paid course live session starts ${new Date(session.startsAt).toLocaleString()}.` : state === "ENDED" ? "This paid course live session has ended." : message ?? "Preparing protected playback…"}
+          <div className="flex aspect-video min-h-56 items-center justify-center rounded-lg border bg-muted/20 p-4 text-center text-sm text-muted-foreground sm:p-6">
+            <span className="break-words">{state === "UPCOMING" ? `This paid course live session starts ${new Date(session.startsAt).toLocaleString()}.` : state === "ENDED" ? "This paid course live session has ended." : message ?? "Preparing protected playback…"}</span>
           </div>
         )}
-        {message && state === "LIVE" ? <p className="text-sm text-muted-foreground">{message}</p> : null}
-        {session.deliveryMode === "MEDIA" && state === "LIVE" && !playbackUrl ? <Button disabled={busy} onClick={() => void authorize()}>{busy ? "Loading…" : "Retry playback"}</Button> : null}
+        {message && state === "LIVE" ? <p className="break-words text-sm text-muted-foreground">{message}</p> : null}
+        {session.deliveryMode === "MEDIA" && state === "LIVE" && !playbackUrl ? <Button className="w-full sm:w-auto" disabled={busy} onClick={() => void authorize()}>{busy ? "Loading…" : "Retry playback"}</Button> : null}
       </CardContent>
     </Card>
   );

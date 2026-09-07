@@ -79,9 +79,9 @@ export default async function CourseDetailPage({
         </Button>
 
         <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
-          <div className="max-w-2xl">
+          <div className="min-w-0 max-w-2xl">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-tight">
+              <h1 className="min-w-0 break-words text-2xl font-semibold tracking-tight">
                 {course.title}
               </h1>
               {course.enrollmentStatus === "COMPLETED" ? (
@@ -89,7 +89,7 @@ export default async function CourseDetailPage({
               ) : null}
             </div>
             {course.description ? (
-              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+              <p className="mt-3 break-words text-sm leading-relaxed text-muted-foreground">
                 {course.description}
               </p>
             ) : null}
@@ -97,15 +97,15 @@ export default async function CourseDetailPage({
         </div>
 
         <div className="mt-6 space-y-2">
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <span>
+          <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+            <span className="min-w-0 break-words">
               {completedLessons} of {totalLessons} lessons completed
             </span>
-            <span>{course.progressPercent}%</span>
+            <span className="shrink-0">{course.progressPercent}%</span>
           </div>
           <Progress value={course.progressPercent} className="h-2" />
           {quizzes.length ? (
-            <p className="text-xs text-muted-foreground">
+            <p className="break-words text-xs text-muted-foreground">
               Course completion also requires passing all {quizzes.length} published
               {quizzes.length === 1 ? " quiz" : " quizzes"}.
             </p>
@@ -123,20 +123,21 @@ export default async function CourseDetailPage({
               });
 
               return (
-                <Card key={liveSession.id}>
-                  <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Radio className="size-4" />
-                        <p className="font-medium">{liveSession.title}</p>
+                <Card key={liveSession.id} className="overflow-hidden">
+                  <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Radio className="size-4 shrink-0" />
+                        <p className="min-w-0 break-words font-medium">{liveSession.title}</p>
                         <Badge variant="outline">{state}</Badge>
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
+                      <p className="mt-1 break-words text-xs text-muted-foreground">
                         {liveSession.startsAt.toLocaleString()} — {liveSession.endsAt.toLocaleString()}
                       </p>
                     </div>
                     <Button
                       size="sm"
+                      className="w-full sm:w-auto"
                       variant={state === "LIVE" ? "default" : "outline"}
                       asChild
                     >
@@ -156,20 +157,20 @@ export default async function CourseDetailPage({
             const moduleQuizzes = quizzes.filter((quiz) => quiz.moduleId === module.id);
 
             return (
-              <Card key={module.id}>
+              <Card key={module.id} className="overflow-hidden">
                 <CardHeader>
-                  <CardTitle className="text-base">
+                  <CardTitle className="break-words text-base">
                     Module {moduleIndex + 1}: {module.title}
                   </CardTitle>
                   {module.description ? (
-                    <CardDescription>{module.description}</CardDescription>
+                    <CardDescription className="break-words">{module.description}</CardDescription>
                   ) : null}
                 </CardHeader>
                 <CardContent className="space-y-2">
                   {module.lessons.map((lesson, lessonIndex) => {
                     const content = (
-                      <div className="flex items-center gap-3 rounded-lg border px-4 py-3 transition-colors hover:bg-muted/30">
-                        <div className="shrink-0">
+                      <div className="flex items-start gap-3 rounded-lg border px-3 py-3 transition-colors hover:bg-muted/30 sm:px-4">
+                        <div className="shrink-0 pt-0.5">
                           {lesson.completed ? (
                             <CheckCircle2 className="size-5 text-foreground" />
                           ) : lesson.locked ? (
@@ -179,10 +180,10 @@ export default async function CourseDetailPage({
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium">
+                          <p className="break-words text-sm font-medium">
                             Lesson {lessonIndex + 1}: {lesson.title}
                           </p>
-                          <p className="mt-0.5 text-xs text-muted-foreground">
+                          <p className="mt-0.5 break-words text-xs text-muted-foreground">
                             {lesson.completed
                               ? "Completed"
                               : lesson.locked
@@ -201,6 +202,7 @@ export default async function CourseDetailPage({
                       <Link
                         key={lesson.id}
                         href={`/courses/${course.id}/lessons/${lesson.id}`}
+                        className="block min-w-0"
                       >
                         {content}
                       </Link>
@@ -211,17 +213,17 @@ export default async function CourseDetailPage({
                     <Link
                       key={quiz.id}
                       href={`/courses/${course.id}/quizzes/${quiz.id}`}
-                      className="block"
+                      className="block min-w-0"
                     >
-                      <div className="flex items-center gap-3 rounded-lg border px-4 py-3 transition-colors hover:bg-muted/30">
+                      <div className="flex items-start gap-3 rounded-lg border px-3 py-3 transition-colors hover:bg-muted/30 sm:px-4">
                         {passedQuizIds.has(quiz.id) ? (
-                          <CheckCircle2 className="size-5" />
+                          <CheckCircle2 className="mt-0.5 size-5 shrink-0" />
                         ) : (
-                          <ScrollText className="size-5" />
+                          <ScrollText className="mt-0.5 size-5 shrink-0" />
                         )}
-                        <div className="flex-1">
-                          <p className="text-sm font-medium">Quiz: {quiz.title}</p>
-                          <p className="mt-0.5 text-xs text-muted-foreground">
+                        <div className="min-w-0 flex-1">
+                          <p className="break-words text-sm font-medium">Quiz: {quiz.title}</p>
+                          <p className="mt-0.5 break-words text-xs text-muted-foreground">
                             {passedQuizIds.has(quiz.id)
                               ? "Passed"
                               : `Pass mark ${quiz.passMarkPercent}%`}
