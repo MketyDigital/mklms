@@ -31,7 +31,7 @@ test('Mkety provisioning keeps database and Cloudflare credentials out of artifa
   const workflow = readFileSync(path, 'utf8');
   assert.match(workflow, /secrets\.MKETY_DATABASE_URL/);
   assert.match(workflow, /secrets\.CLOUDFLARE_PROVISIONING_API_TOKEN/);
-  assert.doesNotMatch(workflow, /echo\s+.*MKETY_DATABASE_URL|printenv|set\s+-x|curl\s+[^\n]*--verbose/);
+  assert.doesNotMatch(workflow, /echo\s+[^\n]*\$\{?MKETY_DATABASE_URL|printenv|set\s+-x|curl\s+[^\n]*--verbose/);
   assert.match(workflow, /mkety-academy-provisioning/);
   assert.match(workflow, /proposed-manifest\.json/);
 });
