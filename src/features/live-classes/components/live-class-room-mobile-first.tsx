@@ -79,6 +79,21 @@ const LIVE_CHAT_BOTTOM_THRESHOLD_PX = 48;
 
 type DirectSlot = 0 | 1;
 
+function waitForRenderableFrame(video: HTMLVideoElement): Promise<void> {
+  return new Promise((resolve) => {
+    const afterPaint = () => window.requestAnimationFrame(() => resolve());
+    if (typeof video.requestVideoFrameCallback === "function") {
+      video.requestVideoFrameCallback(() => resolve());
+      return;
+    }
+    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      afterPaint();
+      return;
+    }
+    video.addEventListener("loadeddata", afterPaint, { once: true });
+  });
+}
+
 function formatCountdown(targetIso: string | null, nowMs: number): string {
   if (!targetIso) return "Waiting for the next session";
   const remaining = Math.max(0, new Date(targetIso).getTime() - nowMs);
@@ -648,6 +663,8 @@ export function LiveClassRoomMobileFirst({
           setNeedsPlaybackGesture(true);
           return;
         }
+        if (generation !== directSwapGenerationRef.current) return;
+        await waitForRenderableFrame(targetVideo);
         if (generation !== directSwapGenerationRef.current) return;
 
         setNeedsPlaybackGesture(false);
