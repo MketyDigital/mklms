@@ -26,16 +26,29 @@ test('Mkety deployment validates, tests, builds and dry-runs before any deploy',
   assert.match(workflow, /--config\s+\.generated\/mkety-academy\/media\.wrangler\.jsonc/);
 });
 
-test('Mkety deploy uploads secrets alongside code and never migrates Starpips database', () => {
+test('Mkety deploy uploads isolated secrets alongside code and never migrates Starpips database', () => {
   const workflow = readFileSync(workflowPath, 'utf8');
   assert.match(workflow, /--secrets-file/);
   assert.match(workflow, /MKETY_ADMIN_ACCESS_KEY/);
   assert.match(workflow, /MKETY_ADMIN_SESSION_SECRET/);
   assert.match(workflow, /MKETY_MEDIA_SIGNING_SECRET/);
-  assert.match(workflow, /MKETY_MEDIA_DELIVERY_BASE_URL/);
+  assert.match(workflow, /MKETY_R2_ACCESS_KEY_ID/);
+  assert.match(workflow, /MKETY_R2_SECRET_ACCESS_KEY/);
+  assert.doesNotMatch(workflow, /secrets\.MKETY_MEDIA_DELIVERY_BASE_URL/);
   assert.doesNotMatch(workflow, /MKLMS_DATABASE_URL|MKLMS_DATABASE_SSL/);
   assert.doesNotMatch(workflow, /db:migrate|scripts\/migrate/);
   assert.doesNotMatch(workflow, /printenv|set\s+-x|curl\s+[^\n]*--verbose/);
+});
+
+test('Mkety first production deploy derives and verifies the new media workers.dev URL after media deployment', () => {
+  const workflow = readFileSync(workflowPath, 'utf8');
+  assert.match(workflow, /workers\/subdomain/);
+  assert.match(workflow, /workers\/scripts\/\$\{MEDIA_WORKER\}\/subdomain/);
+  assert.match(workflow, /MEDIA_DELIVERY_BASE_URL/);
+  const mediaDeploy = workflow.indexOf('Deploy Mkety protected media Worker');
+  const resolveUrl = workflow.indexOf('Resolve deployed Mkety media Worker URL');
+  const appDeploy = workflow.indexOf('Deploy Mkety application Worker');
+  assert.ok(mediaDeploy >= 0 && resolveUrl > mediaDeploy && appDeploy > resolveUrl);
 });
 
 test('generated Wrangler files use paths valid from .generated installation directory', () => {
