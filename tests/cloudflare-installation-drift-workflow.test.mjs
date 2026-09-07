@@ -12,7 +12,7 @@ test('drift comparator distinguishes match, drift and not_verifiable without sec
     { name: 'AUTH_RATE_LIMITER', type: 'ratelimit', namespace_id: 'WRONG' },
   ];
   const results = compareObservedBindings(manifest, observed, 'app');
-  assert.ok(results.some((x) => x.field === 'APP_STORAGE_BUCKET' && x.status === 'match'));
+  assert.ok(results.some((x) => x.field === 'APP_STORAGE_BUCKET.bucket_name' && x.status === 'match'));
   assert.ok(results.some((x) => x.field === 'HYPERDRIVE_CACHED.id' && x.status === 'not_verifiable'));
   assert.ok(results.some((x) => x.field === 'AUTH_RATE_LIMITER.namespace_id' && x.status === 'drift'));
   assert.doesNotMatch(JSON.stringify(results), /secret|password|token/i);
