@@ -44,6 +44,12 @@ export interface VideoProgressRepository {
     courseId: string,
     lessonId: string,
   ): Promise<LessonProgressRecord | null>;
+  getCreditedWatchSecondsExcludingGrant?(
+    studentId: string,
+    courseId: string,
+    lessonId: string,
+    grantId: string,
+  ): Promise<number>;
   listPublishedQuizGates?(courseId: string): Promise<PublishedQuizGate[]>;
   getPassedQuizIds?(studentId: string, courseId: string): Promise<ReadonlySet<string>>;
   allRequiredQuizzesPassed?(studentId: string, courseId: string): Promise<boolean>;
@@ -165,9 +171,15 @@ export class VideoProgressService {
       return { ok: false, reason: "VIDEO_PROGRESS_NOT_ALLOWED" };
     }
 
-    const [completedRaw, priorProgress, quizGates, passedQuizIdsRaw] = await Promise.all([
+    const [completedRaw, priorProgress, otherGrantCreditedSeconds, quizGates, passedQuizIdsRaw] = await Promise.all([
       this.repository.getCompletedLessonIds(input.studentId, input.courseId),
       this.repository.getLessonProgress?.(input.studentId, input.courseId, input.lessonId) ?? Promise.resolve(null),
+      this.repository.getCreditedWatchSecondsExcludingGrant?.(
+        input.studentId,
+        input.courseId,
+        input.lessonId,
+        input.grantId,
+      ) ?? Promise.resolve(0),
       this.repository.listPublishedQuizGates?.(input.courseId) ?? Promise.resolve([]),
       this.repository.getPassedQuizIds?.(input.studentId, input.courseId) ?? Promise.resolve(new Set<string>()),
     ]);
@@ -191,20 +203,11 @@ export class VideoProgressService {
       0,
       (now.getTime() - grant.startedAt.getTime()) / 1000,
     );
-    const crediblePercent = Math.min(
-      100,
-      Math.floor((elapsedSeconds / lesson.durationSeconds) * 100),
-    );
     const reportedPercent = Math.max(
       0,
       Math.min(100, Math.floor(input.reportedPercent)),
     );
-    const newlyCrediblePercent = Math.min(reportedPercent, crediblePercent);
-    const creditedPercent = Math.max(
-      priorProgress?.progressPercent ?? 0,
-      newlyCrediblePercent,
-    );
-    const newlyCrediblePositionSeconds = Math.max(
+    const currentGrantCreditedSeconds = Math.max(
       0,
       Math.min(
         lesson.durationSeconds,
@@ -212,9 +215,22 @@ export class VideoProgressService {
         Math.floor(elapsedSeconds),
       ),
     );
+    const cumulativeCreditedSeconds = Math.min(
+      lesson.durationSeconds,
+      Math.max(0, otherGrantCreditedSeconds) + currentGrantCreditedSeconds,
+    );
+    const cumulativeCrediblePercent = Math.min(
+      100,
+      Math.floor((cumulativeCreditedSeconds / lesson.durationSeconds) * 100),
+    );
+    const newlyCrediblePercent = Math.min(reportedPercent, cumulativeCrediblePercent);
+    const creditedPercent = Math.max(
+      priorProgress?.progressPercent ?? 0,
+      newlyCrediblePercent,
+    );
     const creditedPositionSeconds = Math.max(
       priorProgress?.lastPositionSeconds ?? 0,
-      newlyCrediblePositionSeconds,
+      Math.min(Math.floor(input.lastPositionSeconds), Math.floor(cumulativeCreditedSeconds)),
     );
     const lessonCompleted =
       Boolean(priorProgress?.completed) ||
@@ -233,7 +249,7 @@ export class VideoProgressService {
       input.studentId,
       input.courseId,
       input.lessonId,
-      creditedPositionSeconds,
+      currentGrantCreditedSeconds,
     );
 
     if (lessonCompleted) {
