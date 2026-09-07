@@ -1,0 +1,49 @@
+name: Migrate Mkety Academy Database
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  MKETY_DATABASE_URL: ${{ secrets.MKETY_DATABASE_URL }}
+  MKETY_DATABASE_SSL: ${{ secrets.MKETY_DATABASE_SSL }}
+
+jobs:
+  migrate-mkety:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Verify Mkety database secret is present
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$MKETY_DATABASE_URL" || { echo "Missing MKETY_DATABASE_URL secret."; exit 1; }
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify or claim isolated Mkety database identity
+        run: node scripts/guard-mkety-database.mjs
+
+      - name: Apply MkLMS migrations to Mkety database only
+        env:
+          DATABASE_URL: ${{ secrets.MKETY_DATABASE_URL }}
+          DATABASE_SSL: ${{ secrets.MKETY_DATABASE_SSL }}
+        run: npm run db:migrate
+
+      - name: Verify Mkety migration status
+        env:
+          DATABASE_URL: ${{ secrets.MKETY_DATABASE_URL }}
+          DATABASE_SSL: ${{ secrets.MKETY_DATABASE_SSL }}
+        run: npm run db:status
+
+      - name: Re-verify database identity after migration
+        run: node scripts/guard-mkety-database.mjs
