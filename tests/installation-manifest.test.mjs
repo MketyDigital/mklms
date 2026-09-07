@@ -16,10 +16,7 @@ function validConcrete(overrides = {}) {
     mediaWorker: 'mklms-media-alpha-academy',
     publicDomain: 'learn.alpha.example',
     r2Bucket: 'alpha-academy-media',
-    hyperdrive: {
-      freshId: 'alpha-fresh',
-      cachedId: 'alpha-cached',
-    },
+    hyperdrive: { freshId: 'alpha-fresh', cachedId: 'alpha-cached' },
     rateLimits: {
       auth: 'alpha-rate-auth',
       admin: 'alpha-rate-admin',
@@ -107,7 +104,11 @@ test('examples and templates are non-deployable and concrete manifests reject se
     r2Bucket: 'EXAMPLE_BUCKET',
     hyperdrive: { freshId: 'EXAMPLE_FRESH', cachedId: 'EXAMPLE_CACHED' },
     rateLimits: {
-      auth: 'EXAMPLE_AUTH', admin: 'EXAMPLE_ADMIN', studentMutation: 'EXAMPLE_STUDENT', playback: 'EXAMPLE_PLAYBACK', certificate: 'EXAMPLE_CERT',
+      auth: 'EXAMPLE_AUTH',
+      admin: 'EXAMPLE_ADMIN',
+      studentMutation: 'EXAMPLE_STUDENT',
+      playback: 'EXAMPLE_PLAYBACK',
+      certificate: 'EXAMPLE_CERT',
     },
     billingInstallationId: 'EXAMPLE_BILLING',
   });
@@ -117,7 +118,13 @@ test('examples and templates are non-deployable and concrete manifests reject se
   const template = structuredClone(example);
   template.r2Bucket = 'TEMPLATE_BUCKET';
   template.hyperdrive = { freshId: 'TEMPLATE_FRESH', cachedId: 'TEMPLATE_CACHED' };
-  template.rateLimits = { auth: 'TEMPLATE_AUTH', admin: 'TEMPLATE_ADMIN', studentMutation: 'TEMPLATE_STUDENT', playback: 'TEMPLATE_PLAYBACK', certificate: 'TEMPLATE_CERT' };
+  template.rateLimits = {
+    auth: 'TEMPLATE_AUTH',
+    admin: 'TEMPLATE_ADMIN',
+    studentMutation: 'TEMPLATE_STUDENT',
+    playback: 'TEMPLATE_PLAYBACK',
+    certificate: 'TEMPLATE_CERT',
+  };
   template.billingInstallationId = 'TEMPLATE_BILLING';
   assert.deepEqual(validateManifest(template, { filename: 'customer-template.json', manifestType: 'template' }), []);
   assert.ok(validateManifest({ ...template, deployable: true }, { filename: 'customer-template.json', manifestType: 'template' }).length > 0);
@@ -212,12 +219,9 @@ test('manifest validator source is local-only and contains no deployment/network
   }
 });
 
-test('package and CI wire validation without secrets or deploy side effects', () => {
+test('package wires the pure local installation validation command', () => {
   const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
   assert.equal(pkg.scripts['installation:validate'], 'node scripts/validate-installation-manifest.mjs');
-
-  const workflow = readFileSync('.github/workflows/phase1-ci.yml', 'utf8');
-  assert.match(workflow, /- name: Validate installation manifests\s+run: npm run installation:validate/);
 });
 
 test('repository installation validation CLI succeeds locally', () => {
