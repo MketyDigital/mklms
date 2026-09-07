@@ -2,6 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, ShieldCheck } from "lucide-react";
+import { useRouter } from "next/navigation";
+
+import {
+  destinationHref,
+  type NextLearningDestination,
+} from "@/features/courses/domain/paid-course-progression";
 
 interface PlaybackAuthorization {
   playbackType: "HLS" | "DIRECT" | "EMBED" | "CUSTOM";
@@ -23,6 +29,7 @@ interface ProgressResponse {
   lessonCompleted?: boolean;
   creditedPercent?: number;
   courseCompleted?: boolean;
+  nextDestination?: NextLearningDestination;
 }
 
 export interface ProtectedLessonPlayerProps {
@@ -30,6 +37,8 @@ export interface ProtectedLessonPlayerProps {
   lessonId: string;
   completionMode: "MANUAL" | "VIDEO_PROGRESS" | "CUSTOM" | string;
   completed: boolean;
+  initialProgressPercent?: number;
+  initialPositionSeconds?: number;
 }
 
 export function ProtectedLessonPlayer({
@@ -37,16 +46,23 @@ export function ProtectedLessonPlayer({
   lessonId,
   completionMode,
   completed,
+  initialProgressPercent = completed ? 100 : 0,
+  initialPositionSeconds = 0,
 }: ProtectedLessonPlayerProps) {
+  const router = useRouter();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const progressGrantIdRef = useRef<string | null>(null);
   const lastReportedAtRef = useRef(0);
-  const resumePositionRef = useRef(0);
+  const resumePositionRef = useRef(Math.max(0, initialPositionSeconds));
+  const advancingRef = useRef(false);
   const [authorization, setAuthorization] = useState<PlaybackAuthorization | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [creditedPercent, setCreditedPercent] = useState(completed ? 100 : 0);
+  const [creditedPercent, setCreditedPercent] = useState(
+    completed ? 100 : Math.max(0, Math.min(100, initialProgressPercent)),
+  );
   const [lessonCompleted, setLessonCompleted] = useState(completed);
+  const [advancing, setAdvancing] = useState(false);
 
   const requestPlayback = useCallback(async () => {
     const currentPosition = videoRef.current?.currentTime ?? 0;
@@ -66,7 +82,7 @@ export function ProtectedLessonPlayer({
       throw new Error(payload.message ?? "Protected playback is unavailable.");
     }
 
-    if (payload.grantId && !progressGrantIdRef.current) {
+    if (payload.grantId) {
       progressGrantIdRef.current = payload.grantId;
     }
 
@@ -154,7 +170,7 @@ export function ProtectedLessonPlayer({
   }, [authorization]);
 
   const reportProgress = useCallback(async () => {
-    if (completionMode !== "VIDEO_PROGRESS" || lessonCompleted) return;
+    if (completionMode !== "VIDEO_PROGRESS" || lessonCompleted || advancingRef.current) return;
     const grantId = progressGrantIdRef.current;
     const video = videoRef.current;
     if (!grantId || !video || !Number.isFinite(video.duration) || video.duration <= 0) return;
@@ -182,9 +198,19 @@ export function ProtectedLessonPlayer({
     const payload = (await response.json()) as ProgressResponse;
     if (!payload.ok) return;
 
-    setCreditedPercent(payload.creditedPercent ?? 0);
-    if (payload.lessonCompleted) setLessonCompleted(true);
-  }, [completionMode, courseId, lessonCompleted, lessonId]);
+    setCreditedPercent((current) => Math.max(current, payload.creditedPercent ?? 0));
+    if (payload.lessonCompleted) {
+      setLessonCompleted(true);
+      if (payload.nextDestination && !advancingRef.current) {
+        const href = destinationHref(courseId, payload.nextDestination);
+        if (href) {
+          advancingRef.current = true;
+          setAdvancing(true);
+          window.setTimeout(() => router.push(href), 700);
+        }
+      }
+    }
+  }, [completionMode, courseId, lessonCompleted, lessonId, router]);
 
   if (loading) {
     return (
@@ -245,7 +271,13 @@ export function ProtectedLessonPlayer({
 
       {completionMode === "VIDEO_PROGRESS" ? (
         <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-          <span>{lessonCompleted ? "Lesson completed" : "Watch progress is verified automatically"}</span>
+          <span>
+            {advancing
+              ? "Lesson completed. Continuing to the next step…"
+              : lessonCompleted
+                ? "Lesson completed"
+                : "Watch progress is verified and saved automatically"}
+          </span>
           <span>{Math.round(creditedPercent)}% credited</span>
         </div>
       ) : null}
