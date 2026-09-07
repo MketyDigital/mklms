@@ -1,9 +1,11 @@
 import type { CourseStructure } from "../../courses/domain/model.ts";
+import type { PublishedQuizGate } from "../../courses/domain/paid-course-progression.ts";
+import { canAccessLessonWithQuizzes } from "../../courses/domain/paid-course-progression.ts";
 import {
   calculateCourseProgress,
-  canAccessLesson,
   getNextLessonId,
 } from "../../courses/domain/progress.ts";
+import type { LessonProgressRecord } from "../../courses/services/student-learning.service.ts";
 
 export interface PlaybackGrantRecord {
   id: string;
@@ -37,6 +39,14 @@ export interface VideoProgressRepository {
     studentId: string,
     courseId: string,
   ): Promise<ReadonlySet<string>>;
+  getLessonProgress?(
+    studentId: string,
+    courseId: string,
+    lessonId: string,
+  ): Promise<LessonProgressRecord | null>;
+  listPublishedQuizGates?(courseId: string): Promise<PublishedQuizGate[]>;
+  getPassedQuizIds?(studentId: string, courseId: string): Promise<ReadonlySet<string>>;
+  allRequiredQuizzesPassed?(studentId: string, courseId: string): Promise<boolean>;
   saveLessonProgress(
     studentId: string,
     courseId: string,
@@ -155,11 +165,25 @@ export class VideoProgressService {
       return { ok: false, reason: "VIDEO_PROGRESS_NOT_ALLOWED" };
     }
 
-    const completed = new Set(
-      await this.repository.getCompletedLessonIds(input.studentId, input.courseId),
-    );
+    const [completedRaw, priorProgress, quizGates, passedQuizIdsRaw] = await Promise.all([
+      this.repository.getCompletedLessonIds(input.studentId, input.courseId),
+      this.repository.getLessonProgress?.(input.studentId, input.courseId, input.lessonId) ?? Promise.resolve(null),
+      this.repository.listPublishedQuizGates?.(input.courseId) ?? Promise.resolve([]),
+      this.repository.getPassedQuizIds?.(input.studentId, input.courseId) ?? Promise.resolve(new Set<string>()),
+    ]);
+    const completed = new Set(completedRaw);
+    const passedQuizIds = new Set(passedQuizIdsRaw);
 
-    if (!canAccessLesson(course, input.lessonId, completed, enrollment)) {
+    if (
+      !canAccessLessonWithQuizzes(
+        course,
+        input.lessonId,
+        completed,
+        quizGates,
+        passedQuizIds,
+        enrollment,
+      )
+    ) {
       return { ok: false, reason: "LESSON_LOCKED" };
     }
 
@@ -175,8 +199,12 @@ export class VideoProgressService {
       0,
       Math.min(100, Math.floor(input.reportedPercent)),
     );
-    const creditedPercent = Math.min(reportedPercent, crediblePercent);
-    const creditedPositionSeconds = Math.max(
+    const newlyCrediblePercent = Math.min(reportedPercent, crediblePercent);
+    const creditedPercent = Math.max(
+      priorProgress?.progressPercent ?? 0,
+      newlyCrediblePercent,
+    );
+    const newlyCrediblePositionSeconds = Math.max(
       0,
       Math.min(
         lesson.durationSeconds,
@@ -184,7 +212,12 @@ export class VideoProgressService {
         Math.floor(elapsedSeconds),
       ),
     );
+    const creditedPositionSeconds = Math.max(
+      priorProgress?.lastPositionSeconds ?? 0,
+      newlyCrediblePositionSeconds,
+    );
     const lessonCompleted =
+      Boolean(priorProgress?.completed) ||
       creditedPercent >= lesson.completionThresholdPercent;
 
     await this.repository.saveLessonProgress(
@@ -208,7 +241,10 @@ export class VideoProgressService {
     }
 
     const courseProgressPercent = calculateCourseProgress(course, completed);
-    const courseCompleted = courseProgressPercent === 100;
+    const quizzesPassed = this.repository.allRequiredQuizzesPassed
+      ? await this.repository.allRequiredQuizzesPassed(input.studentId, input.courseId)
+      : quizGates.every((quiz) => passedQuizIds.has(quiz.id));
+    const courseCompleted = courseProgressPercent === 100 && quizzesPassed;
 
     if (courseCompleted && enrollment.status !== "COMPLETED") {
       await this.repository.markEnrollmentCompleted(
@@ -217,16 +253,30 @@ export class VideoProgressService {
       );
     }
 
+    const candidateNextLessonId =
+      lessonCompleted && !courseCompleted
+        ? getNextLessonId(course, input.lessonId)
+        : null;
+    const nextLessonId =
+      candidateNextLessonId &&
+      canAccessLessonWithQuizzes(
+        course,
+        candidateNextLessonId,
+        completed,
+        quizGates,
+        passedQuizIds,
+        enrollment,
+      )
+        ? candidateNextLessonId
+        : null;
+
     return {
       ok: true,
       lessonCompleted,
       creditedPercent,
       courseProgressPercent,
       courseCompleted,
-      nextLessonId:
-        lessonCompleted && !courseCompleted
-          ? getNextLessonId(course, input.lessonId)
-          : null,
+      nextLessonId,
     };
   }
 }
