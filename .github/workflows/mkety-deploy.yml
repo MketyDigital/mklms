@@ -24,6 +24,8 @@ env:
   MKETY_ADMIN_SESSION_SECRET: ${{ secrets.MKETY_ADMIN_SESSION_SECRET }}
   MKETY_MEDIA_SIGNING_SECRET: ${{ secrets.MKETY_MEDIA_SIGNING_SECRET }}
   MKETY_MEDIA_DELIVERY_BASE_URL: ${{ secrets.MKETY_MEDIA_DELIVERY_BASE_URL }}
+  MKETY_R2_ACCESS_KEY_ID: ${{ secrets.MKETY_R2_ACCESS_KEY_ID }}
+  MKETY_R2_SECRET_ACCESS_KEY: ${{ secrets.MKETY_R2_SECRET_ACCESS_KEY }}
   MKETY_BILLING_SERVICE_URL: ${{ secrets.MKETY_BILLING_SERVICE_URL }}
   MKETY_BILLING_SHARED_SECRET: ${{ secrets.MKETY_BILLING_SHARED_SECRET }}
 
@@ -118,6 +120,8 @@ jobs:
           test -n "$MKETY_ADMIN_SESSION_SECRET" || { echo "Missing MKETY_ADMIN_SESSION_SECRET."; exit 1; }
           test -n "$MKETY_MEDIA_SIGNING_SECRET" || { echo "Missing MKETY_MEDIA_SIGNING_SECRET."; exit 1; }
           test -n "$MKETY_MEDIA_DELIVERY_BASE_URL" || { echo "Missing MKETY_MEDIA_DELIVERY_BASE_URL."; exit 1; }
+          test -n "$MKETY_R2_ACCESS_KEY_ID" || { echo "Missing bucket-scoped MKETY_R2_ACCESS_KEY_ID."; exit 1; }
+          test -n "$MKETY_R2_SECRET_ACCESS_KEY" || { echo "Missing bucket-scoped MKETY_R2_SECRET_ACCESS_KEY."; exit 1; }
 
       - name: Build temporary Mkety secret files
         if: ${{ inputs.environment == 'production' }}
@@ -127,20 +131,30 @@ jobs:
           mkdir -p .deployment-secrets
           chmod 700 .deployment-secrets
           node --input-type=module <<'NODE'
-          import { writeFileSync } from 'node:fs';
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const manifest = JSON.parse(readFileSync('deploy/installations/mkety-academy.json', 'utf8'));
+          const endpoint = `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`;
           const app = {
             MKLMS_ADMIN_ACCESS_KEY: process.env.MKETY_ADMIN_ACCESS_KEY,
             MKLMS_ADMIN_SESSION_SECRET: process.env.MKETY_ADMIN_SESSION_SECRET,
             MKLMS_MEDIA_SIGNING_SECRET: process.env.MKETY_MEDIA_SIGNING_SECRET,
             MKLMS_MEDIA_DELIVERY_BASE_URL: process.env.MKETY_MEDIA_DELIVERY_BASE_URL,
             MKLMS_BILLING_INSTALLATION_ID: 'mkety-academy',
+            R2_ACCOUNT_ID: process.env.CLOUDFLARE_ACCOUNT_ID,
+            MKLMS_R2_DIRECT_UPLOAD_BUCKET: manifest.r2Bucket,
+            MKLMS_R2_DIRECT_UPLOAD_ENDPOINT: endpoint,
+            MKLMS_R2_DIRECT_UPLOAD_ACCESS_KEY_ID: process.env.MKETY_R2_ACCESS_KEY_ID,
+            MKLMS_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY: process.env.MKETY_R2_SECRET_ACCESS_KEY,
           };
           if (process.env.MKETY_BILLING_SERVICE_URL) app.MKLMS_BILLING_SERVICE_URL = process.env.MKETY_BILLING_SERVICE_URL;
           if (process.env.MKETY_BILLING_SHARED_SECRET) app.MKLMS_BILLING_SHARED_SECRET = process.env.MKETY_BILLING_SHARED_SECRET;
           writeFileSync('.deployment-secrets/app.json', JSON.stringify(app), { mode: 0o600 });
           writeFileSync(
             '.deployment-secrets/media.json',
-            JSON.stringify({ MKLMS_MEDIA_SIGNING_SECRET: process.env.MKETY_MEDIA_SIGNING_SECRET }),
+            JSON.stringify({
+              MKLMS_MEDIA_SIGNING_SECRET: process.env.MKETY_MEDIA_SIGNING_SECRET,
+              MKLMS_MEDIA_ALLOWED_ORIGINS: `https://${manifest.publicDomain}`,
+            }),
             { mode: 0o600 },
           );
           NODE
