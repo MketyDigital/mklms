@@ -3,11 +3,15 @@ import type { Pool } from "pg";
 
 import { getPostgresPool } from "@/lib/postgres";
 import type { CourseStructure } from "../domain/model";
+import type { PublishedQuizGate } from "../domain/paid-course-progression";
 import type {
   LearningEnrollmentRecord,
   LearningProgressRepository,
 } from "../services/learning-progress.service";
-import type { StudentLearningRepository } from "../services/student-learning.service";
+import type {
+  LessonProgressRecord,
+  StudentLearningRepository,
+} from "../services/student-learning.service";
 
 export class PostgresLearningRepository
   implements LearningProgressRepository, StudentLearningRepository
@@ -167,6 +171,86 @@ export class PostgresLearningRepository
     );
 
     return new Set(result.rows.map((row) => row.lesson_id));
+  }
+
+  async getLessonProgress(
+    studentId: string,
+    courseId: string,
+    lessonId: string,
+  ): Promise<LessonProgressRecord | null> {
+    const result = await this.pool.query<{
+      lesson_id: string;
+      progress_percent: number;
+      last_position_seconds: number | null;
+      completed_at: Date | null;
+    }>(
+      `SELECT lesson_id, progress_percent, last_position_seconds, completed_at
+       FROM lesson_progress
+       WHERE student_id = $1 AND course_id = $2 AND lesson_id = $3
+       LIMIT 1`,
+      [studentId, courseId, lessonId],
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      lessonId: row.lesson_id,
+      progressPercent: Math.max(0, Math.min(100, Number(row.progress_percent) || 0)),
+      lastPositionSeconds: Math.max(0, Number(row.last_position_seconds) || 0),
+      completed: Boolean(row.completed_at),
+    };
+  }
+
+  async listLessonProgress(
+    studentId: string,
+    courseId: string,
+  ): Promise<LessonProgressRecord[]> {
+    const result = await this.pool.query<{
+      lesson_id: string;
+      progress_percent: number;
+      last_position_seconds: number | null;
+      completed_at: Date | null;
+    }>(
+      `SELECT lesson_id, progress_percent, last_position_seconds, completed_at
+       FROM lesson_progress
+       WHERE student_id = $1 AND course_id = $2`,
+      [studentId, courseId],
+    );
+    return result.rows.map((row) => ({
+      lessonId: row.lesson_id,
+      progressPercent: Math.max(0, Math.min(100, Number(row.progress_percent) || 0)),
+      lastPositionSeconds: Math.max(0, Number(row.last_position_seconds) || 0),
+      completed: Boolean(row.completed_at),
+    }));
+  }
+
+  async listPublishedQuizGates(courseId: string): Promise<PublishedQuizGate[]> {
+    const result = await this.pool.query<{
+      id: string;
+      module_id: string;
+      position: number;
+    }>(
+      `SELECT q.id, q.module_id, q.position
+       FROM quizzes q
+       JOIN course_modules m ON m.id = q.module_id
+       WHERE m.course_id = $1 AND q.status = 'PUBLISHED'
+       ORDER BY m.position ASC, q.position ASC`,
+      [courseId],
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      moduleId: row.module_id,
+      position: row.position,
+    }));
+  }
+
+  async getPassedQuizIds(studentId: string, courseId: string): Promise<Set<string>> {
+    const result = await this.pool.query<{ quiz_id: string }>(
+      `SELECT DISTINCT quiz_id
+       FROM quiz_attempts
+       WHERE student_id = $1 AND course_id = $2 AND passed = TRUE`,
+      [studentId, courseId],
+    );
+    return new Set(result.rows.map((row) => row.quiz_id));
   }
 
   async saveLessonCompletion(
