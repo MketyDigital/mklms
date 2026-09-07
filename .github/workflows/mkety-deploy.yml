@@ -18,12 +18,13 @@ permissions:
 env:
   INSTALLATION_ID: mkety-academy
   PRODUCTION_BRANCH: production/mkety-academy
+  APP_WORKER: mklms-mkety-academy
+  MEDIA_WORKER: mklms-media-mkety-academy
   CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
   CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
   MKETY_ADMIN_ACCESS_KEY: ${{ secrets.MKETY_ADMIN_ACCESS_KEY }}
   MKETY_ADMIN_SESSION_SECRET: ${{ secrets.MKETY_ADMIN_SESSION_SECRET }}
   MKETY_MEDIA_SIGNING_SECRET: ${{ secrets.MKETY_MEDIA_SIGNING_SECRET }}
-  MKETY_MEDIA_DELIVERY_BASE_URL: ${{ secrets.MKETY_MEDIA_DELIVERY_BASE_URL }}
   MKETY_R2_ACCESS_KEY_ID: ${{ secrets.MKETY_R2_ACCESS_KEY_ID }}
   MKETY_R2_SECRET_ACCESS_KEY: ${{ secrets.MKETY_R2_SECRET_ACCESS_KEY }}
   MKETY_BILLING_SERVICE_URL: ${{ secrets.MKETY_BILLING_SERVICE_URL }}
@@ -48,7 +49,8 @@ jobs:
           test "$PRODUCTION_BRANCH" = "production/mkety-academy"
           test "$INSTALLATION_ID" != "starpips"
           test "$PRODUCTION_BRANCH" != "production/starpips"
-          test ! -e deploy/installations/starpips.json || grep -q 'spf-media' deploy/installations/starpips.json
+          test "$APP_WORKER" != "mklms"
+          test "$MEDIA_WORKER" != "mklms-media-delivery"
           if [ "${{ inputs.environment }}" = "production" ]; then
             test "$GITHUB_REF" = "refs/heads/${PRODUCTION_BRANCH}" || {
               echo "Production deployment is allowed only from production/mkety-academy."
@@ -67,8 +69,8 @@ jobs:
           test "$(jq -r '.id' deploy/installations/mkety-academy.json)" = "mkety-academy"
           test "$(jq -r '.deployable' deploy/installations/mkety-academy.json)" = "true"
           test "$(jq -r '.productionBranch' deploy/installations/mkety-academy.json)" = "production/mkety-academy"
-          test "$(jq -r '.appWorker' deploy/installations/mkety-academy.json)" != "mklms"
-          test "$(jq -r '.mediaWorker' deploy/installations/mkety-academy.json)" != "mklms-media-delivery"
+          test "$(jq -r '.appWorker' deploy/installations/mkety-academy.json)" = "$APP_WORKER"
+          test "$(jq -r '.mediaWorker' deploy/installations/mkety-academy.json)" = "$MEDIA_WORKER"
           test "$(jq -r '.r2Bucket' deploy/installations/mkety-academy.json)" != "spf-media"
 
       - name: Install dependencies
@@ -119,11 +121,10 @@ jobs:
           test -n "$MKETY_ADMIN_ACCESS_KEY" || { echo "Missing MKETY_ADMIN_ACCESS_KEY."; exit 1; }
           test -n "$MKETY_ADMIN_SESSION_SECRET" || { echo "Missing MKETY_ADMIN_SESSION_SECRET."; exit 1; }
           test -n "$MKETY_MEDIA_SIGNING_SECRET" || { echo "Missing MKETY_MEDIA_SIGNING_SECRET."; exit 1; }
-          test -n "$MKETY_MEDIA_DELIVERY_BASE_URL" || { echo "Missing MKETY_MEDIA_DELIVERY_BASE_URL."; exit 1; }
           test -n "$MKETY_R2_ACCESS_KEY_ID" || { echo "Missing bucket-scoped MKETY_R2_ACCESS_KEY_ID."; exit 1; }
           test -n "$MKETY_R2_SECRET_ACCESS_KEY" || { echo "Missing bucket-scoped MKETY_R2_SECRET_ACCESS_KEY."; exit 1; }
 
-      - name: Build temporary Mkety secret files
+      - name: Build temporary Mkety media secret file
         if: ${{ inputs.environment == 'production' }}
         shell: bash
         run: |
@@ -133,22 +134,6 @@ jobs:
           node --input-type=module <<'NODE'
           import { readFileSync, writeFileSync } from 'node:fs';
           const manifest = JSON.parse(readFileSync('deploy/installations/mkety-academy.json', 'utf8'));
-          const endpoint = `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`;
-          const app = {
-            MKLMS_ADMIN_ACCESS_KEY: process.env.MKETY_ADMIN_ACCESS_KEY,
-            MKLMS_ADMIN_SESSION_SECRET: process.env.MKETY_ADMIN_SESSION_SECRET,
-            MKLMS_MEDIA_SIGNING_SECRET: process.env.MKETY_MEDIA_SIGNING_SECRET,
-            MKLMS_MEDIA_DELIVERY_BASE_URL: process.env.MKETY_MEDIA_DELIVERY_BASE_URL,
-            MKLMS_BILLING_INSTALLATION_ID: 'mkety-academy',
-            R2_ACCOUNT_ID: process.env.CLOUDFLARE_ACCOUNT_ID,
-            MKLMS_R2_DIRECT_UPLOAD_BUCKET: manifest.r2Bucket,
-            MKLMS_R2_DIRECT_UPLOAD_ENDPOINT: endpoint,
-            MKLMS_R2_DIRECT_UPLOAD_ACCESS_KEY_ID: process.env.MKETY_R2_ACCESS_KEY_ID,
-            MKLMS_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY: process.env.MKETY_R2_SECRET_ACCESS_KEY,
-          };
-          if (process.env.MKETY_BILLING_SERVICE_URL) app.MKLMS_BILLING_SERVICE_URL = process.env.MKETY_BILLING_SERVICE_URL;
-          if (process.env.MKETY_BILLING_SHARED_SECRET) app.MKLMS_BILLING_SHARED_SECRET = process.env.MKETY_BILLING_SHARED_SECRET;
-          writeFileSync('.deployment-secrets/app.json', JSON.stringify(app), { mode: 0o600 });
           writeFileSync(
             '.deployment-secrets/media.json',
             JSON.stringify({
@@ -167,6 +152,63 @@ jobs:
           --secrets-file .deployment-secrets/media.json
           --experimental-provision=false
           --experimental-auto-create=false
+
+      - name: Resolve deployed Mkety media Worker URL
+        if: ${{ inputs.environment == 'production' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth_header="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+          account_file="$(mktemp)"
+          worker_file="$(mktemp)"
+          trap 'rm -f "$account_file" "$worker_file"' EXIT
+
+          curl --fail-with-body --silent --show-error --request GET \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/subdomain" \
+            --header "$auth_header" --output "$account_file"
+          test "$(jq -r '.success' "$account_file")" = "true"
+          account_subdomain="$(jq -r '.result.subdomain // empty' "$account_file")"
+          test -n "$account_subdomain" || { echo "Cloudflare Workers account subdomain is unavailable."; exit 1; }
+
+          curl --fail-with-body --silent --show-error --request GET \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${MEDIA_WORKER}/subdomain" \
+            --header "$auth_header" --output "$worker_file"
+          test "$(jq -r '.success' "$worker_file")" = "true"
+          test "$(jq -r '.result.enabled' "$worker_file")" = "true" || {
+            echo "Mkety media Worker workers.dev route is not enabled; refusing to deploy the app with an unreachable media URL."
+            exit 1
+          }
+
+          media_url="https://${MEDIA_WORKER}.${account_subdomain}.workers.dev"
+          echo "MEDIA_DELIVERY_BASE_URL=${media_url}" >> "$GITHUB_ENV"
+          echo "Mkety media delivery URL resolved from Cloudflare Worker metadata."
+
+      - name: Build temporary Mkety application secret file
+        if: ${{ inputs.environment == 'production' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${MEDIA_DELIVERY_BASE_URL:-}" || { echo "Mkety media delivery URL was not resolved."; exit 1; }
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const manifest = JSON.parse(readFileSync('deploy/installations/mkety-academy.json', 'utf8'));
+          const endpoint = `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`;
+          const app = {
+            MKLMS_ADMIN_ACCESS_KEY: process.env.MKETY_ADMIN_ACCESS_KEY,
+            MKLMS_ADMIN_SESSION_SECRET: process.env.MKETY_ADMIN_SESSION_SECRET,
+            MKLMS_MEDIA_SIGNING_SECRET: process.env.MKETY_MEDIA_SIGNING_SECRET,
+            MKLMS_MEDIA_DELIVERY_BASE_URL: process.env.MEDIA_DELIVERY_BASE_URL,
+            MKLMS_BILLING_INSTALLATION_ID: 'mkety-academy',
+            R2_ACCOUNT_ID: process.env.CLOUDFLARE_ACCOUNT_ID,
+            MKLMS_R2_DIRECT_UPLOAD_BUCKET: manifest.r2Bucket,
+            MKLMS_R2_DIRECT_UPLOAD_ENDPOINT: endpoint,
+            MKLMS_R2_DIRECT_UPLOAD_ACCESS_KEY_ID: process.env.MKETY_R2_ACCESS_KEY_ID,
+            MKLMS_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY: process.env.MKETY_R2_SECRET_ACCESS_KEY,
+          };
+          if (process.env.MKETY_BILLING_SERVICE_URL) app.MKLMS_BILLING_SERVICE_URL = process.env.MKETY_BILLING_SERVICE_URL;
+          if (process.env.MKETY_BILLING_SHARED_SECRET) app.MKLMS_BILLING_SHARED_SECRET = process.env.MKETY_BILLING_SHARED_SECRET;
+          writeFileSync('.deployment-secrets/app.json', JSON.stringify(app), { mode: 0o600 });
+          NODE
 
       - name: Deploy Mkety application Worker
         if: ${{ inputs.environment == 'production' }}
