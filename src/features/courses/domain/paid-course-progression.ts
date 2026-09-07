@@ -19,8 +19,8 @@ function orderedModules<TLesson extends LessonLike, TModule extends ModuleLike<T
   return [...course.modules].sort((a, b) => a.position - b.position);
 }
 
-function orderedLessons<TLesson extends LessonLike>(module: ModuleLike<TLesson>): TLesson[] {
-  return [...module.lessons].sort((a, b) => a.position - b.position);
+function orderedLessons<TLesson extends LessonLike>(courseModule: ModuleLike<TLesson>): TLesson[] {
+  return [...courseModule.lessons].sort((a, b) => a.position - b.position);
 }
 
 function moduleQuizzes(
@@ -33,10 +33,10 @@ function moduleQuizzes(
 }
 
 function moduleLessonsComplete(
-  module: ModuleLike,
+  courseModule: ModuleLike,
   completedLessonIds: ReadonlySet<string>,
 ): boolean {
-  return module.lessons.every((lesson) => completedLessonIds.has(lesson.id));
+  return courseModule.lessons.every((lesson) => completedLessonIds.has(lesson.id));
 }
 
 function moduleQuizzesPassed(
@@ -55,13 +55,13 @@ function priorModulesComplete(
   passedQuizIds: ReadonlySet<string>,
 ): boolean {
   const modules = orderedModules(course);
-  const targetIndex = modules.findIndex((module) => module.id === moduleId);
+  const targetIndex = modules.findIndex((courseModule) => courseModule.id === moduleId);
   if (targetIndex < 0) return false;
 
   return modules.slice(0, targetIndex).every(
-    (module) =>
-      moduleLessonsComplete(module, completedLessonIds) &&
-      moduleQuizzesPassed(quizzes, module.id, passedQuizIds),
+    (courseModule) =>
+      moduleLessonsComplete(courseModule, completedLessonIds) &&
+      moduleQuizzesPassed(quizzes, courseModule.id, passedQuizIds),
   );
 }
 
@@ -74,20 +74,20 @@ export function canAccessLessonWithQuizzes(
   enrollment: EnrollmentLike,
 ): boolean {
   const modules = orderedModules(course);
-  const module = modules.find((candidate) =>
+  const courseModule = modules.find((candidate) =>
     candidate.lessons.some((lesson) => lesson.id === lessonId),
   );
-  if (!module) return false;
+  if (!courseModule) return false;
 
   if (enrollment.status === "COMPLETED") {
-    return module.lessons.some((lesson) => lesson.id === lessonId);
+    return courseModule.lessons.some((lesson) => lesson.id === lessonId);
   }
   if (enrollment.status !== "ACTIVE") return false;
-  if (!priorModulesComplete(course, module.id, completedLessonIds, quizzes, passedQuizIds)) {
+  if (!priorModulesComplete(course, courseModule.id, completedLessonIds, quizzes, passedQuizIds)) {
     return false;
   }
 
-  const lessons = orderedLessons(module);
+  const lessons = orderedLessons(courseModule);
   const lessonIndex = lessons.findIndex((lesson) => lesson.id === lessonId);
   if (lessonIndex < 0) return false;
 
@@ -107,17 +107,17 @@ export function canAccessQuiz(
   const quiz = quizzes.find((candidate) => candidate.id === quizId);
   if (!quiz) return false;
 
-  const module = orderedModules(course).find((candidate) => candidate.id === quiz.moduleId);
-  if (!module) return false;
+  const courseModule = orderedModules(course).find((candidate) => candidate.id === quiz.moduleId);
+  if (!courseModule) return false;
 
   if (enrollment.status === "COMPLETED") return true;
   if (enrollment.status !== "ACTIVE") return false;
-  if (!priorModulesComplete(course, module.id, completedLessonIds, quizzes, passedQuizIds)) {
+  if (!priorModulesComplete(course, courseModule.id, completedLessonIds, quizzes, passedQuizIds)) {
     return false;
   }
-  if (!moduleLessonsComplete(module, completedLessonIds)) return false;
+  if (!moduleLessonsComplete(courseModule, completedLessonIds)) return false;
 
-  const ordered = moduleQuizzes(quizzes, module.id);
+  const ordered = moduleQuizzes(quizzes, courseModule.id);
   const quizIndex = ordered.findIndex((candidate) => candidate.id === quizId);
   if (quizIndex < 0) return false;
 
@@ -132,8 +132,8 @@ export function areCourseRequirementsComplete(
   quizzes: readonly PublishedQuizGate[],
   passedQuizIds: ReadonlySet<string>,
 ): boolean {
-  const allLessonsComplete = orderedModules(course).every((module) =>
-    moduleLessonsComplete(module, completedLessonIds),
+  const allLessonsComplete = orderedModules(course).every((courseModule) =>
+    moduleLessonsComplete(courseModule, completedLessonIds),
   );
   const allQuizzesPassed = quizzes.every((quiz) => passedQuizIds.has(quiz.id));
   return allLessonsComplete && allQuizzesPassed;
@@ -152,13 +152,13 @@ export function getNextDestinationAfterLesson(
   }
 
   const modules = orderedModules(course);
-  const moduleIndex = modules.findIndex((module) =>
-    module.lessons.some((lesson) => lesson.id === lessonId),
+  const moduleIndex = modules.findIndex((courseModule) =>
+    courseModule.lessons.some((lesson) => lesson.id === lessonId),
   );
   if (moduleIndex < 0) return { type: "COURSE" };
 
-  const module = modules[moduleIndex];
-  const lessons = orderedLessons(module);
+  const courseModule = modules[moduleIndex];
+  const lessons = orderedLessons(courseModule);
   const lessonIndex = lessons.findIndex((lesson) => lesson.id === lessonId);
 
   for (const nextLesson of lessons.slice(lessonIndex + 1)) {
@@ -176,7 +176,7 @@ export function getNextDestinationAfterLesson(
     }
   }
 
-  for (const quiz of moduleQuizzes(quizzes, module.id)) {
+  for (const quiz of moduleQuizzes(quizzes, courseModule.id)) {
     if (
       !passedQuizIds.has(quiz.id) &&
       canAccessQuiz(course, quiz.id, completedLessonIds, quizzes, passedQuizIds, enrollment)
@@ -230,7 +230,7 @@ export function getNextDestinationAfterQuiz(
   }
 
   const modules = orderedModules(course);
-  const moduleIndex = modules.findIndex((module) => module.id === quiz.moduleId);
+  const moduleIndex = modules.findIndex((courseModule) => courseModule.id === quiz.moduleId);
   for (const nextModule of modules.slice(moduleIndex + 1)) {
     const nextLesson = orderedLessons(nextModule)[0];
     if (
