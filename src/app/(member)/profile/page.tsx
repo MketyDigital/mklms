@@ -18,22 +18,22 @@ export default async function ProfilePage() {
       unreadMessages={0}
     >
       <div className="mx-auto max-w-2xl px-4 py-6 sm:px-6 lg:px-8">
-        <h1 className="text-2xl font-semibold tracking-tight">Profile</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Your current MkLMS student identity.</p>
-        <Card className="mt-6">
+        <h1 className="break-words text-2xl font-semibold tracking-tight">Profile</h1>
+        <p className="mt-1 break-words text-sm text-muted-foreground">Your current MkLMS student identity.</p>
+        <Card className="mt-6 overflow-hidden">
           <CardHeader>
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <CardTitle className="text-base">Account</CardTitle>
               <Badge variant="secondary">Active session</Badge>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4 text-sm">
-            <div><p className="text-muted-foreground">Name</p><p className="mt-1 font-medium">{session.displayName}</p></div>
-            <div><p className="text-muted-foreground">Email</p><p className="mt-1 font-medium">{session.email ?? "Not set"}</p></div>
-            <div><p className="text-muted-foreground">Student ID</p><p className="mt-1 break-all font-mono text-xs">{session.studentId}</p></div>
+          <CardContent className="min-w-0 space-y-4 text-sm">
+            <div className="min-w-0"><p className="text-muted-foreground">Name</p><p className="mt-1 break-words font-medium">{session.displayName}</p></div>
+            <div className="min-w-0"><p className="text-muted-foreground">Email</p><p className="mt-1 break-all font-medium">{session.email ?? "Not set"}</p></div>
+            <div className="min-w-0"><p className="text-muted-foreground">Student ID</p><p className="mt-1 break-all font-mono text-xs">{session.studentId}</p></div>
           </CardContent>
         </Card>
-        <p className="mt-4 text-xs text-muted-foreground">Certificate identity is intentionally managed separately and is locked during first-time access claim.</p>
+        <p className="mt-4 break-words text-xs text-muted-foreground">Certificate identity is intentionally managed separately and is locked during first-time access claim.</p>
       </div>
     </AppLayout>
   );
