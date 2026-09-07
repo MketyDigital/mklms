@@ -10,6 +10,8 @@
     "lint": "eslint",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "installation:validate": "node scripts/validate-installation-manifest.mjs",
+    "installation:generate": "node scripts/generate-installation-config.mjs",
+    "installation:compare-starpips": "node scripts/compare-starpips-generated-config.mjs",
     "db:status": "node scripts/migration-status.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "cf:build": "opennextjs-cloudflare build",
