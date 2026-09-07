@@ -1,0 +1,178 @@
+name: Provision Mkety Academy infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      provision_hyperdrive:
+        description: "Create/reuse Mkety Hyperdrives when Mkety DB origin secrets are configured"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  provision:
+    runs-on: ubuntu-24.04
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      MKETY_DB_HOST: ${{ secrets.MKETY_DB_HOST }}
+      MKETY_DB_PORT: ${{ secrets.MKETY_DB_PORT }}
+      MKETY_DB_NAME: ${{ secrets.MKETY_DB_NAME }}
+      MKETY_DB_USER: ${{ secrets.MKETY_DB_USER }}
+      MKETY_DB_PASSWORD: ${{ secrets.MKETY_DB_PASSWORD }}
+      INSTALLATION_ID: mkety-academy
+      R2_BUCKET: mkety-academy-media
+      HYPERDRIVE_FRESH_NAME: mklms-mkety-academy-fresh
+      HYPERDRIVE_CACHED_NAME: mklms-mkety-academy-cached
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Verify target and Cloudflare credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "Missing CLOUDFLARE_ACCOUNT_ID"; exit 1; }
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "Missing CLOUDFLARE_API_TOKEN"; exit 1; }
+          node --input-type=module <<'NODE'
+          import { assertNotProtectedInstallationTarget } from './scripts/protected-installation-resources.mjs';
+          for (const value of [
+            'mkety-academy',
+            'production/mkety-academy',
+            'mklms-mkety-academy',
+            'mklms-media-mkety-academy',
+            'mkety-academy-media',
+            'mkety-academy',
+          ]) assertNotProtectedInstallationTarget(value);
+          NODE
+
+      - name: Create or reuse Mkety R2 bucket
+        id: r2
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets"
+          AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          status=$(curl --silent --show-error --output /tmp/r2.json --write-out '%{http_code}' \
+            --request GET "$API/$R2_BUCKET" -H "$AUTH")
+          if [ "$status" = "200" ]; then
+            jq -e '.success == true' /tmp/r2.json >/dev/null
+          elif [ "$status" = "404" ]; then
+            jq -n --arg name "$R2_BUCKET" '{name:$name}' >/tmp/r2-create.json
+            curl --silent --show-error --fail-with-body --request POST "$API" \
+              -H "$AUTH" -H 'Content-Type: application/json' \
+              --data @/tmp/r2-create.json >/tmp/r2.json
+            jq -e '.success == true' /tmp/r2.json >/dev/null
+          else
+            echo "Unexpected R2 lookup response: HTTP $status"
+            jq -r '.errors[]?.message // empty' /tmp/r2.json
+            exit 1
+          fi
+          echo "r2_bucket=$R2_BUCKET" >> "$GITHUB_OUTPUT"
+          rm -f /tmp/r2.json /tmp/r2-create.json
+
+      - name: Check Mkety Hyperdrive prerequisite
+        id: dbcheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.provision_hyperdrive }}" != "true" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          missing=0
+          for name in MKETY_DB_HOST MKETY_DB_PORT MKETY_DB_NAME MKETY_DB_USER MKETY_DB_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing required Mkety-only database secret: $name"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then exit 1; fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Create or reuse Mkety Hyperdrives
+        id: hyperdrive
+        if: steps.dbcheck.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/hyperdrive/configs"
+          AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+
+          list=$(mktemp)
+          curl --silent --show-error --fail-with-body --request GET "$API?per_page=100" -H "$AUTH" >"$list"
+          jq -e '.success == true' "$list" >/dev/null
+
+          create_or_reuse() {
+            local name="$1"
+            local existing
+            existing=$(jq -r --arg name "$name" '.result[]? | select(.name == $name) | .id' "$list" | head -n1)
+            if [ -n "$existing" ]; then
+              printf '%s' "$existing"
+              return
+            fi
+            local body response
+            body=$(mktemp)
+            response=$(mktemp)
+            jq -n \
+              --arg name "$name" \
+              --arg host "$MKETY_DB_HOST" \
+              --arg database "$MKETY_DB_NAME" \
+              --arg user "$MKETY_DB_USER" \
+              --arg password "$MKETY_DB_PASSWORD" \
+              --argjson port "${MKETY_DB_PORT:-5432}" \
+              '{name:$name,origin:{scheme:"postgres",host:$host,port:$port,database:$database,user:$user,password:$password},origin_connection_limit:20}' \
+              >"$body"
+            curl --silent --show-error --fail-with-body --request POST "$API" \
+              -H "$AUTH" -H 'Content-Type: application/json' --data @"$body" >"$response"
+            jq -e '.success == true' "$response" >/dev/null
+            jq -r '.result.id' "$response"
+            rm -f "$body" "$response"
+          }
+
+          fresh_id=$(create_or_reuse "$HYPERDRIVE_FRESH_NAME")
+          cached_id=$(create_or_reuse "$HYPERDRIVE_CACHED_NAME")
+          test -n "$fresh_id" && test -n "$cached_id" && test "$fresh_id" != "$cached_id"
+          node --input-type=module - "$fresh_id" "$cached_id" <<'NODE'
+          import { assertNotProtectedInstallationTarget } from './scripts/protected-installation-resources.mjs';
+          assertNotProtectedInstallationTarget(process.argv[2], 'fresh Hyperdrive');
+          assertNotProtectedInstallationTarget(process.argv[3], 'cached Hyperdrive');
+          NODE
+          echo "fresh_id=$fresh_id" >> "$GITHUB_OUTPUT"
+          echo "cached_id=$cached_id" >> "$GITHUB_OUTPUT"
+          rm -f "$list"
+
+      - name: Write non-secret provisioning result
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .generated/provisioning
+          jq -n \
+            --arg installationId "$INSTALLATION_ID" \
+            --arg r2Bucket "${{ steps.r2.outputs.r2_bucket }}" \
+            --arg hyperdriveFreshId "${{ steps.hyperdrive.outputs.fresh_id }}" \
+            --arg hyperdriveCachedId "${{ steps.hyperdrive.outputs.cached_id }}" \
+            '{installationId:$installationId,r2Bucket:$r2Bucket,hyperdriveFreshId:$hyperdriveFreshId,hyperdriveCachedId:$hyperdriveCachedId}' \
+            > .generated/provisioning/mkety-academy.json
+          node --input-type=module <<'NODE'
+          import { readFile } from 'node:fs/promises';
+          import { assertNotProtectedInstallationTarget } from './scripts/protected-installation-resources.mjs';
+          const result = JSON.parse(await readFile('.generated/provisioning/mkety-academy.json', 'utf8'));
+          for (const value of Object.values(result).filter(Boolean)) assertNotProtectedInstallationTarget(value);
+          NODE
+
+      - name: Upload non-secret provisioning result
+        uses: actions/upload-artifact@v4
+        with:
+          name: mkety-academy-provisioning-result
+          path: .generated/provisioning/mkety-academy.json
+          retention-days: 7
+          if-no-files-found: error
