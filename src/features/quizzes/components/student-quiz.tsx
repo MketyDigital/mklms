@@ -56,36 +56,37 @@ export function StudentQuiz({ quiz }: { quiz: StudentQuizView }) {
   }
 
   return (
-    <Card>
+    <Card className="overflow-hidden">
       <CardHeader>
-        <CardTitle>{quiz.title}</CardTitle>
-        <CardDescription>{quiz.description || `Pass mark: ${quiz.passMarkPercent}%`}</CardDescription>
+        <CardTitle className="break-words">{quiz.title}</CardTitle>
+        <CardDescription className="break-words">{quiz.description || `Pass mark: ${quiz.passMarkPercent}%`}</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={submit} className="space-y-6">
           {quiz.questions.map((question, questionIndex) => (
-            <fieldset key={question.id} className="space-y-3 rounded-lg border p-4">
-              <legend className="px-1 text-sm font-medium">{questionIndex + 1}. {question.prompt}</legend>
+            <fieldset key={question.id} className="min-w-0 space-y-3 rounded-lg border p-3 sm:p-4">
+              <legend className="max-w-full break-words px-1 text-sm font-medium">{questionIndex + 1}. {question.prompt}</legend>
               {question.choices.map((choice) => (
-                <label key={choice.id} className="flex cursor-pointer items-center gap-3 rounded-md border p-3 text-sm">
+                <label key={choice.id} className="flex cursor-pointer items-start gap-3 rounded-md border p-3 text-sm">
                   <input
                     type="radio"
                     name={`question-${question.id}`}
                     value={choice.id}
                     checked={answers[question.id] === choice.id}
                     onChange={() => setAnswers((current) => ({ ...current, [question.id]: choice.id }))}
+                    className="mt-0.5 shrink-0"
                   />
-                  <span>{choice.label}</span>
+                  <span className="min-w-0 break-words">{choice.label}</span>
                 </label>
               ))}
             </fieldset>
           ))}
           {result ? (
-            <div className={`rounded-lg border p-4 text-sm ${result.passed ? "bg-muted/30" : "bg-muted/20"}`}>
+            <div className={`break-words rounded-lg border p-4 text-sm ${result.passed ? "bg-muted/30" : "bg-muted/20"}`}>
               {result.message ?? (result.passed ? `Passed — ${result.scorePercent}%` : `Not passed — ${result.scorePercent}%. Required: ${quiz.passMarkPercent}%.`)}
             </div>
           ) : null}
-          <Button type="submit" disabled={busy || !quiz.questions.length}>{busy ? "Submitting…" : "Submit quiz"}</Button>
+          <Button type="submit" className="w-full sm:w-auto" disabled={busy || !quiz.questions.length}>{busy ? "Submitting…" : "Submit quiz"}</Button>
         </form>
       </CardContent>
     </Card>
