@@ -1,0 +1,225 @@
+name: Prepare or Provision Mkety Academy Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Plan performs read-only collision checks; provision creates new Mkety resources.
+        required: true
+        type: choice
+        options:
+          - plan
+          - provision
+        default: plan
+      public_domain:
+        description: Mkety Academy hostname without protocol.
+        required: true
+        type: string
+      rate_auth:
+        description: Unique positive rate-limit namespace ID for auth.
+        required: true
+        type: string
+      rate_admin:
+        description: Unique positive rate-limit namespace ID for admin.
+        required: true
+        type: string
+      rate_student_mutation:
+        description: Unique positive rate-limit namespace ID for student mutations.
+        required: true
+        type: string
+      rate_playback:
+        description: Unique positive rate-limit namespace ID for playback.
+        required: true
+        type: string
+      rate_certificate:
+        description: Unique positive rate-limit namespace ID for certificates.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  CLOUDFLARE_PROVISIONING_API_TOKEN: ${{ secrets.CLOUDFLARE_PROVISIONING_API_TOKEN }}
+  MKETY_DATABASE_URL: ${{ secrets.MKETY_DATABASE_URL }}
+  INSTALLATION_ID: mkety-academy
+  APP_WORKER: mklms-mkety-academy
+  MEDIA_WORKER: mklms-media-mkety-academy
+  R2_BUCKET: mkety-academy-media
+  PRODUCTION_BRANCH: production/mkety-academy
+  BILLING_INSTALLATION_ID: mkety-academy
+
+jobs:
+  prepare-or-provision:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Verify Cloudflare provisioning credentials are present
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "Missing CLOUDFLARE_ACCOUNT_ID secret."; exit 1; }
+          test -n "$CLOUDFLARE_PROVISIONING_API_TOKEN" || { echo "Missing CLOUDFLARE_PROVISIONING_API_TOKEN secret."; exit 1; }
+          if [ "${{ inputs.mode }}" = "provision" ]; then
+            test -n "$MKETY_DATABASE_URL" || { echo "Provision mode requires a separate MKETY_DATABASE_URL secret."; exit 1; }
+          fi
+
+      - name: Build and validate protected Mkety provisioning plan
+        env:
+          PUBLIC_DOMAIN: ${{ inputs.public_domain }}
+          RATE_AUTH: ${{ inputs.rate_auth }}
+          RATE_ADMIN: ${{ inputs.rate_admin }}
+          RATE_STUDENT_MUTATION: ${{ inputs.rate_student_mutation }}
+          RATE_PLAYBACK: ${{ inputs.rate_playback }}
+          RATE_CERTIFICATE: ${{ inputs.rate_certificate }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .provisioning
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from 'node:fs';
+          import { buildMketyProvisioningPlan, assertProvisioningTarget } from './scripts/mkety-provisioning.mjs';
+          const plan = buildMketyProvisioningPlan({
+            id: process.env.INSTALLATION_ID,
+            productionBranch: process.env.PRODUCTION_BRANCH,
+            appWorker: process.env.APP_WORKER,
+            mediaWorker: process.env.MEDIA_WORKER,
+            publicDomain: process.env.PUBLIC_DOMAIN,
+            r2Bucket: process.env.R2_BUCKET,
+            billingInstallationId: process.env.BILLING_INSTALLATION_ID,
+            rateLimits: {
+              auth: process.env.RATE_AUTH,
+              admin: process.env.RATE_ADMIN,
+              studentMutation: process.env.RATE_STUDENT_MUTATION,
+              playback: process.env.RATE_PLAYBACK,
+              certificate: process.env.RATE_CERTIFICATE,
+            },
+          });
+          assertProvisioningTarget(plan);
+          writeFileSync('.provisioning/plan.json', `${JSON.stringify(plan, null, 2)}\n`);
+          NODE
+          # Defense in depth: these protected Starpips resources must never be targets here.
+          test "$INSTALLATION_ID" != "starpips"
+          test "$PRODUCTION_BRANCH" != "production/starpips"
+          test "$APP_WORKER" != "mklms"
+          test "$MEDIA_WORKER" != "mklms-media-delivery"
+          test "$R2_BUCKET" != "spf-media"
+
+      - name: Read-only preflight - every Mkety resource name must be absent
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth_header="Authorization: Bearer ${CLOUDFLARE_PROVISIONING_API_TOKEN}"
+          r2_file="$(mktemp)"
+          hyperdrive_file="$(mktemp)"
+          app_file="$(mktemp)"
+          media_file="$(mktemp)"
+          trap 'rm -f "$r2_file" "$hyperdrive_file" "$app_file" "$media_file"' EXIT
+
+          curl --fail-with-body --silent --show-error --request GET \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/r2/buckets?name_contains=${R2_BUCKET}&per_page=1000" \
+            --header "$auth_header" --output "$r2_file"
+          test "$(jq -r '.success' "$r2_file")" = "true"
+          if jq -e --arg name "$R2_BUCKET" '.result.buckets[]? | select(.name == $name)' "$r2_file" >/dev/null; then
+            echo "Collision: R2 bucket already exists; provisioning requires target resources to be absent."
+            exit 1
+          fi
+
+          curl --fail-with-body --silent --show-error --request GET \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/hyperdrive/configs?per_page=100" \
+            --header "$auth_header" --output "$hyperdrive_file"
+          test "$(jq -r '.success' "$hyperdrive_file")" = "true"
+          fresh_name="${APP_WORKER}-fresh"
+          cached_name="${APP_WORKER}-cached"
+          if jq -e --arg fresh "$fresh_name" --arg cached "$cached_name" '.result[]? | select(.name == $fresh or .name == $cached)' "$hyperdrive_file" >/dev/null; then
+            echo "Collision: a Mkety Hyperdrive name already exists; provisioning requires target resources to be absent."
+            exit 1
+          fi
+
+          for pair in "${APP_WORKER}:$app_file" "${MEDIA_WORKER}:$media_file"; do
+            worker_name="${pair%%:*}"
+            output_file="${pair#*:}"
+            status="$(curl --silent --show-error --request GET \
+              "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${worker_name}/settings" \
+              --header "$auth_header" --output "$output_file" --write-out '%{http_code}')"
+            if [ "$status" = "200" ]; then
+              echo "Collision: Worker ${worker_name} already exists; provisioning requires target resources to be absent."
+              exit 1
+            fi
+            if [ "$status" != "404" ]; then
+              echo "Worker preflight failed with HTTP ${status}."
+              exit 1
+            fi
+          done
+
+          echo "Preflight passed: all planned Mkety resource names are absent."
+
+      - name: Plan mode summary
+        if: ${{ inputs.mode == 'plan' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .provisioning/plan.json .provisioning/plan-only.json
+          echo "Plan mode complete. No Cloudflare resources were created."
+
+      - name: Provision new Mkety R2 and Hyperdrives
+        if: ${{ inputs.mode == 'provision' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth_header="Authorization: Bearer ${CLOUDFLARE_PROVISIONING_API_TOKEN}"
+          r2_request="$(mktemp)"
+          r2_response="$(mktemp)"
+          fresh_request="$(mktemp)"
+          fresh_response="$(mktemp)"
+          cached_request="$(mktemp)"
+          cached_response="$(mktemp)"
+          trap 'rm -f "$r2_request" "$r2_response" "$fresh_request" "$fresh_response" "$cached_request" "$cached_response"' EXIT
+
+          jq -n --arg name "$R2_BUCKET" '{name:$name, storageClass:"Standard"}' > "$r2_request"
+          curl --fail-with-body --silent --show-error --request POST \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/r2/buckets" \
+            --header "$auth_header" --header "Content-Type: application/json" \
+            --data-binary "@$r2_request" --output "$r2_response"
+          test "$(jq -r '.success' "$r2_response")" = "true"
+
+          node scripts/build-mkety-hyperdrive-request.mjs "$fresh_request" "${APP_WORKER}-fresh" fresh
+          curl --fail-with-body --silent --show-error --request POST \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/hyperdrive/configs" \
+            --header "$auth_header" --header "Content-Type: application/json" \
+            --data-binary "@$fresh_request" --output "$fresh_response"
+          test "$(jq -r '.success' "$fresh_response")" = "true"
+
+          node scripts/build-mkety-hyperdrive-request.mjs "$cached_request" "${APP_WORKER}-cached" cached
+          curl --fail-with-body --silent --show-error --request POST \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/hyperdrive/configs" \
+            --header "$auth_header" --header "Content-Type: application/json" \
+            --data-binary "@$cached_request" --output "$cached_response"
+          test "$(jq -r '.success' "$cached_response")" = "true"
+
+          jq -n \
+            --arg fresh "$(jq -r '.result.id' "$fresh_response")" \
+            --arg cached "$(jq -r '.result.id' "$cached_response")" \
+            '{hyperdriveFreshId:$fresh, hyperdriveCachedId:$cached}' \
+            > .provisioning/created.json
+          node scripts/render-mkety-provisioned-manifest.mjs \
+            .provisioning/plan.json .provisioning/created.json .provisioning/proposed-manifest.json
+          echo "Mkety resources created. Review the proposed manifest artifact before committing it."
+
+      - name: Upload non-secret provisioning artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mkety-academy-provisioning
+          path: |
+            .provisioning/plan.json
+            .provisioning/plan-only.json
+            .provisioning/created.json
+            .provisioning/proposed-manifest.json
+          if-no-files-found: ignore
+          retention-days: 7
