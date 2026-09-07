@@ -1,8 +1,12 @@
 import type { CourseStructure } from "../domain/model.ts";
+import type { PublishedQuizGate } from "../domain/paid-course-progression.ts";
+import {
+  areCourseRequirementsComplete,
+  canAccessLessonWithQuizzes,
+} from "../domain/paid-course-progression.ts";
 import { getPublishedCourseStructure } from "../domain/publication.ts";
 import {
   calculateCourseProgress,
-  canAccessLesson,
   getNextLessonId,
 } from "../domain/progress.ts";
 
@@ -22,6 +26,8 @@ export interface LearningProgressRepository {
     studentId: string,
     courseId: string,
   ): Promise<ReadonlySet<string>>;
+  listPublishedQuizGates?(courseId: string): Promise<PublishedQuizGate[]>;
+  getPassedQuizIds?(studentId: string, courseId: string): Promise<ReadonlySet<string>>;
   saveLessonCompletion(
     studentId: string,
     courseId: string,
@@ -88,13 +94,12 @@ export class LearningProgressService {
     this.repository = repository;
   }
 
-  private async allRequiredQuizzesPassed(
-    studentId: string,
-    courseId: string,
-  ): Promise<boolean> {
-    return this.repository.allRequiredQuizzesPassed
-      ? this.repository.allRequiredQuizzesPassed(studentId, courseId)
-      : true;
+  private async loadQuizState(studentId: string, courseId: string) {
+    const [quizGates, passedQuizIdsRaw] = await Promise.all([
+      this.repository.listPublishedQuizGates?.(courseId) ?? Promise.resolve([]),
+      this.repository.getPassedQuizIds?.(studentId, courseId) ?? Promise.resolve(new Set<string>()),
+    ]);
+    return { quizGates, passedQuizIds: new Set(passedQuizIdsRaw) };
   }
 
   async completeLesson(
@@ -113,11 +118,22 @@ export class LearningProgressService {
       return { ok: false, reason: "ENROLLMENT_INACTIVE" };
     }
 
-    const completedBefore = new Set(
-      await this.repository.getCompletedLessonIds(studentId, courseId),
-    );
+    const [completedRaw, quizState] = await Promise.all([
+      this.repository.getCompletedLessonIds(studentId, courseId),
+      this.loadQuizState(studentId, courseId),
+    ]);
+    const completedBefore = new Set(completedRaw);
 
-    if (!canAccessLesson(course, lessonId, completedBefore, enrollment)) {
+    if (
+      !canAccessLessonWithQuizzes(
+        course,
+        lessonId,
+        completedBefore,
+        quizState.quizGates,
+        quizState.passedQuizIds,
+        enrollment,
+      )
+    ) {
       return { ok: false, reason: "LESSON_LOCKED" };
     }
 
@@ -133,20 +149,37 @@ export class LearningProgressService {
     completedBefore.add(lessonId);
 
     const progressPercent = calculateCourseProgress(course, completedBefore);
-    const courseCompleted =
-      progressPercent === 100 &&
-      (await this.allRequiredQuizzesPassed(studentId, courseId));
+    const courseCompleted = areCourseRequirementsComplete(
+      course,
+      completedBefore,
+      quizState.quizGates,
+      quizState.passedQuizIds,
+    );
 
     if (courseCompleted && enrollment.status !== "COMPLETED") {
       await this.repository.markEnrollmentCompleted(studentId, courseId);
     }
 
+    const candidateNextLessonId =
+      progressPercent === 100 ? null : getNextLessonId(course, lessonId);
+    const nextLessonId =
+      candidateNextLessonId &&
+      canAccessLessonWithQuizzes(
+        course,
+        candidateNextLessonId,
+        completedBefore,
+        quizState.quizGates,
+        quizState.passedQuizIds,
+        enrollment,
+      )
+        ? candidateNextLessonId
+        : null;
+
     return {
       ok: true,
       progressPercent,
       courseCompleted,
-      nextLessonId:
-        progressPercent === 100 ? null : getNextLessonId(course, lessonId),
+      nextLessonId,
     };
   }
 
@@ -167,11 +200,22 @@ export class LearningProgressService {
       return { ok: false, reason: "ENROLLMENT_INACTIVE" };
     }
 
-    const completedBefore = new Set(
-      await this.repository.getCompletedLessonIds(studentId, courseId),
-    );
+    const [completedRaw, quizState] = await Promise.all([
+      this.repository.getCompletedLessonIds(studentId, courseId),
+      this.loadQuizState(studentId, courseId),
+    ]);
+    const completedBefore = new Set(completedRaw);
 
-    if (!canAccessLesson(course, lessonId, completedBefore, enrollment)) {
+    if (
+      !canAccessLessonWithQuizzes(
+        course,
+        lessonId,
+        completedBefore,
+        quizState.quizGates,
+        quizState.passedQuizIds,
+        enrollment,
+      )
+    ) {
       return { ok: false, reason: "LESSON_LOCKED" };
     }
 
@@ -205,23 +249,40 @@ export class LearningProgressService {
     if (lessonCompleted) completedBefore.add(lessonId);
 
     const courseProgressPercent = calculateCourseProgress(course, completedBefore);
-    const courseCompleted =
-      courseProgressPercent === 100 &&
-      (await this.allRequiredQuizzesPassed(studentId, courseId));
+    const courseCompleted = areCourseRequirementsComplete(
+      course,
+      completedBefore,
+      quizState.quizGates,
+      quizState.passedQuizIds,
+    );
 
     if (courseCompleted && enrollment.status !== "COMPLETED") {
       await this.repository.markEnrollmentCompleted(studentId, courseId);
     }
+
+    const candidateNextLessonId =
+      lessonCompleted && courseProgressPercent < 100
+        ? getNextLessonId(course, lessonId)
+        : null;
+    const nextLessonId =
+      candidateNextLessonId &&
+      canAccessLessonWithQuizzes(
+        course,
+        candidateNextLessonId,
+        completedBefore,
+        quizState.quizGates,
+        quizState.passedQuizIds,
+        enrollment,
+      )
+        ? candidateNextLessonId
+        : null;
 
     return {
       ok: true,
       lessonCompleted,
       courseProgressPercent,
       courseCompleted,
-      nextLessonId:
-        lessonCompleted && courseProgressPercent < 100
-          ? getNextLessonId(course, lessonId)
-          : null,
+      nextLessonId,
     };
   }
 }
