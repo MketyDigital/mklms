@@ -40,9 +40,9 @@ export default async function DashboardPage() {
     >
       <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
+          <div className="min-w-0">
+            <h1 className="break-words text-2xl font-semibold tracking-tight">Dashboard</h1>
+            <p className="mt-1 break-words text-sm text-muted-foreground">
               Welcome back, {session.displayName.split(" ")[0] || session.displayName}.
             </p>
           </div>
@@ -67,26 +67,26 @@ export default async function DashboardPage() {
               <CardTitle className="text-sm font-medium">Messages</CardTitle>
             </CardHeader>
             <CardContent>
-              <Button variant="outline" size="sm" asChild><Link href="/messages">Open inbox</Link></Button>
+              <Button variant="outline" size="sm" className="w-full sm:w-auto" asChild><Link href="/messages">Open inbox</Link></Button>
             </CardContent>
           </Card>
         </div>
 
-        <div className="mt-8 flex items-center justify-between gap-4">
-          <div>
+        <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <h2 className="text-lg font-semibold tracking-tight">My courses</h2>
-            <p className="text-sm text-muted-foreground">Continue from your current course progress.</p>
+            <p className="break-words text-sm text-muted-foreground">Continue from your current course progress.</p>
           </div>
-          <Button variant="outline" size="sm" asChild><Link href="/progress">View all progress</Link></Button>
+          <Button variant="outline" size="sm" className="w-full sm:w-auto" asChild><Link href="/progress">View all progress</Link></Button>
         </div>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           {courses.map((course) => (
-            <Link key={course.id} href={`/courses/${course.id}`} className="block">
-              <Card className="h-full transition-colors hover:bg-muted/30">
+            <Link key={course.id} href={`/courses/${course.id}`} className="block min-w-0">
+              <Card className="h-full overflow-hidden transition-colors hover:bg-muted/30">
                 <CardHeader>
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <CardTitle className="text-base">{course.title}</CardTitle>
+                    <CardTitle className="min-w-0 break-words text-base">{course.title}</CardTitle>
                     {course.enrollmentStatus === "COMPLETED" ? <Badge>Completed</Badge> : null}
                   </div>
                   <CardDescription>
@@ -112,9 +112,9 @@ export default async function DashboardPage() {
         </div>
 
         <div className="mt-8 space-y-3">
-          <div>
+          <div className="min-w-0">
             <h2 className="text-lg font-semibold tracking-tight">Member live sessions</h2>
-            <p className="text-sm text-muted-foreground">
+            <p className="break-words text-sm text-muted-foreground">
               Upcoming and currently live sessions from your paid courses appear here. Public free classes remain separate.
             </p>
           </div>
@@ -126,19 +126,19 @@ export default async function DashboardPage() {
               now,
             });
             return (
-              <Card key={liveSession.id}>
-                <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
-                  <div>
+              <Card key={liveSession.id} className="overflow-hidden">
+                <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Radio className="size-4" />
-                      <p className="font-medium">{liveSession.title}</p>
+                      <Radio className="size-4 shrink-0" />
+                      <p className="min-w-0 break-words font-medium">{liveSession.title}</p>
                       <Badge variant={state === "LIVE" ? "default" : "outline"}>{state}</Badge>
                     </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
+                    <p className="mt-1 break-words text-xs text-muted-foreground">
                       {liveSession.courseTitle} · {liveSession.startsAt.toLocaleString()} — {liveSession.endsAt.toLocaleString()}
                     </p>
                   </div>
-                  <Button size="sm" variant={state === "LIVE" ? "default" : "outline"} asChild>
+                  <Button size="sm" className="w-full sm:w-auto" variant={state === "LIVE" ? "default" : "outline"} asChild>
                     <Link href={`/courses/${liveSession.courseId}/live/${liveSession.id}`}>
                       {state === "LIVE" ? "Join live" : "View session"}
                     </Link>
