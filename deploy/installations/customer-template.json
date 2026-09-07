@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "kind": "installation",
+  "deployable": false,
+  "id": "customer-slug",
+  "productionBranch": "production/customer-slug",
+  "appWorker": "mklms-customer-slug",
+  "mediaWorker": "mklms-media-customer-slug",
+  "publicDomain": "learn.customer.example",
+  "r2Bucket": "TEMPLATE_R2_BUCKET",
+  "hyperdrive": {
+    "freshId": "TEMPLATE_HYPERDRIVE_FRESH_ID",
+    "cachedId": "TEMPLATE_HYPERDRIVE_CACHED_ID"
+  },
+  "rateLimits": {
+    "auth": "TEMPLATE_RATE_AUTH",
+    "admin": "TEMPLATE_RATE_ADMIN",
+    "studentMutation": "TEMPLATE_RATE_STUDENT_MUTATION",
+    "playback": "TEMPLATE_RATE_PLAYBACK",
+    "certificate": "TEMPLATE_RATE_CERTIFICATE"
+  },
+  "billingInstallationId": "TEMPLATE_BILLING_INSTALLATION_ID"
+}

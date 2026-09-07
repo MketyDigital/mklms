@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "kind": "installation",
+  "deployable": true,
+  "id": "starpips",
+  "productionBranch": "production/starpips",
+  "appWorker": "mklms",
+  "mediaWorker": "mklms-media-delivery",
+  "publicDomain": "learn.starpipsforex.com",
+  "r2Bucket": "spf-media",
+  "hyperdrive": {
+    "freshId": "bb7c9f70c2fe402080c22e06d0c0f305",
+    "cachedId": "14a4baf3773d41c88e4600967ab3b68d"
+  },
+  "rateLimits": {
+    "auth": "51090501",
+    "admin": "51090502",
+    "studentMutation": "51090503",
+    "playback": "51090504",
+    "certificate": "51090505"
+  },
+  "billingInstallationId": "spf-mklms"
+}

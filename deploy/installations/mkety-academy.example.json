@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "kind": "installation",
+  "deployable": false,
+  "id": "mkety-academy",
+  "productionBranch": "production/mkety-academy",
+  "appWorker": "mklms-mkety-academy",
+  "mediaWorker": "mklms-media-mkety-academy",
+  "publicDomain": "academy.example.com",
+  "r2Bucket": "EXAMPLE_MKETY_ACADEMY_R2_BUCKET",
+  "hyperdrive": {
+    "freshId": "EXAMPLE_MKETY_HYPERDRIVE_FRESH_ID",
+    "cachedId": "EXAMPLE_MKETY_HYPERDRIVE_CACHED_ID"
+  },
+  "rateLimits": {
+    "auth": "EXAMPLE_MKETY_RATE_AUTH",
+    "admin": "EXAMPLE_MKETY_RATE_ADMIN",
+    "studentMutation": "EXAMPLE_MKETY_RATE_STUDENT_MUTATION",
+    "playback": "EXAMPLE_MKETY_RATE_PLAYBACK",
+    "certificate": "EXAMPLE_MKETY_RATE_CERTIFICATE"
+  },
+  "billingInstallationId": "EXAMPLE_MKETY_BILLING_INSTALLATION_ID"
+}
