@@ -59,6 +59,24 @@ export class PostgresVideoProgressRepository
     };
   }
 
+  async getCreditedWatchSecondsExcludingGrant(
+    studentId: string,
+    courseId: string,
+    lessonId: string,
+    grantId: string,
+  ): Promise<number> {
+    const result = await this.mediaPool.query<{ credited_seconds: string }>(
+      `SELECT COALESCE(SUM(credited_seconds), 0)::text AS credited_seconds
+       FROM media_watch_credits
+       WHERE student_id = $1
+         AND course_id = $2
+         AND lesson_id = $3
+         AND grant_id <> $4`,
+      [studentId, courseId, lessonId, grantId],
+    );
+    return Math.max(0, Number(result.rows[0]?.credited_seconds ?? 0) || 0);
+  }
+
   async saveLessonProgress(
     studentId: string,
     courseId: string,

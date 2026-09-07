@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 
 import { getCurrentStudentSession } from "@/features/access/server/current-student";
 import { ensureCourseCertificate } from "@/features/certificates/server/ensure-course-certificate";
+import { getNextDestinationAfterLesson } from "@/features/courses/domain/paid-course-progression";
+import { getPublishedCourseStructure } from "@/features/courses/domain/publication";
 import { PostgresLearningRepository } from "@/features/courses/repositories/postgres-learning.repository";
 import { LearningProgressService } from "@/features/courses/services/learning-progress.service";
 import { consumeDistributedRateLimit, rateLimitHeaders } from "@/lib/security/rate-limit";
@@ -29,7 +31,8 @@ export async function POST(
     );
   }
 
-  const service = new LearningProgressService(new PostgresLearningRepository());
+  const repository = new PostgresLearningRepository();
+  const service = new LearningProgressService(repository);
   const result = await service.completeLesson(session.studentId, courseId, lessonId);
 
   if (!result.ok) {
@@ -42,7 +45,7 @@ export async function POST(
 
     const message =
       result.reason === "LESSON_LOCKED"
-        ? "Complete the previous lesson before continuing."
+        ? "Complete the required earlier lessons and quizzes before continuing."
         : result.reason === "COMPLETION_NOT_ALLOWED"
           ? "This lesson is completed automatically by its configured learning activity."
           : "This lesson is not currently available for your enrollment.";
@@ -53,9 +56,28 @@ export async function POST(
     );
   }
 
+  const [rawCourse, enrollment, completedRaw, quizGates, passedQuizIdsRaw] = await Promise.all([
+    repository.getCourseStructure(courseId),
+    repository.getEnrollment(session.studentId, courseId),
+    repository.getCompletedLessonIds(session.studentId, courseId),
+    repository.listPublishedQuizGates(courseId),
+    repository.getPassedQuizIds(session.studentId, courseId),
+  ]);
+  const course = rawCourse ? getPublishedCourseStructure(rawCourse) : null;
+  const nextDestination = course && enrollment
+    ? getNextDestinationAfterLesson(
+        course,
+        lessonId,
+        new Set(completedRaw),
+        quizGates,
+        new Set(passedQuizIdsRaw),
+        enrollment,
+      )
+    : null;
+
   const certificate = result.courseCompleted
     ? await ensureCourseCertificate(session.studentId, courseId)
     : null;
 
-  return NextResponse.json({ ...result, certificate });
+  return NextResponse.json({ ...result, nextDestination, certificate });
 }

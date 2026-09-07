@@ -41,10 +41,9 @@ export default async function CourseDetailPage({
   const learning = new StudentLearningService(new PostgresLearningRepository());
   const quizRepository = new PostgresQuizRepository();
   const paidLiveRepository = new PostgresPaidLiveRepository();
-  const [course, quizzes, passedQuizIds, paidLiveSessions] = await Promise.all([
+  const [course, quizzes, paidLiveSessions] = await Promise.all([
     learning.getCourseView(session.studentId, courseId),
     quizRepository.listByCourse(courseId, true),
-    quizRepository.getPassedQuizIds(session.studentId, courseId),
     paidLiveRepository.listByCourse(courseId, true),
   ]);
   if (!course) notFound();
@@ -104,12 +103,10 @@ export default async function CourseDetailPage({
             <span className="shrink-0">{course.progressPercent}%</span>
           </div>
           <Progress value={course.progressPercent} className="h-2" />
-          {quizzes.length ? (
-            <p className="break-words text-xs text-muted-foreground">
-              Course completion also requires passing all {quizzes.length} published
-              {quizzes.length === 1 ? " quiz" : " quizzes"}.
-            </p>
-          ) : null}
+          <p className="break-words text-xs text-muted-foreground">
+            Watch progress is saved automatically. Course completion requires all published lessons
+            {quizzes.length ? ` and all ${quizzes.length} published ${quizzes.length === 1 ? "quiz" : "quizzes"}` : ""}.
+          </p>
         </div>
 
         {paidLiveSessions.length ? (
@@ -187,8 +184,10 @@ export default async function CourseDetailPage({
                             {lesson.completed
                               ? "Completed"
                               : lesson.locked
-                                ? "Complete the previous lesson to unlock"
-                                : "Available"}
+                                ? "Complete the required earlier lessons and quizzes to unlock"
+                                : lesson.progressPercent > 0
+                                  ? `${Math.round(lesson.progressPercent)}% watched and saved`
+                                  : "Available"}
                           </p>
                         </div>
                       </div>
@@ -209,29 +208,46 @@ export default async function CourseDetailPage({
                     );
                   })}
 
-                  {moduleQuizzes.map((quiz) => (
-                    <Link
-                      key={quiz.id}
-                      href={`/courses/${course.id}/quizzes/${quiz.id}`}
-                      className="block min-w-0"
-                    >
+                  {moduleQuizzes.map((quiz) => {
+                    const gate = course.quizGates.find((candidate) => candidate.id === quiz.id);
+                    const passed = gate?.passed ?? false;
+                    const quizLocked = gate?.locked ?? true;
+                    const content = (
                       <div className="flex items-start gap-3 rounded-lg border px-3 py-3 transition-colors hover:bg-muted/30 sm:px-4">
-                        {passedQuizIds.has(quiz.id) ? (
+                        {passed ? (
                           <CheckCircle2 className="mt-0.5 size-5 shrink-0" />
+                        ) : quizLocked ? (
+                          <LockKeyhole className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
                         ) : (
                           <ScrollText className="mt-0.5 size-5 shrink-0" />
                         )}
                         <div className="min-w-0 flex-1">
                           <p className="break-words text-sm font-medium">Quiz: {quiz.title}</p>
                           <p className="mt-0.5 break-words text-xs text-muted-foreground">
-                            {passedQuizIds.has(quiz.id)
+                            {passed
                               ? "Passed"
-                              : `Pass mark ${quiz.passMarkPercent}%`}
+                              : quizLocked
+                                ? "Complete this module's required lessons and earlier quizzes to unlock"
+                                : `Available — pass mark ${quiz.passMarkPercent}%`}
                           </p>
                         </div>
                       </div>
-                    </Link>
-                  ))}
+                    );
+
+                    return quizLocked ? (
+                      <div key={quiz.id} aria-disabled="true">
+                        {content}
+                      </div>
+                    ) : (
+                      <Link
+                        key={quiz.id}
+                        href={`/courses/${course.id}/quizzes/${quiz.id}`}
+                        className="block min-w-0"
+                      >
+                        {content}
+                      </Link>
+                    );
+                  })}
                 </CardContent>
               </Card>
             );

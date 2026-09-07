@@ -64,7 +64,7 @@ export default async function LessonPage({
                 Lesson locked
               </CardTitle>
               <CardDescription>
-                Complete the previous lesson before opening this lesson.
+                Complete the required earlier lessons and quizzes before opening this lesson.
               </CardDescription>
             </CardHeader>
           </Card>
@@ -96,6 +96,8 @@ export default async function LessonPage({
                     lessonId={lessonId}
                     completionMode={lesson.completionMode}
                     completed={lesson.completed}
+                    initialProgressPercent={lesson.progressPercent}
+                    initialPositionSeconds={lesson.lastPositionSeconds}
                   />
                 ) : (
                   <div className="flex min-h-72 items-center justify-center rounded-lg border bg-muted/20 px-6 text-center text-sm text-muted-foreground">
@@ -109,7 +111,7 @@ export default async function LessonPage({
               <CardHeader>
                 <CardTitle className="text-base">Lesson progress</CardTitle>
                 <CardDescription>
-                  Completion unlocks the next lesson. After the whole course is completed, all lessons remain available for revision.
+                  Progress is saved automatically. Reaching the required watch threshold unlocks the next required step.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -123,7 +125,7 @@ export default async function LessonPage({
                   <p className="text-sm text-muted-foreground">
                     {lesson.completed
                       ? "Lesson completed."
-                      : "This lesson completes automatically when the protected player verifies enough watch progress."}
+                      : `${Math.round(lesson.progressPercent)}% watch progress saved. Continue watching to reach the required completion threshold.`}
                   </p>
                 )}
               </CardContent>

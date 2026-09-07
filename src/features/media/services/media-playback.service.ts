@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 
 import type { CourseStructure } from "../../courses/domain/model.ts";
-import { canAccessLesson } from "../../courses/domain/progress.ts";
+import type { PublishedQuizGate } from "../../courses/domain/paid-course-progression.ts";
+import { canAccessLessonWithQuizzes } from "../../courses/domain/paid-course-progression.ts";
 import type {
   MediaAsset,
   MediaProvider,
@@ -34,6 +35,8 @@ export interface MediaPlaybackRepository {
     studentId: string,
     courseId: string,
   ): Promise<ReadonlySet<string>>;
+  listPublishedQuizGates?(courseId: string): Promise<PublishedQuizGate[]>;
+  getPassedQuizIds?(studentId: string, courseId: string): Promise<ReadonlySet<string>>;
   getMediaAssetForLesson(
     courseId: string,
     lessonId: string,
@@ -115,12 +118,24 @@ export class MediaPlaybackService {
       return { ok: false, reason: "LESSON_NOT_AVAILABLE" };
     }
 
-    const completed = await this.repository.getCompletedLessonIds(
-      studentId,
-      courseId,
-    );
+    const [completedRaw, quizGates, passedQuizIdsRaw] = await Promise.all([
+      this.repository.getCompletedLessonIds(studentId, courseId),
+      this.repository.listPublishedQuizGates?.(courseId) ?? Promise.resolve([]),
+      this.repository.getPassedQuizIds?.(studentId, courseId) ?? Promise.resolve(new Set<string>()),
+    ]);
+    const completed = new Set(completedRaw);
+    const passedQuizIds = new Set(passedQuizIdsRaw);
 
-    if (!canAccessLesson(course, lessonId, completed, enrollment)) {
+    if (
+      !canAccessLessonWithQuizzes(
+        course,
+        lessonId,
+        completed,
+        quizGates,
+        passedQuizIds,
+        enrollment,
+      )
+    ) {
       return { ok: false, reason: "LESSON_LOCKED" };
     }
 
