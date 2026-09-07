@@ -4,11 +4,11 @@ import type {
   CourseStructure,
   LessonRecord,
 } from "../domain/model";
-import type { PublishedQuizGate } from "../domain/paid-course-progression";
+import type { PublishedQuizGate } from "../domain/paid-course-progression.ts";
 import {
   canAccessLessonWithQuizzes,
   canAccessQuiz,
-} from "../domain/paid-course-progression";
+} from "../domain/paid-course-progression.ts";
 import { getPublishedCourseStructure } from "../domain/publication.ts";
 import { calculateCourseProgress } from "../domain/progress.ts";
 import type { LearningEnrollmentRecord } from "./learning-progress.service";
