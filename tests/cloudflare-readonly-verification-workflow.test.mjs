@@ -17,10 +17,11 @@ test('Cloudflare verification workflow is manual and read-only', () => {
   assert.doesNotMatch(workflow, /--request\s+(POST|PUT|PATCH|DELETE)|-X\s+(POST|PUT|PATCH|DELETE)/);
 });
 
-test('Cloudflare verification checks the Starpips mklms Worker without deploying', () => {
+test('Cloudflare verification checks the pinned Starpips mklms Worker without deploying', () => {
   const workflow = readFileSync(workflowPath, 'utf8');
 
-  assert.match(workflow, /workers\/scripts\/mklms\/settings/);
-  assert.match(workflow, /workers\/scripts\/mklms\/deployments/);
+  assert.match(workflow, /CLOUDFLARE_WORKER_NAME:\s*mklms/);
+  assert.match(workflow, /workers\/scripts\/\$\{CLOUDFLARE_WORKER_NAME\}\/settings/);
+  assert.match(workflow, /workers\/scripts\/\$\{CLOUDFLARE_WORKER_NAME\}\/deployments/);
   assert.doesNotMatch(workflow, /wrangler\s+deploy/);
 });
