@@ -4,7 +4,7 @@
 
 **Goal:** Add staged, fail-closed provisioning and deployment tooling for a brand-new isolated Mkety Academy installation without reusing or mutating Starpips resources.
 
-**Architecture:** A pure planning/guard module validates the target and produces a create-only Cloudflare resource plan. A manual provisioning workflow performs only preflight GETs and create POSTs for resources confirmed absent, writes a non-secret proposed concrete manifest as an artifact, and never updates/deletes resources. A separate manual deploy workflow requires a reviewed concrete deployable Mkety manifest plus installation-specific secrets; it generates config, validates, builds, dry-runs, then deploys only Mkety Workers. Production branch/domain promotion remains a later explicit gate.
+**Architecture:** A pure planning/guard module validates the target and produces a create-only Cloudflare resource plan. A manual provisioning workflow performs only preflight GETs and create POSTs for resources confirmed absent, writes a non-secret proposed concrete manifest as an artifact, and never updates/deletes resources. A separate manual deploy workflow requires a reviewed concrete deployable Mkety manifest plus installation-specific secrets; it generates config, validates, builds, dry-runs, deploys the Mkety media Worker first, derives and verifies that Worker's Cloudflare `workers.dev` URL, then injects that URL while deploying the Mkety application Worker. Production branch/custom-domain promotion remains a later explicit gate.
 
 **Tech Stack:** Node.js 24, GitHub Actions, Cloudflare REST API, Wrangler/OpenNext, PostgreSQL/Hyperdrive, R2.
 
@@ -19,6 +19,8 @@
 - No secret values are committed, printed, or included in artifacts.
 - Provisioning and deployment are manual `workflow_dispatch` only.
 - Deployment never targets Starpips.
+- Mkety admin direct video upload uses its own bucket-scoped R2 S3-compatible credentials.
+- The first app deployment derives the protected media delivery URL from Cloudflare Worker metadata after the media Worker deploys; there is no circular pre-existing media URL secret requirement.
 
 ---
 
@@ -33,10 +35,8 @@
 - `buildMketyProvisioningPlan(input)` returns non-secret names and rate-limit namespaces.
 - `buildProposedManifest(plan, created)` returns a concrete Mkety manifest from newly-created resource IDs.
 
-- [ ] Write failing tests for all protected Starpips identifiers, Mkety naming, unique rate-limit namespaces, and secret-free proposed manifest.
-- [ ] Run focused test and confirm RED.
-- [ ] Implement pure module without network/client imports.
-- [ ] Run focused test and confirm GREEN.
+- [x] Write failing tests for all protected Starpips identifiers, Mkety naming, unique rate-limit namespaces, and secret-free proposed manifest.
+- [x] Implement pure module without network/client imports.
 
 ### Task 2: Manual create-only Cloudflare provisioning workflow
 
@@ -50,13 +50,12 @@
 - Secrets: `CLOUDFLARE_ACCOUNT_ID`, provisioning API token, `MKETY_DATABASE_URL` only for `provision`.
 - Output artifact: `mkety-academy-provisioning` containing only non-secret JSON and proposed concrete manifest.
 
-- [ ] Add RED workflow safety test requiring `workflow_dispatch`, no push/PR trigger, no DELETE/PUT/PATCH, explicit Starpips guard, plan mode with GET-only preflight, and provisioning POSTs limited to R2 and Hyperdrive creation.
-- [ ] Implement workflow with preflight GET collision checks before writes.
-- [ ] Parse `MKETY_DATABASE_URL` inside Node without echoing it; send origin fields directly to Hyperdrive API through temporary request files removed on exit.
-- [ ] Create R2 only if absent, create FRESH and CACHED Hyperdrives only if names absent, never reuse existing IDs.
-- [ ] Render proposed concrete manifest from API-returned IDs plus supplied rate-limit namespace IDs.
-- [ ] Upload only the non-secret artifact.
-- [ ] Run focused tests.
+- [x] Add workflow safety tests requiring `workflow_dispatch`, no push/PR trigger, no DELETE/PUT/PATCH, explicit Starpips guard, plan mode with GET-only preflight, and provisioning POSTs limited to R2 and Hyperdrive creation.
+- [x] Implement workflow with preflight GET collision checks before writes.
+- [x] Parse `MKETY_DATABASE_URL` inside Node without echoing it; send origin fields through temporary request files removed on exit.
+- [x] Create R2 only if absent and create FRESH/CACHED Hyperdrives only if names are absent; never reuse existing IDs automatically.
+- [x] Render proposed concrete manifest from API-returned IDs plus supplied rate-limit namespace IDs.
+- [x] Upload only the non-secret artifact.
 
 ### Task 3: Separate Mkety deployment workflow
 
@@ -69,19 +68,27 @@
 - Production is allowed only when `deploy/installations/mkety-academy.json` exists, validates, and `productionBranch` is `production/mkety-academy`.
 - Required installation-specific secrets are checked for presence without printing values.
 
-- [ ] Add RED tests requiring manual-only trigger, hard `mkety-academy` target, refusal of Starpips names, manifest validation/config generation, test/lint/build/dry-run gates before deploy, and no DB migration in build step.
-- [ ] Implement workflow with preview deployment separated from production promotion.
-- [ ] Production workflow checks current Git ref is `production/mkety-academy`; preview can run from `main`.
-- [ ] Use generated Mkety Wrangler configs with explicit `--config`.
-- [ ] Do not create/move `production/mkety-academy` from the workflow.
+- [x] Add tests requiring manual-only trigger, hard `mkety-academy` target, refusal of Starpips names, manifest validation/config generation, test/lint/build/dry-run gates before deploy, and no DB migration in build step.
+- [x] Preview is non-mutating; production requires exactly `production/mkety-academy`.
+- [x] Use generated Mkety Wrangler configs with explicit `--config`.
+- [x] Deploy media first, verify its `workers.dev` route through Cloudflare GET endpoints, derive its URL, then inject that URL into the app Worker secret set.
+- [x] Pass Mkety-only admin/session/signing and bucket-scoped R2 upload credentials alongside the code using temporary secret files.
+- [x] Do not create/move `production/mkety-academy` from the workflow.
 
-### Task 4: Audit and integration
+### Task 4: Isolated Mkety database migration
 
-- [ ] Run `npm test`.
+- [x] Add database identity guard that inspects existing MkLMS tables before any claim write.
+- [x] Refuse an existing MkLMS database without the `mkety-academy` identity marker.
+- [x] Claim only a new/empty database as Mkety.
+- [x] Add manual migration workflow that maps only `MKETY_DATABASE_URL` into the existing migration commands.
+
+### Task 5: Audit and integration
+
+- [ ] Run full `npm test` on the final branch head.
 - [ ] Run `npm run lint`.
 - [ ] Run Next.js production build.
 - [ ] Run OpenNext build.
 - [ ] Run all Worker packaging dry-runs.
 - [ ] Audit PR changed files for no Starpips runtime/config mutation.
 - [ ] Merge to `main` only after full green CI.
-- [ ] Do not run provisioning until a separate Mkety database exists and the provisioning token permissions are verified.
+- [ ] Do not run provisioning until a separate Mkety database exists and provisioning/deploy token permissions and bucket-scoped R2 credentials are verified.
