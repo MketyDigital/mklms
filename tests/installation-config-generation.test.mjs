@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 
 const STAR_PIPS = JSON.parse(readFileSync('deploy/installations/starpips.json', 'utf8'));
 
@@ -72,6 +73,19 @@ test('Starpips generated configuration is semantically equivalent to committed W
   const result = compareStarpipsGeneratedConfig();
   assert.equal(result.ok, true, result.errors.join('\n'));
   assert.deepEqual(result.errors, []);
+});
+
+test('generated Wrangler files use paths relative to their .generated installation directory', () => {
+  const result = spawnSync(process.execPath, ['scripts/generate-installation-config.mjs', 'starpips'], {
+    encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const app = JSON.parse(readFileSync('.generated/starpips/app.wrangler.jsonc', 'utf8'));
+  const media = JSON.parse(readFileSync('.generated/starpips/media.wrangler.jsonc', 'utf8'));
+  assert.equal(app.main, '../../.open-next/worker.js');
+  assert.equal(app.assets.directory, '../../.open-next/assets');
+  assert.equal('build' in app, false);
+  assert.equal(media.main, '../../workers/media-delivery/src/index.ts');
 });
 
 test('generation and comparison sources are local-only and never deploy', () => {
