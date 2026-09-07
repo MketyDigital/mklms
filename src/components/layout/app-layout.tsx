@@ -1,4 +1,5 @@
 import { AppSidebar } from "@/components/layout/app-sidebar";
+import { cn } from "@/lib/utils";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -18,13 +19,18 @@ export function AppLayout({
   unreadMessages,
 }: AppLayoutProps) {
   return (
-    <div className="flex min-h-dvh">
+    <div
+      className={cn(
+        "flex min-h-dvh",
+        isAdmin ? "flex-row" : "flex-col lg:flex-row",
+      )}
+    >
       <AppSidebar
         isAdmin={isAdmin}
         user={user}
         unreadMessages={unreadMessages}
       />
-      <main className="flex-1 overflow-x-hidden">{children}</main>
+      <main className="min-w-0 flex-1 overflow-x-hidden">{children}</main>
     </div>
   );
 }
