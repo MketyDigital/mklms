@@ -10,13 +10,34 @@ if (!id) {
   process.exit(1);
 }
 
+function relocateAppConfig(config) {
+  return {
+    ...config,
+    $schema: '../../node_modules/wrangler/config-schema.json',
+    main: '../../.open-next/worker.js',
+    build: undefined,
+    assets: {
+      ...config.assets,
+      directory: '../../.open-next/assets',
+    },
+  };
+}
+
+function relocateMediaConfig(config) {
+  return {
+    ...config,
+    $schema: '../../node_modules/wrangler/config-schema.json',
+    main: '../../workers/media-delivery/src/index.ts',
+  };
+}
+
 try {
   const { manifest } = await loadConcreteInstallation(id);
   const target = join(ROOT, '.generated', id);
   await rm(target, { recursive: true, force: true });
   await mkdir(target, { recursive: true });
-  await writeFile(join(target, 'app.wrangler.jsonc'), renderJson(buildAppWrangler(manifest)), 'utf8');
-  await writeFile(join(target, 'media.wrangler.jsonc'), renderJson(buildMediaWrangler(manifest)), 'utf8');
+  await writeFile(join(target, 'app.wrangler.jsonc'), renderJson(relocateAppConfig(buildAppWrangler(manifest))), 'utf8');
+  await writeFile(join(target, 'media.wrangler.jsonc'), renderJson(relocateMediaConfig(buildMediaWrangler(manifest))), 'utf8');
   console.log(`Generated installation config for ${id} in .generated/${id}/`);
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));

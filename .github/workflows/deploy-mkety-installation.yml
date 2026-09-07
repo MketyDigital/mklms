@@ -1,0 +1,170 @@
+name: Deploy Mkety Academy preview
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      DATABASE_URL: ${{ secrets.MKETY_DATABASE_URL }}
+      DATABASE_SSL: ${{ secrets.MKETY_DATABASE_SSL }}
+      MKETY_ADMIN_ACCESS_KEY: ${{ secrets.MKETY_ADMIN_ACCESS_KEY }}
+      MKETY_ADMIN_SESSION_SECRET: ${{ secrets.MKETY_ADMIN_SESSION_SECRET }}
+      MKETY_MEDIA_SIGNING_SECRET: ${{ secrets.MKETY_MEDIA_SIGNING_SECRET }}
+      MKETY_BILLING_SERVICE_URL: ${{ secrets.MKETY_BILLING_SERVICE_URL }}
+      MKETY_BILLING_SHARED_SECRET: ${{ secrets.MKETY_BILLING_SHARED_SECRET }}
+      INSTALLATION_ID: mkety-academy
+      APP_WORKER: mklms-mkety-academy
+      MEDIA_WORKER: mklms-media-mkety-academy
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Verify concrete Mkety manifest and required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f deploy/installations/mkety-academy.json || {
+            echo "Concrete deploy/installations/mkety-academy.json is required before deployment."
+            exit 1
+          }
+          for name in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN DATABASE_URL MKETY_ADMIN_ACCESS_KEY MKETY_ADMIN_SESSION_SECRET MKETY_MEDIA_SIGNING_SECRET; do
+            if [ -z "${!name:-}" ]; then echo "Missing required Mkety deployment secret: $name"; exit 1; fi
+          done
+          node --input-type=module <<'NODE'
+          import { readFile } from 'node:fs/promises';
+          import { assertInstallationObjectIsUnprotected } from './scripts/protected-installation-resources.mjs';
+          import { validateManifest } from './scripts/installation-manifest.mjs';
+          const manifest = JSON.parse(await readFile('deploy/installations/mkety-academy.json', 'utf8'));
+          if (manifest.id !== 'mkety-academy') throw new Error('Mkety deploy workflow only accepts mkety-academy.');
+          if (manifest.appWorker !== 'mklms-mkety-academy') throw new Error('Unexpected Mkety app Worker name.');
+          if (manifest.mediaWorker !== 'mklms-media-mkety-academy') throw new Error('Unexpected Mkety media Worker name.');
+          assertInstallationObjectIsUnprotected(manifest);
+          const errors = validateManifest(manifest, { filename: 'mkety-academy.json', manifestType: 'concrete' });
+          if (errors.length) throw new Error(errors.join('\n'));
+          NODE
+
+      - name: Apply Mkety database migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run db:migrate
+
+      - name: Generate Mkety Wrangler configs
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/generate-installation-config.mjs mkety-academy
+          test -f .generated/mkety-academy/app.wrangler.jsonc
+          test -f .generated/mkety-academy/media.wrangler.jsonc
+
+      - name: Package Mkety Workers before deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run cf:build
+          npx wrangler deploy --config .generated/mkety-academy/app.wrangler.jsonc --dry-run --outdir .generated/mkety-app-dry-run --x-provision=false
+          npx wrangler deploy --config .generated/mkety-academy/media.wrangler.jsonc --dry-run --outdir .generated/mkety-media-dry-run --x-provision=false
+
+      - name: Deploy Mkety media Worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --config .generated/mkety-academy/media.wrangler.jsonc --x-provision=false
+          jq -n --arg signing "$MKETY_MEDIA_SIGNING_SECRET" '{MKLMS_MEDIA_SIGNING_SECRET:$signing}' > /tmp/mkety-media-secrets.json
+          npx wrangler secret bulk /tmp/mkety-media-secrets.json --name "$MEDIA_WORKER"
+          rm -f /tmp/mkety-media-secrets.json
+          curl --silent --show-error --fail-with-body --request POST \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$MEDIA_WORKER/subdomain" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H 'Content-Type: application/json' \
+            --data '{"enabled":true,"previews_enabled":true}' >/tmp/media-subdomain.json
+          jq -e '.success == true' /tmp/media-subdomain.json >/dev/null
+          rm -f /tmp/media-subdomain.json
+
+      - name: Resolve Mkety Workers.dev URLs
+        id: urls
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --silent --show-error --fail-with-body --request GET \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" >/tmp/account-subdomain.json
+          jq -e '.success == true' /tmp/account-subdomain.json >/dev/null
+          subdomain=$(jq -r '.result.subdomain' /tmp/account-subdomain.json)
+          test -n "$subdomain"
+          media_url="https://$MEDIA_WORKER.$subdomain.workers.dev"
+          app_url="https://$APP_WORKER.$subdomain.workers.dev"
+          echo "media_url=$media_url" >> "$GITHUB_OUTPUT"
+          echo "app_url=$app_url" >> "$GITHUB_OUTPUT"
+          rm -f /tmp/account-subdomain.json
+
+      - name: Deploy Mkety application Worker
+        shell: bash
+        env:
+          MKETY_MEDIA_DELIVERY_BASE_URL: ${{ steps.urls.outputs.media_url }}
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --config .generated/mkety-academy/app.wrangler.jsonc --x-provision=false
+          jq -n \
+            --arg database "$DATABASE_URL" \
+            --arg databaseSsl "${DATABASE_SSL:-require}" \
+            --arg adminKey "$MKETY_ADMIN_ACCESS_KEY" \
+            --arg adminSession "$MKETY_ADMIN_SESSION_SECRET" \
+            --arg mediaUrl "$MKETY_MEDIA_DELIVERY_BASE_URL" \
+            --arg mediaSigning "$MKETY_MEDIA_SIGNING_SECRET" \
+            --arg billingUrl "$MKETY_BILLING_SERVICE_URL" \
+            --arg billingShared "$MKETY_BILLING_SHARED_SECRET" \
+            '{
+              DATABASE_URL:$database,
+              DATABASE_SSL:$databaseSsl,
+              DATABASE_POOL_MAX:"5",
+              MKLMS_ADMIN_ACCESS_KEY:$adminKey,
+              MKLMS_ADMIN_SESSION_SECRET:$adminSession,
+              MKLMS_ACCESS_CODE_PREFIX:"ACCESS",
+              MKLMS_CLAIM_VERIFICATION_STRATEGY:"preauth-only",
+              MKLMS_STUDENT_SESSION_TTL_SECONDS:"1209600",
+              MKLMS_MEDIA_DELIVERY_BASE_URL:$mediaUrl,
+              MKLMS_MEDIA_SIGNING_SECRET:$mediaSigning,
+              MKLMS_BILLING_INSTALLATION_ID:"mkety-academy"
+            }
+            + (if $billingUrl == "" then {} else {MKLMS_BILLING_SERVICE_URL:$billingUrl} end)
+            + (if $billingShared == "" then {} else {MKLMS_BILLING_SHARED_SECRET:$billingShared} end)' \
+            >/tmp/mkety-app-secrets.json
+          npx wrangler secret bulk /tmp/mkety-app-secrets.json --name "$APP_WORKER"
+          rm -f /tmp/mkety-app-secrets.json
+          curl --silent --show-error --fail-with-body --request POST \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$APP_WORKER/subdomain" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H 'Content-Type: application/json' \
+            --data '{"enabled":true,"previews_enabled":true}' >/tmp/app-subdomain.json
+          jq -e '.success == true' /tmp/app-subdomain.json >/dev/null
+          rm -f /tmp/app-subdomain.json
+
+      - name: Smoke test Mkety preview
+        shell: bash
+        env:
+          APP_URL: ${{ steps.urls.outputs.app_url }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { assertNotProtectedInstallationTarget } from './scripts/protected-installation-resources.mjs';
+          assertNotProtectedInstallationTarget(process.env.APP_URL, 'Mkety preview URL');
+          NODE
+          curl --silent --show-error --fail --retry 5 --retry-delay 3 "$APP_URL/login" >/dev/null
+          curl --silent --show-error --fail --retry 5 --retry-delay 3 "$APP_URL/" >/dev/null
+          echo "Mkety preview smoke checks passed."
