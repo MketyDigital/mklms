@@ -20,6 +20,9 @@
 # production
 /build
 
+# generated installation config
+/.generated/
+
 # misc
 .DS_Store
 *.pem

@@ -1,7 +1,14 @@
-name: Verify Cloudflare Starpips Worker (read-only)
+name: Verify Cloudflare Installation (read-only)
 
 on:
   workflow_dispatch:
+    inputs:
+      installation:
+        description: Installation to verify
+        required: true
+        type: choice
+        options:
+          - starpips
 
 permissions:
   contents: read
@@ -13,8 +20,16 @@ jobs:
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_WORKER_NAME: mklms
+      INSTALLATION_ID: ${{ inputs.installation }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: Verify required Cloudflare secrets are present
         shell: bash
         run: |
@@ -28,48 +43,67 @@ jobs:
             exit 1
           fi
 
-      - name: Read Worker settings safely
+      - name: Validate selected installation manifest
         shell: bash
         run: |
           set -euo pipefail
-          response_file="$(mktemp)"
-          trap 'rm -f "$response_file"' EXIT
+          npm run installation:validate
+          MANIFEST_PATH="deploy/installations/${INSTALLATION_ID}.json"
+          test -f "$MANIFEST_PATH"
+          test "$(jq -r '.deployable' "$MANIFEST_PATH")" = "true"
+          test "$(jq -r '.id' "$MANIFEST_PATH")" = "$INSTALLATION_ID"
+          echo "MANIFEST_PATH=$MANIFEST_PATH" >> "$GITHUB_ENV"
+          echo "APP_WORKER=$(jq -r '.appWorker' "$MANIFEST_PATH")" >> "$GITHUB_ENV"
+          echo "MEDIA_WORKER=$(jq -r '.mediaWorker' "$MANIFEST_PATH")" >> "$GITHUB_ENV"
 
-          curl --fail-with-body --silent --show-error --request GET \
-            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${CLOUDFLARE_WORKER_NAME}/settings" \
-            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            --header "Content-Type: application/json" \
-            --output "$response_file"
-
-          if [ "$(jq -r '.success' "$response_file")" != "true" ]; then
-            echo "Cloudflare Worker settings request was not successful"
-            jq -r '.errors[]?.message // empty' "$response_file"
-            exit 1
-          fi
-
-          echo "Cloudflare Worker settings are readable."
-          echo "Worker: ${CLOUDFLARE_WORKER_NAME}"
-          jq -r '[.result.bindings[]? | {name, type}] | sort_by(.name) | .[] | "Binding: \(.name) [\(.type)]"' "$response_file"
-
-      - name: Read Worker deployments safely
+      - name: Read and verify application Worker safely
         shell: bash
         run: |
           set -euo pipefail
-          response_file="$(mktemp)"
-          trap 'rm -f "$response_file"' EXIT
+          settings_file="$(mktemp)"
+          deployments_file="$(mktemp)"
+          trap 'rm -f "$settings_file" "$deployments_file"' EXIT
 
           curl --fail-with-body --silent --show-error --request GET \
-            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${CLOUDFLARE_WORKER_NAME}/deployments" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${APP_WORKER}/settings" \
             --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             --header "Content-Type: application/json" \
-            --output "$response_file"
+            --output "$settings_file"
 
-          if [ "$(jq -r '.success' "$response_file")" != "true" ]; then
-            echo "Cloudflare Worker deployments request was not successful"
-            jq -r '.errors[]?.message // empty' "$response_file"
-            exit 1
-          fi
+          node scripts/verify-cloudflare-response.mjs "$MANIFEST_PATH" app "$settings_file"
 
-          echo "Cloudflare Worker deployments are readable."
-          jq -r '"Deployment count: \(.result.deployments | length)"' "$response_file"
-          jq -r '.result.deployments[0]? | "Latest deployment: \(.id) created \(.created_on) source=\(.source)"' "$response_file"
+          curl --fail-with-body --silent --show-error --request GET \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${APP_WORKER}/deployments" \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --output "$deployments_file"
+
+          test "$(jq -r '.success' "$deployments_file")" = "true"
+          echo "Application Worker deployments are readable."
+          jq -r '"Deployment count: \(.result.deployments | length)"' "$deployments_file"
+
+      - name: Read and verify media Worker safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          settings_file="$(mktemp)"
+          deployments_file="$(mktemp)"
+          trap 'rm -f "$settings_file" "$deployments_file"' EXIT
+
+          curl --fail-with-body --silent --show-error --request GET \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${MEDIA_WORKER}/settings" \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --output "$settings_file"
+
+          node scripts/verify-cloudflare-response.mjs "$MANIFEST_PATH" media "$settings_file"
+
+          curl --fail-with-body --silent --show-error --request GET \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${MEDIA_WORKER}/deployments" \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --output "$deployments_file"
+
+          test "$(jq -r '.success' "$deployments_file")" = "true"
+          echo "Media Worker deployments are readable."
+          jq -r '"Deployment count: \(.result.deployments | length)"' "$deployments_file"
