@@ -7,6 +7,10 @@
   "appWorker": "mklms",
   "mediaWorker": "mklms-media-delivery",
   "publicDomain": "learn.starpipsforex.com",
+  "domain": {
+    "mode": "saas-custom-hostname",
+    "platformId": "mkety-saas"
+  },
   "r2Bucket": "spf-media",
   "hyperdrive": {
     "freshId": "bb7c9f70c2fe402080c22e06d0c0f305",
