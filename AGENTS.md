@@ -19,7 +19,7 @@ main
 └── production/mkety-academy
 ```
 
-Starpips is the existing live production and must not be moved as a side effect of Mkety or future customer work.
+Never move one production pointer as a side effect of another installation or of ordinary `main` development.
 
 ## Product boundaries that must not regress
 
@@ -36,23 +36,9 @@ Starpips is the existing live production and must not be moved as a side effect 
 
 ## Installation manifests
 
-Concrete installations live in `deploy/installations/*.json` and are the non-secret source of truth for:
+Concrete installations live in `deploy/installations/*.json` and are the non-secret source of truth for installation ID, production branch, application Worker, media Worker, public hostname, domain mode/platform ID, private R2 bucket, Hyperdrive IDs, rate-limit namespace IDs, billing installation ID, and approved non-secret database origin coordinates.
 
-- installation ID;
-- production branch;
-- application Worker;
-- media Worker;
-- public hostname;
-- domain mode/platform ID;
-- private R2 bucket;
-- fresh/cached Hyperdrive IDs;
-- five isolated rate-limit namespace IDs;
-- billing installation ID;
-- non-secret database origin coordinates where required.
-
-Secrets and full database URLs are forbidden in manifests.
-
-Cross-installation validation must reject reuse of production branches, Workers, public domains, R2 buckets, Hyperdrive IDs, rate-limit namespace IDs, or billing installation IDs.
+Secrets and full database URLs are forbidden in manifests. Cross-installation validation must reject reuse of production branches, Workers, public domains, R2 buckets, Hyperdrive IDs, rate-limit namespace IDs, or billing installation IDs.
 
 ## Cloudflare for SaaS domain model
 
@@ -89,33 +75,20 @@ Mkety Academy is `provider-domain` at `academy.mkety.com`.
 
 ### Domain lifecycle is separate from software releases
 
-Use `.github/workflows/configure-installation-domain.yml` only for deliberate domain onboarding/reconciliation.
+Use `.github/workflows/configure-installation-domain.yml` only for deliberate domain onboarding/reconciliation. Ordinary application releases must not recreate Custom Hostnames or routes. Cloudflare SSL sub-status alone is not the production gate; successful HTTPS smoke tests on the real hostname are authoritative.
 
-For SaaS custom hostnames the workflow is idempotent:
-
-1. read existing Custom Hostname;
-2. read existing Worker routes;
-3. reuse exact matching state;
-4. create only missing state;
-5. fail closed if the hostname route belongs to a different Worker;
-6. print the required customer CNAME to `customers.mkety.com`;
-7. re-read and verify final state.
-
-Ordinary application releases must not recreate Custom Hostnames or routes.
-Cloudflare SSL sub-status alone is not the MkLMS production gate; successful HTTPS smoke tests on the real customer hostname are authoritative.
+For SaaS custom hostnames the onboarding workflow must remain idempotent: read existing hostname/route state, reuse exact matching state, create only missing state, fail closed on route ownership conflicts, print the required customer CNAME, then re-read and verify final state.
 
 ## Cloudflare workers and storage
 
-Each installation owns an application Worker and a protected media Worker.
-
-Starpips currently uses:
+Starpips:
 
 - app Worker: `mklms`;
 - media Worker: `mklms-media-delivery`;
 - private R2: `spf-media`;
 - public hostname: `learn.starpipsforex.com`.
 
-Mkety Academy uses isolated resources defined in `deploy/installations/mkety-academy.json`, including:
+Mkety Academy:
 
 - app Worker: `mklms-mkety-academy`;
 - media Worker: `mklms-media-mkety-academy`;
@@ -124,7 +97,7 @@ Mkety Academy uses isolated resources defined in `deploy/installations/mkety-aca
 - separate rate-limit namespaces;
 - public hostname: `academy.mkety.com`.
 
-R2 public access stays disabled. The main app and media Worker may bind the same installation-private bucket under different binding names.
+R2 public access stays disabled. The app and media Worker may bind the same installation-private bucket under different binding names.
 
 ## Database migrations
 
@@ -134,20 +107,29 @@ Latest migration:
 
 - `017_tenant_font_branding.sql` — persists tenant-selected font branding.
 
-Never edit an applied historical migration. Add a new numbered migration instead.
-The migration manifest/checksum tests must remain green.
+Never edit an applied historical migration. Add a new numbered migration instead. Migration manifest/checksum tests must remain green.
 
 ### Mkety Academy migration ownership caveat
 
 Mkety Academy's isolated Supabase schema is `mkety_academy` in project `vdblajgxrfndjesoyayy`, using role `mkety_academy_app` with an isolated `search_path`.
 
-The schema was pre-created/audited outside the preview deployment flow, while `_mklms_migrations` exists with an empty ledger. Therefore:
+The schema was pre-created/audited outside the preview deployment flow while `_mklms_migrations` exists with an empty ledger. Therefore preview/production deployment must not blindly replay migrations into Mkety and the ledger must never be blindly backfilled. Any future normalization must first prove the live schema matches the expected numbered migrations.
 
-- preview/production deployment must not blindly replay migrations into Mkety;
-- never blindly backfill `_mklms_migrations`;
-- if migration-ledger ownership is normalized later, first prove the live schema matches the expected numbered migrations and baseline only from verified evidence.
+For brand-new installations, migrations should run against an empty isolated database/schema before production deployment and should own their checksum ledger normally.
 
-For brand-new future installations, migrations should run against an empty isolated database/schema before production deployment and should own their checksum ledger normally.
+### Starpips migration safety
+
+Starpips has a verified historical `_mklms_migrations` ledger. `.github/workflows/release-starpips-production.yml` uses `scripts/starpips-migration-guard.mjs` before any Worker deployment.
+
+The Starpips guard must remain fail-closed:
+
+- the ledger must already exist;
+- historical migrations must be present with matching checksums;
+- a release may not replay historical migrations;
+- for the 2026-09-08 parity release, only additive migration `017_tenant_font_branding.sql` was permitted;
+- database verification must finish successfully before Worker deployment can start.
+
+Migration `017` was successfully applied and verified on Starpips during production release run `34248552737`.
 
 ## Generic commercial deployment lifecycle
 
@@ -170,30 +152,26 @@ Generic workflows must stay installation-driven and must not contain customer re
 
 ## Starpips compatibility release
 
-Starpips predates the standardized `MKLMS_*` GitHub release-secret contract. Its existing live Worker secrets must not be invented, rotated, or deleted merely to adopt the generic release system.
+Starpips predates the standardized generic release-secret contract. Its existing live Worker secrets must not be invented, rotated, or deleted merely to adopt the generic release system.
 
-Use `.github/workflows/release-starpips-production.yml` for Starpips releases.
+Use `.github/workflows/release-starpips-production.yml` for Starpips releases. It is triggered only by a deliberate move of `production/starpips`; ordinary `main` pushes do not deploy Starpips.
 
 The workflow must:
 
-- be manual only;
-- require `RELEASE_STARPIPS` confirmation;
-- require the exact full SHA currently selected by `production/starpips`;
+- run only for `production/starpips`, never a wildcard production branch;
+- verify the GitHub event SHA is the exact current Starpips production pointer;
+- complete the fail-closed Starpips database migration gate first;
 - validate the Starpips manifest and expected Worker/domain identities;
 - generate/package the Starpips installation configuration;
 - deploy the existing media/app Workers without `wrangler secret put/bulk/delete`;
 - never mutate Custom Hostnames, Worker routes, customer DNS, Hyperdrive resources, or R2 resources;
 - require live HTTPS smoke success on `https://learn.starpipsforex.com/login` and `/`.
 
-Do not move `production/starpips` merely because `main` or another installation moves. Deliberate Starpips upgrades use its compatibility workflow after the candidate has passed the repository gate and has been proven on a non-Starpips production first.
+Do not move `production/starpips` merely because `main` or another installation moves. A candidate must first pass the repository gate and, for substantial shared-product changes, be proven on a non-Starpips production where practical.
 
 ## Read-only Cloudflare verification
 
-`.github/workflows/cloudflare-readonly-verify.yml` is manual and GET-only.
-
-It validates the selected installation manifest and checks application/media Worker bindings/deployments. For `saas-custom-hostname` installations it also verifies the Custom Hostname and exact Worker-route ownership without mutating Cloudflare state.
-
-Use this before and after production promotions when practical.
+`.github/workflows/cloudflare-readonly-verify.yml` is manual and GET-only. It validates the selected manifest and checks application/media Worker bindings/deployments. For `saas-custom-hostname` installations it also verifies Custom Hostname and exact Worker-route ownership without mutation.
 
 ## Production verification gate
 
@@ -213,42 +191,43 @@ Before calling a release production-ready require fresh evidence for:
 12. protected media and application binding verification;
 13. real HTTPS hostname smoke after domain onboarding/promotion.
 
-For functional release testing also preserve these flows: admin media, student claim/login/enrollment, paid sequential progression, quizzes, protected playback/Range, paid live, public free live before/during/after LIVE, messaging, certificates, tenant branding/settings health, and managed-hosting billing behavior.
+For functional release testing also preserve admin media, student claim/login/enrollment, paid sequential progression, quizzes, protected playback/Range, paid live, public free live before/during/after LIVE, messaging, certificates, tenant branding/settings health, and managed-hosting billing behavior.
 
 ## Current production handoff — 2026-09-08
 
-Commercial Cloudflare SaaS/release architecture was merged by PR `#64`.
+### Shared commercial architecture
 
-Verified release SHA:
+PR `#64` established the commercial Cloudflare SaaS/release architecture. Its product release SHA `c52d526a2fa7f168f480030bcbf11f375c5e9439` passed 380 tests, lint, Next.js, OpenNext, application/media/billing Worker packaging, and CodeQL. Mkety preview and production deployments from that product tree passed, including `academy.mkety.com` production HTTPS smoke.
 
-- `c52d526a2fa7f168f480030bcbf11f375c5e9439`
+### Mkety Academy production
 
-Evidence on that exact SHA:
+- `production/mkety-academy` -> `c52d526a2fa7f168f480030bcbf11f375c5e9439`.
+- Mkety remains isolated on its own Workers, R2, Hyperdrives, rate limits, database/schema, secrets, and provider-owned hostname.
+- Later commits through the Starpips parity release changed operational docs, tests, and Starpips-specific release/migration guards, not shared application runtime behavior; therefore Mkety does not need a production pointer move solely for those commits.
 
-- PR gate: 380 tests passed, lint passed, Next.js build passed, OpenNext build passed, application/media/billing Worker packaging dry-runs passed, CodeQL passed;
-- merged `main`: the same full CI/build/packaging gate passed again and CodeQL passed;
-- `preview/mkety-academy`: isolated preview media Worker deployment, application Worker deployment, R2 CORS configuration, and preview smoke checks passed;
-- `production/mkety-academy`: release pointer validation, production packaging, media Worker deploy, R2 CORS, application Worker/secrets deploy, `academy.mkety.com` provider-domain attachment, and real production HTTPS smoke checks passed.
+### Starpips parity production
 
-Current controlled production pointers after this rollout:
+PR `#66` added the fail-closed Starpips migration/release guard. Its exact PR head passed 382 tests, lint, Next.js, OpenNext, all three Worker packaging dry-runs, and CodeQL. After merge, `main` SHA `b6b3a69cdfc56be47ce89f78c6099f5d3c18585a` passed the same full gate and CodeQL again.
 
-- `production/mkety-academy` -> `c52d526a2fa7f168f480030bcbf11f375c5e9439`;
-- `production/starpips` -> `071d113f6763525082ced324ad54151c91b573fa` (intentionally unchanged).
+`production/starpips` was then deliberately promoted to:
 
-This batch completed:
+- `b6b3a69cdfc56be47ce89f78c6099f5d3c18585a`.
 
-- Mkety SaaS platform config;
-- explicit `domain.mode + platformId` installation semantics;
-- rejection of the obsolete per-installation `dnsZone` ownership assumption;
-- SaaS-domain planning/validation helpers;
-- HTTP-DCV, idempotent one-time SaaS domain onboarding;
-- read-only SaaS hostname/route verification;
-- release/domain lifecycle separation;
-- generic preview and selected-production deployment path;
-- provider-owned Mkety production domain deployment;
-- legacy-safe Starpips production release workflow;
-- updated tests and operational handoff.
+Production release run `34248552737` completed successfully:
 
-For the next enterprise customer, copy the installation pattern rather than adding tenant logic to the app: provision isolated database/Hyperdrive/R2/rate limits/Workers, materialize a concrete manifest, configure installation-scoped secrets, prove preview, onboard the hostname, then promote only that customer's production pointer.
+- exact Starpips production pointer verified;
+- historical migration ledger verified cleanly;
+- additive migration `017_tenant_font_branding.sql` applied and verified;
+- exact release built and packaged;
+- existing `mklms-media-delivery` Worker upgraded without changing secrets;
+- existing `mklms` application Worker upgraded without changing secrets;
+- no SaaS Custom Hostname, Worker route, customer DNS, Hyperdrive, or R2 resource mutation was part of the release workflow;
+- live HTTPS smoke passed on `https://learn.starpipsforex.com/login` and `/`.
+
+Starpips and Mkety now run the same shared application product fixes/features from the verified commercial product tree, while retaining independent production pointers and isolated infrastructure.
+
+### Future enterprise installations
+
+For the next customer, copy the installation pattern rather than adding tenant logic to the app: provision isolated database/Hyperdrive/R2/rate limits/Workers, materialize a concrete manifest, configure installation-scoped secrets, prove preview, onboard the hostname, then promote only that customer's production pointer.
 
 Never claim completion from code changes alone; use fresh CI/deployment/smoke evidence.
