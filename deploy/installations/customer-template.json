@@ -19,5 +19,11 @@
     "playback": "TEMPLATE_RATE_PLAYBACK",
     "certificate": "TEMPLATE_RATE_CERTIFICATE"
   },
-  "billingInstallationId": "TEMPLATE_BILLING_INSTALLATION_ID"
+  "billingInstallationId": "TEMPLATE_BILLING_INSTALLATION_ID",
+  "databaseOrigin": {
+    "host": "TEMPLATE_DATABASE_HOST",
+    "port": 5432,
+    "database": "TEMPLATE_DATABASE_NAME",
+    "user": "TEMPLATE_DATABASE_USER"
+  }
 }
