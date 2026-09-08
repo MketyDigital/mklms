@@ -7,6 +7,7 @@
   "appWorker": "mklms-mkety-academy",
   "mediaWorker": "mklms-media-mkety-academy",
   "publicDomain": "academy.mkety.com",
+  "cloudflareZone": "mkety.com",
   "r2Bucket": "mkety-academy-media",
   "hyperdrive": {
     "freshId": "c6033fd6696444ea97c7c2c93707b3bc",
