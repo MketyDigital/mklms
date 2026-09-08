@@ -1,0 +1,76 @@
+name: Promote MkLMS installation release
+
+on:
+  workflow_dispatch:
+    inputs:
+      installation_id:
+        description: "Concrete installation id"
+        required: true
+        type: string
+      release_sha:
+        description: "Exact verified main commit SHA to promote"
+        required: true
+        type: string
+      confirmation:
+        description: "Type PROMOTE to move only the selected production branch"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    env:
+      INSTALLATION_ID: ${{ inputs.installation_id }}
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout full repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate selected installation and exact release target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = "PROMOTE" || { echo "Promotion requires confirmation PROMOTE"; exit 1; }
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "release_sha must be a full 40-character commit SHA"; exit 1; }
+          npm install --no-audit --no-fund
+          npm run installation:validate
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs';
+          import { loadConcreteInstallation } from './scripts/installation-config.mjs';
+          import { assertReleaseBranch } from './scripts/installation-release.mjs';
+          const { manifest } = await loadConcreteInstallation(process.env.INSTALLATION_ID);
+          assertReleaseBranch(manifest, manifest.productionBranch);
+          appendFileSync(process.env.GITHUB_ENV, `PRODUCTION_BRANCH=${manifest.productionBranch}\n`);
+          NODE
+          git fetch origin main --force
+          git cat-file -e "$RELEASE_SHA^{commit}"
+          git merge-base --is-ancestor "$RELEASE_SHA" origin/main || { echo "release_sha is not reachable from main"; exit 1; }
+          test "$(git rev-parse origin/main)" = "$RELEASE_SHA" || { echo "release_sha must equal the current main HEAD for exact-head promotion"; exit 1; }
+
+      - name: Require successful exact-head MkLMS CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/phase1-ci.yml/runs?branch=main&status=success&per_page=100"
+          curl --silent --show-error --fail-with-body "$api" \
+            -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' >/tmp/ci-runs.json
+          jq -e --arg sha "$RELEASE_SHA" '.workflow_runs | any(.head_sha == $sha and .conclusion == "success")' /tmp/ci-runs.json >/dev/null || {
+            echo "No successful MkLMS CI run exists for exact release SHA $RELEASE_SHA"
+            exit 1
+          }
+          rm -f /tmp/ci-runs.json
+
+      - name: Move only the selected production branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Promoting $INSTALLATION_ID to $PRODUCTION_BRANCH at $RELEASE_SHA"
+          git push origin "$RELEASE_SHA:refs/heads/$PRODUCTION_BRANCH"

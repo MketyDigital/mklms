@@ -7,6 +7,7 @@
   "appWorker": "mklms-customer-slug",
   "mediaWorker": "mklms-media-customer-slug",
   "publicDomain": "learn.customer.example",
+  "dnsZone": "TEMPLATE_DNS_ZONE",
   "r2Bucket": "TEMPLATE_R2_BUCKET",
   "hyperdrive": {
     "freshId": "TEMPLATE_HYPERDRIVE_FRESH_ID",
@@ -19,5 +20,11 @@
     "playback": "TEMPLATE_RATE_PLAYBACK",
     "certificate": "TEMPLATE_RATE_CERTIFICATE"
   },
-  "billingInstallationId": "TEMPLATE_BILLING_INSTALLATION_ID"
+  "billingInstallationId": "TEMPLATE_BILLING_INSTALLATION_ID",
+  "databaseOrigin": {
+    "host": "TEMPLATE_DATABASE_HOST",
+    "port": 5432,
+    "database": "TEMPLATE_DATABASE_NAME",
+    "user": "TEMPLATE_DATABASE_USER"
+  }
 }

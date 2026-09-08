@@ -1,0 +1,161 @@
+name: Provision MkLMS installation infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      installation_id:
+        description: "Concrete installation id from deploy/installations/<id>.json"
+        required: true
+        type: string
+      provision_hyperdrive:
+        description: "Create/reuse fresh and cached Hyperdrives from manifest databaseOrigin"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  provision:
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.installation_id }}
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+      INSTALLATION_ID: ${{ inputs.installation_id }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Validate installation set and selected provisioning target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "Missing CLOUDFLARE_ACCOUNT_ID"; exit 1; }
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "Missing CLOUDFLARE_API_TOKEN"; exit 1; }
+          npm run installation:validate
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs';
+          import { loadConcreteInstallation } from './scripts/installation-config.mjs';
+          import { assertProvisionableDatabaseOrigin } from './scripts/installation-release.mjs';
+          import { assertInstallationObjectIsUnprotected } from './scripts/protected-installation-resources.mjs';
+
+          const { manifest } = await loadConcreteInstallation(process.env.INSTALLATION_ID);
+          if (manifest.id === 'starpips') throw new Error('Generic provisioning never mutates the existing Starpips production installation.');
+          assertInstallationObjectIsUnprotected(manifest);
+          if (process.env.PROVISION_HYPERDRIVE === 'true') assertProvisionableDatabaseOrigin(manifest);
+          const pairs = {
+            APP_WORKER: manifest.appWorker,
+            MEDIA_WORKER: manifest.mediaWorker,
+            R2_BUCKET: manifest.r2Bucket,
+            PUBLIC_DOMAIN: manifest.publicDomain,
+            HYPERDRIVE_FRESH_NAME: `${manifest.appWorker}-fresh`,
+            HYPERDRIVE_CACHED_NAME: `${manifest.appWorker}-cached`,
+          };
+          if (manifest.databaseOrigin) {
+            pairs.DB_HOST = manifest.databaseOrigin.host;
+            pairs.DB_PORT = String(manifest.databaseOrigin.port);
+            pairs.DB_NAME = manifest.databaseOrigin.database;
+            pairs.DB_USER = manifest.databaseOrigin.user;
+          }
+          for (const [key, value] of Object.entries(pairs)) appendFileSync(process.env.GITHUB_ENV, `${key}=${value}\n`);
+          NODE
+        env:
+          PROVISION_HYPERDRIVE: ${{ inputs.provision_hyperdrive }}
+
+      - name: Create or reuse installation R2 bucket
+        id: r2
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets"
+          AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          status=$(curl --silent --show-error --output /tmp/r2.json --write-out '%{http_code}' --request GET "$API/$R2_BUCKET" -H "$AUTH")
+          if [ "$status" = "200" ]; then
+            jq -e '.success == true' /tmp/r2.json >/dev/null
+          elif [ "$status" = "404" ]; then
+            jq -n --arg name "$R2_BUCKET" '{name:$name}' >/tmp/r2-create.json
+            curl --silent --show-error --fail-with-body --request POST "$API" -H "$AUTH" -H 'Content-Type: application/json' --data @/tmp/r2-create.json >/tmp/r2.json
+            jq -e '.success == true' /tmp/r2.json >/dev/null
+          else
+            echo "Unexpected R2 lookup response: HTTP $status"
+            jq -r '.errors[]?.message // empty' /tmp/r2.json
+            exit 1
+          fi
+          echo "r2_bucket=$R2_BUCKET" >> "$GITHUB_OUTPUT"
+          rm -f /tmp/r2.json /tmp/r2-create.json
+
+      - name: Check Hyperdrive prerequisite
+        id: dbcheck
+        shell: bash
+        env:
+          PROVISION_HYPERDRIVE: ${{ inputs.provision_hyperdrive }}
+        run: |
+          set -euo pipefail
+          if [ "$PROVISION_HYPERDRIVE" != "true" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          test -n "$DATABASE_PASSWORD" || { echo "Missing installation environment secret: DATABASE_PASSWORD"; exit 1; }
+          for name in DB_HOST DB_PORT DB_NAME DB_USER; do test -n "${!name:-}" || { echo "Manifest databaseOrigin is incomplete: $name"; exit 1; }; done
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Create or reuse installation Hyperdrives
+        id: hyperdrive
+        if: steps.dbcheck.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/hyperdrive/configs"
+          AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          list=$(mktemp)
+          curl --silent --show-error --fail-with-body --request GET "$API?per_page=100" -H "$AUTH" >"$list"
+          jq -e '.success == true' "$list" >/dev/null
+
+          create_or_reuse() {
+            local name="$1"
+            local existing
+            existing=$(jq -r --arg name "$name" '.result[]? | select(.name == $name) | .id' "$list" | head -n1)
+            if [ -n "$existing" ]; then printf '%s' "$existing"; return; fi
+            local body response
+            body=$(mktemp); response=$(mktemp)
+            jq -n --arg name "$name" --arg host "$DB_HOST" --arg database "$DB_NAME" --arg user "$DB_USER" --arg password "$DATABASE_PASSWORD" --argjson port "$DB_PORT" \
+              '{name:$name,origin:{scheme:"postgres",host:$host,port:$port,database:$database,user:$user,password:$password},origin_connection_limit:20}' >"$body"
+            curl --silent --show-error --fail-with-body --request POST "$API" -H "$AUTH" -H 'Content-Type: application/json' --data @"$body" >"$response"
+            jq -e '.success == true' "$response" >/dev/null
+            jq -r '.result.id' "$response"
+            rm -f "$body" "$response"
+          }
+
+          fresh_id=$(create_or_reuse "$HYPERDRIVE_FRESH_NAME")
+          cached_id=$(create_or_reuse "$HYPERDRIVE_CACHED_NAME")
+          test -n "$fresh_id" && test -n "$cached_id" && test "$fresh_id" != "$cached_id"
+          echo "fresh_id=$fresh_id" >> "$GITHUB_OUTPUT"
+          echo "cached_id=$cached_id" >> "$GITHUB_OUTPUT"
+          rm -f "$list"
+
+      - name: Write non-secret provisioning result
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .generated/provisioning
+          jq -n --arg installationId "$INSTALLATION_ID" --arg r2Bucket "${{ steps.r2.outputs.r2_bucket }}" --arg hyperdriveFreshId "${{ steps.hyperdrive.outputs.fresh_id }}" --arg hyperdriveCachedId "${{ steps.hyperdrive.outputs.cached_id }}" \
+            '{installationId:$installationId,r2Bucket:$r2Bucket,hyperdriveFreshId:$hyperdriveFreshId,hyperdriveCachedId:$hyperdriveCachedId}' > ".generated/provisioning/$INSTALLATION_ID.json"
+
+      - name: Upload non-secret provisioning result
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.installation_id }}-provisioning-result
+          path: .generated/provisioning/${{ inputs.installation_id }}.json
+          retention-days: 7
+          if-no-files-found: error

@@ -7,6 +7,7 @@
   "appWorker": "mklms-mkety-academy",
   "mediaWorker": "mklms-media-mkety-academy",
   "publicDomain": "academy.example.com",
+  "dnsZone": "EXAMPLE_DNS_ZONE",
   "r2Bucket": "EXAMPLE_MKETY_ACADEMY_R2_BUCKET",
   "hyperdrive": {
     "freshId": "EXAMPLE_MKETY_HYPERDRIVE_FRESH_ID",
@@ -19,5 +20,11 @@
     "playback": "EXAMPLE_MKETY_RATE_PLAYBACK",
     "certificate": "EXAMPLE_MKETY_RATE_CERTIFICATE"
   },
-  "billingInstallationId": "EXAMPLE_MKETY_BILLING_INSTALLATION_ID"
+  "billingInstallationId": "EXAMPLE_MKETY_BILLING_INSTALLATION_ID",
+  "databaseOrigin": {
+    "host": "EXAMPLE_DATABASE_HOST",
+    "port": 5432,
+    "database": "EXAMPLE_DATABASE_NAME",
+    "user": "EXAMPLE_DATABASE_USER"
+  }
 }

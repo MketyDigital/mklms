@@ -34,6 +34,12 @@ export function buildPreparedProposal({ publicDomain = 'academy.mkety.com' } = {
       RATE_KEYS.map((key) => [key, deterministicRateLimitNamespaceId('mkety-academy', key)]),
     ),
     billingInstallationId: 'mkety-academy',
+    databaseOrigin: {
+      host: 'db.vdblajgxrfndjesoyayy.supabase.co',
+      port: 5432,
+      database: 'postgres',
+      user: 'mkety_academy_app',
+    },
   };
   assertInstallationObjectIsUnprotected(proposal);
   return proposal;

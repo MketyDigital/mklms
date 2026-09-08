@@ -1,0 +1,15 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+test('Mkety compatibility wrapper delegates to generic isolated preview and production deploy workflows', () => {
+  const source = readFileSync('.github/workflows/mkety-academy-release.yml', 'utf8');
+  assert.match(source, /preview\/mkety-academy/);
+  assert.match(source, /production\/mkety-academy/);
+  assert.match(source, /deploy-installation-preview\.yml/);
+  assert.match(source, /deploy-installation-production\.yml/);
+  assert.match(source, /installation_id:\s*mkety-academy/);
+  assert.match(source, /MKETY_ADMIN_ACCESS_KEY/);
+  assert.match(source, /MKETY_MEDIA_SIGNING_SECRET/);
+  assert.doesNotMatch(source, /production\/starpips|learn\.starpipsforex\.com|spf-media/);
+});
