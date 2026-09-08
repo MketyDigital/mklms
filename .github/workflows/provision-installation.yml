@@ -12,6 +12,21 @@ on:
         required: true
         type: boolean
         default: false
+  workflow_call:
+    inputs:
+      installation_id:
+        required: true
+        type: string
+      provision_hyperdrive:
+        required: true
+        type: boolean
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID:
+        required: true
+      CLOUDFLARE_API_TOKEN:
+        required: true
+      DATABASE_PASSWORD:
+        required: false
 
 permissions:
   contents: read
@@ -19,7 +34,6 @@ permissions:
 jobs:
   provision:
     runs-on: ubuntu-24.04
-    environment: ${{ inputs.installation_id }}
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -106,7 +120,10 @@ jobs:
             echo "ready=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          test -n "$DATABASE_PASSWORD" || { echo "Missing installation environment secret: DATABASE_PASSWORD"; exit 1; }
+          test -n "$DATABASE_PASSWORD" || {
+            echo "Missing DATABASE_PASSWORD. On GitHub Free private repositories, invoke this reusable workflow from an installation-specific wrapper that maps that customer's prefixed repository secret."
+            exit 1
+          }
           for name in DB_HOST DB_PORT DB_NAME DB_USER; do test -n "${!name:-}" || { echo "Manifest databaseOrigin is incomplete: $name"; exit 1; }; done
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
