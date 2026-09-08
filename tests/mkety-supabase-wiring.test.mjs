@@ -17,17 +17,11 @@ for (const [name, workflow] of [['provision', provision], ['deploy', deploy]]) {
   });
 }
 
-test('deploy workflow uses Supavisor session pooling for GitHub Actions migrations only', () => {
-  assert.match(deploy, /MKETY_MIGRATION_DB_HOST:\s*aws-0-eu-west-1\.pooler\.supabase\.com/);
-  assert.match(deploy, /MKETY_MIGRATION_DB_PORT:\s*5432/);
-  assert.match(deploy, /MKETY_MIGRATION_DB_USER:\s*mkety_academy_app\.vdblajgxrfndjesoyayy/);
-  assert.match(deploy, /Construct Mkety migration DATABASE_URL/);
-  assert.match(deploy, /process\.env\.MKETY_MIGRATION_DB_HOST/);
-  assert.match(deploy, /process\.env\.MKETY_MIGRATION_DB_USER/);
-  assert.match(deploy, /url\.searchParams\.set\('sslmode', 'require'\)/);
-  assert.match(deploy, /url\.searchParams\.set\('uselibpqcompat', 'true'\)/);
-  assert.match(deploy, /MIGRATION_DATABASE_URL/);
-  assert.match(deploy, /DATABASE_URL=\"\$MIGRATION_DATABASE_URL\"\s+npm run db:migrate/);
+test('preview deploy treats the already-audited Mkety Supabase schema as pre-migrated', () => {
+  assert.match(deploy, /Mkety database schema is pre-migrated and audited via Supabase/);
+  assert.doesNotMatch(deploy, /MKETY_MIGRATION_DB_HOST|MKETY_MIGRATION_DB_PORT|MKETY_MIGRATION_DB_USER/);
+  assert.doesNotMatch(deploy, /MIGRATION_DATABASE_URL/);
+  assert.doesNotMatch(deploy, /npm run db:migrate/);
 });
 
 test('deploy workflow keeps the application DATABASE_URL on the direct Mkety database coordinates', () => {
@@ -37,5 +31,5 @@ test('deploy workflow keeps the application DATABASE_URL on the direct Mkety dat
   assert.match(deploy, /APP_DATABASE_URL/);
   assert.match(deploy, /--arg database \"\$APP_DATABASE_URL\"/);
   assert.match(deploy, /DATABASE_SSL:\s*require/);
-  assert.doesNotMatch(deploy, /echo\s+\"?\$(MIGRATION_DATABASE_URL|APP_DATABASE_URL)/);
+  assert.doesNotMatch(deploy, /echo\s+\"?\$APP_DATABASE_URL/);
 });
