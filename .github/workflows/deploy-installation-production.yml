@@ -73,7 +73,7 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Validate production branch ownership and installation target
+      - name: Resolve selected production target
         shell: bash
         run: |
           set -euo pipefail
@@ -81,6 +81,11 @@ jobs:
           for name in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN ADMIN_ACCESS_KEY ADMIN_SESSION_SECRET MEDIA_SIGNING_SECRET; do
             test -n "${!name:-}" || { echo "Missing required production secret: $name"; exit 1; }
           done
+          if { [ -n "$R2_DIRECT_UPLOAD_ACCESS_KEY_ID" ] && [ -z "$R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY" ]; } || \
+             { [ -z "$R2_DIRECT_UPLOAD_ACCESS_KEY_ID" ] && [ -n "$R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY" ]; }; then
+            echo "Direct-upload R2 credentials must be configured as a complete pair"
+            exit 1
+          fi
           npm run installation:validate
           node --input-type=module <<'NODE'
           import { appendFileSync } from 'node:fs';
@@ -102,17 +107,17 @@ jobs:
           };
           for (const [key, value] of Object.entries(pairs)) appendFileSync(process.env.GITHUB_ENV, `${key}=${value}\n`);
           NODE
+
+      - name: Validate production branch ownership and release pointer
+        shell: bash
+        run: |
+          set -euo pipefail
           git fetch origin "$PRODUCTION_BRANCH:refs/remotes/origin/$PRODUCTION_BRANCH" --force
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
           test "$(git rev-parse "origin/$PRODUCTION_BRANCH")" = "$RELEASE_SHA" || {
             echo "Release SHA is not the current selected production branch pointer"
             exit 1
           }
-          if { [ -n "$R2_DIRECT_UPLOAD_ACCESS_KEY_ID" ] && [ -z "$R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY" ]; } || \
-             { [ -z "$R2_DIRECT_UPLOAD_ACCESS_KEY_ID" ] && [ -n "$R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY" ]; }; then
-            echo "Direct-upload R2 credentials must be configured as a complete pair"
-            exit 1
-          fi
 
       - name: Generate and package production Workers
         shell: bash
