@@ -16,7 +16,7 @@ Current named productions:
 ```text
 main
 ├── production/starpips
-└── production/mkety-academy   # create/promote only after Mkety preview is green
+└── production/mkety-academy
 ```
 
 Starpips is the existing live production and must not be moved as a side effect of Mkety or future customer work.
@@ -185,7 +185,7 @@ The workflow must:
 - never mutate Custom Hostnames, Worker routes, customer DNS, Hyperdrive resources, or R2 resources;
 - require live HTTPS smoke success on `https://learn.starpipsforex.com/login` and `/`.
 
-Do not move `production/starpips` until the same candidate SHA has passed the full repository gate and has been proven on Mkety Academy first.
+Do not move `production/starpips` merely because `main` or another installation moves. Deliberate Starpips upgrades use its compatibility workflow after the candidate has passed the repository gate and has been proven on a non-Starpips production first.
 
 ## Read-only Cloudflare verification
 
@@ -215,33 +215,40 @@ Before calling a release production-ready require fresh evidence for:
 
 For functional release testing also preserve these flows: admin media, student claim/login/enrollment, paid sequential progression, quizzes, protected playback/Range, paid live, public free live before/during/after LIVE, messaging, certificates, tenant branding/settings health, and managed-hosting billing behavior.
 
-## Current implementation handoff — 2026-09-08
+## Current production handoff — 2026-09-08
 
-Active implementation PR: `#64`, branch `feat/cloudflare-saas-installation-domains`.
+Commercial Cloudflare SaaS/release architecture was merged by PR `#64`.
 
-This batch introduces the corrected commercial domain/release architecture:
+Verified release SHA:
+
+- `c52d526a2fa7f168f480030bcbf11f375c5e9439`
+
+Evidence on that exact SHA:
+
+- PR gate: 380 tests passed, lint passed, Next.js build passed, OpenNext build passed, application/media/billing Worker packaging dry-runs passed, CodeQL passed;
+- merged `main`: the same full CI/build/packaging gate passed again and CodeQL passed;
+- `preview/mkety-academy`: isolated preview media Worker deployment, application Worker deployment, R2 CORS configuration, and preview smoke checks passed;
+- `production/mkety-academy`: release pointer validation, production packaging, media Worker deploy, R2 CORS, application Worker/secrets deploy, `academy.mkety.com` provider-domain attachment, and real production HTTPS smoke checks passed.
+
+Current controlled production pointers after this rollout:
+
+- `production/mkety-academy` -> `c52d526a2fa7f168f480030bcbf11f375c5e9439`;
+- `production/starpips` -> `071d113f6763525082ced324ad54151c91b573fa` (intentionally unchanged).
+
+This batch completed:
 
 - Mkety SaaS platform config;
 - explicit `domain.mode + platformId` installation semantics;
 - rejection of the obsolete per-installation `dnsZone` ownership assumption;
 - SaaS-domain planning/validation helpers;
-- idempotent one-time domain onboarding workflow;
+- HTTP-DCV, idempotent one-time SaaS domain onboarding;
 - read-only SaaS hostname/route verification;
-- production deployment separation so SaaS hostnames are not mutated on every release;
+- release/domain lifecycle separation;
+- generic preview and selected-production deployment path;
+- provider-owned Mkety production domain deployment;
 - legacy-safe Starpips production release workflow;
-- tests locking all of the above.
+- updated tests and operational handoff.
 
-The TDD sequence intentionally observed RED failures before the missing platform/domain/release pieces were implemented.
-
-After PR #64 is fully green, the next safe sequence is:
-
-1. merge the exact green PR SHA to `main`;
-2. verify `main` again;
-3. deploy/prove Mkety Academy preview from that exact release;
-4. promote/create `production/mkety-academy` only after preview is green;
-5. deploy Mkety production and verify `academy.mkety.com`;
-6. verify Starpips Cloudflare state read-only;
-7. only then deliberately move `production/starpips` to that same proven release if a Starpips upgrade is desired;
-8. use the Starpips compatibility release workflow and require live smoke success.
+For the next enterprise customer, copy the installation pattern rather than adding tenant logic to the app: provision isolated database/Hyperdrive/R2/rate limits/Workers, materialize a concrete manifest, configure installation-scoped secrets, prove preview, onboard the hostname, then promote only that customer's production pointer.
 
 Never claim completion from code changes alone; use fresh CI/deployment/smoke evidence.
