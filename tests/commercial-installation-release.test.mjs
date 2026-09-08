@@ -91,16 +91,28 @@ test('generic provision workflow is installation-driven and contains no Mkety re
   assert.match(source, /protected-installation-resources/);
 });
 
-test('generic preview deployment is manifest-driven, migration-free and uses standard secrets', () => {
+test('generic preview deployment is isolated from production Workers and migration-free', () => {
   const source = readFileSync('.github/workflows/deploy-installation-preview.yml', 'utf8');
   assert.match(source, /installation_id:/);
   assert.match(source, /generate-installation-config/);
-  assert.match(source, /MKLMS_ADMIN_ACCESS_KEY/);
-  assert.match(source, /MKLMS_ADMIN_SESSION_SECRET/);
-  assert.match(source, /MKLMS_MEDIA_SIGNING_SECRET/);
+  assert.match(source, /-preview/);
+  assert.match(source, /R2_DIRECT_UPLOAD_ACCESS_KEY_ID/);
+  assert.match(source, /r2\/buckets\/\$R2_BUCKET\/cors/);
   assert.doesNotMatch(source, /MKETY_DB_|mklms-mkety-academy|mkety-academy-media|db\.vdblajgxrfndjesoyayy\.supabase\.co/);
   assert.doesNotMatch(source, /run-db-migrations|Apply .*database migrations|npm run db:migrate/);
   assert.match(source, /Smoke test installation preview/);
+});
+
+test('production deployment uses manifest Worker names only from the selected production branch and attaches its custom domain', () => {
+  const source = readFileSync('.github/workflows/deploy-installation-production.yml', 'utf8');
+  assert.match(source, /installation_id:/);
+  assert.match(source, /productionBranch/);
+  assert.match(source, /assertReleaseBranch/);
+  assert.match(source, /workers\/domains/);
+  assert.match(source, /publicDomain/);
+  assert.match(source, /R2_DIRECT_UPLOAD_ACCESS_KEY_ID/);
+  assert.doesNotMatch(source, /-preview/);
+  assert.doesNotMatch(source, /MKETY_DB_|mklms-mkety-academy|mkety-academy-media/);
 });
 
 test('production promotion workflow requires selected installation, exact SHA and confirmation', () => {
