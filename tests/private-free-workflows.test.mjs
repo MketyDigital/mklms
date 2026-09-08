@@ -66,6 +66,12 @@ test('private Free readiness workflow verifies required repository secrets witho
   assert.doesNotMatch(workflow, /echo\s+.*\$\{\{\s*secrets\./);
 });
 
+test('PR CI cancels superseded runs to preserve private-repo Actions minutes', () => {
+  const workflow = readFileSync('.github/workflows/phase1-ci.yml', 'utf8');
+  assert.match(workflow, /concurrency:/);
+  assert.match(workflow, /cancel-in-progress:\s*\$\{\{\s*github\.event_name\s*==\s*'pull_request'\s*\}\}/);
+});
+
 test('private Free operations guide records CodeQL and Actions-plan tradeoffs', () => {
   const guide = readFileSync('docs/operations/github-free-private.md', 'utf8');
   assert.match(guide, /GitHub Free/i);
