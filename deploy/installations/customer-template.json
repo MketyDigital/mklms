@@ -7,7 +7,7 @@
   "appWorker": "mklms-customer-slug",
   "mediaWorker": "mklms-media-customer-slug",
   "publicDomain": "learn.customer.example",
-  "cloudflareZone": "TEMPLATE_CLOUDFLARE_ZONE",
+  "dnsZone": "TEMPLATE_DNS_ZONE",
   "r2Bucket": "TEMPLATE_R2_BUCKET",
   "hyperdrive": {
     "freshId": "TEMPLATE_HYPERDRIVE_FRESH_ID",
