@@ -180,6 +180,26 @@ export class AccessAdminService {
     return { accessCode };
   }
 
+  async prepareStudentReclaim(
+    studentId: string,
+    claimStrategy: ClaimVerificationStrategy,
+  ) {
+    const claimCode =
+      claimStrategy === "claim-code"
+        ? generateAccessCode({
+            prefix: this.options.claimCodePrefix ?? "CLAIM",
+            randomBytes: 12,
+          })
+        : undefined;
+
+    await this.repository.prepareStudentReclaim(studentId, {
+      claimStrategy,
+      claimCodeHash: claimCode ? hashClaimCode(claimCode) : null,
+    });
+
+    return claimCode ? { claimCode } : {};
+  }
+
   async setStudentStatus(
     studentId: string,
     status: StudentAccessStatus,
