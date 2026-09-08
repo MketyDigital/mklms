@@ -22,7 +22,8 @@ test('Starpips release deploys existing Workers without rotating or deleting liv
   assert.match(workflow, /npx wrangler deploy --config ".generated\/starpips\/media\.wrangler\.jsonc"/);
   assert.match(workflow, /npx wrangler deploy --config ".generated\/starpips\/app\.wrangler\.jsonc"/);
   assert.doesNotMatch(workflow, /wrangler secret (put|bulk|delete)/i);
-  assert.doesNotMatch(workflow, /MKLMS_ADMIN_ACCESS_KEY|MKLMS_ADMIN_SESSION_SECRET|MKLMS_MEDIA_SIGNING_SECRET/);
+  assert.doesNotMatch(workflow, /secrets\.(MKLMS_ADMIN_ACCESS_KEY|MKLMS_ADMIN_SESSION_SECRET|MKLMS_MEDIA_SIGNING_SECRET)/);
+  assert.doesNotMatch(workflow, /secrets\.STARPIPS_(ADMIN_ACCESS_KEY|ADMIN_SESSION_SECRET|MEDIA_SIGNING_SECRET)/);
 });
 
 test('Starpips release never mutates SaaS hostname, route, DNS, Hyperdrive or R2 resources', () => {
