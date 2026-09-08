@@ -94,16 +94,16 @@ export function validateManifest(manifest, { filename, manifestType }) {
   if (manifest.appWorker && manifest.mediaWorker && manifest.appWorker === manifest.mediaWorker) push('mediaWorker', 'must differ from appWorker');
   if (typeof manifest.publicDomain !== 'string' || !HOSTNAME_RE.test(manifest.publicDomain)) push('publicDomain', 'must be a hostname without protocol or path');
 
-  if (manifest.cloudflareZone !== undefined) {
-    if (typeof manifest.cloudflareZone !== 'string' || (!HOSTNAME_RE.test(manifest.cloudflareZone) && !isAllowedPlaceholder(manifest.cloudflareZone, manifestType))) {
-      push('cloudflareZone', 'must be a hostname without protocol or path');
+  if (manifest.dnsZone !== undefined) {
+    if (typeof manifest.dnsZone !== 'string' || (!HOSTNAME_RE.test(manifest.dnsZone) && !isAllowedPlaceholder(manifest.dnsZone, manifestType))) {
+      push('dnsZone', 'must be a hostname without protocol or path');
     } else if (
-      HOSTNAME_RE.test(manifest.cloudflareZone) &&
+      HOSTNAME_RE.test(manifest.dnsZone) &&
       HOSTNAME_RE.test(manifest.publicDomain) &&
-      manifest.publicDomain !== manifest.cloudflareZone &&
-      !manifest.publicDomain.endsWith(`.${manifest.cloudflareZone}`)
+      manifest.publicDomain !== manifest.dnsZone &&
+      !manifest.publicDomain.endsWith(`.${manifest.dnsZone}`)
     ) {
-      push('cloudflareZone', 'must own the configured publicDomain');
+      push('dnsZone', 'must own the configured publicDomain');
     }
   }
 
