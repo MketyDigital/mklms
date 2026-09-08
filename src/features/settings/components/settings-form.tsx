@@ -9,6 +9,22 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { PlatformSettings } from "../platform-settings";
 
+const FONT_SUGGESTIONS = [
+  "Geist",
+  "Ubuntu",
+  "Inter",
+  "Roboto",
+  "Poppins",
+  "Montserrat",
+  "Open Sans",
+  "Lato",
+  "Nunito",
+  "Playfair Display",
+  "IBM Plex Sans",
+  "Source Sans 3",
+  "system-ui",
+];
+
 export function SettingsForm({ settings }: { settings: PlatformSettings }) {
   const [form, setForm] = useState(settings);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -37,8 +53,13 @@ export function SettingsForm({ settings }: { settings: PlatformSettings }) {
       <Field label="Product/portal name"><Input value={form.productName} onChange={(e) => update("productName", e.target.value)} /></Field>
       <Field label="Logo URL"><Input type="url" value={form.logoUrl ?? ""} onChange={(e) => update("logoUrl", e.target.value || null)} placeholder="https://..." /></Field>
       <Field label="Favicon URL"><Input type="url" value={form.faviconUrl ?? ""} onChange={(e) => update("faviconUrl", e.target.value || null)} placeholder="https://..." /></Field>
-      <Field label="Primary color"><Input value={form.primaryColor ?? ""} onChange={(e) => update("primaryColor", e.target.value || null)} /></Field>
-      <Field label="Secondary color"><Input value={form.secondaryColor ?? ""} onChange={(e) => update("secondaryColor", e.target.value || null)} /></Field>
+      <Field label="Primary color"><Input value={form.primaryColor ?? ""} onChange={(e) => update("primaryColor", e.target.value || null)} placeholder="#006FFF" /></Field>
+      <Field label="Secondary color"><Input value={form.secondaryColor ?? ""} onChange={(e) => update("secondaryColor", e.target.value || null)} placeholder="#00C6FE" /></Field>
+      <Field label="Portal font">
+        <Input list="portal-font-options" value={form.fontFamily ?? "Geist"} onChange={(e) => update("fontFamily", e.target.value)} placeholder="Ubuntu" />
+        <datalist id="portal-font-options">{FONT_SUGGESTIONS.map((font) => <option key={font} value={font} />)}</datalist>
+        <p className="text-xs text-muted-foreground">Choose a suggestion or type any Google Font family name. Geist remains the default.</p>
+      </Field>
       <Field label="Support/admin display name"><Input value={form.supportName ?? ""} onChange={(e) => update("supportName", e.target.value || null)} /></Field>
       <Field label="Support email"><Input type="email" value={form.supportEmail ?? ""} onChange={(e) => update("supportEmail", e.target.value || null)} /></Field>
       <Field label="Public portal URL"><Input type="url" value={form.publicBaseUrl} onChange={(e) => update("publicBaseUrl", e.target.value.replace(/\/$/, ""))} required /></Field>
