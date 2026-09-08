@@ -7,7 +7,10 @@
   "appWorker": "mklms-customer-slug",
   "mediaWorker": "mklms-media-customer-slug",
   "publicDomain": "learn.customer.example",
-  "dnsZone": "TEMPLATE_DNS_ZONE",
+  "domain": {
+    "mode": "saas-custom-hostname",
+    "platformId": "mkety-saas"
+  },
   "r2Bucket": "TEMPLATE_R2_BUCKET",
   "hyperdrive": {
     "freshId": "TEMPLATE_HYPERDRIVE_FRESH_ID",

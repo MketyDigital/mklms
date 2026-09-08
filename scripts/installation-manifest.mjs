@@ -10,6 +10,7 @@ const ID_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const PROD_BRANCH_RE = /^production\/[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const HOSTNAME_RE = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
 const DATABASE_URL_RE = /^postgres(?:ql)?:\/\//i;
+const DOMAIN_MODES = new Set(['saas-custom-hostname', 'provider-domain']);
 const SECRET_KEY_PARTS = [
   'secret',
   'password',
@@ -95,15 +96,21 @@ export function validateManifest(manifest, { filename, manifestType }) {
   if (typeof manifest.publicDomain !== 'string' || !HOSTNAME_RE.test(manifest.publicDomain)) push('publicDomain', 'must be a hostname without protocol or path');
 
   if (manifest.dnsZone !== undefined) {
-    if (typeof manifest.dnsZone !== 'string' || (!HOSTNAME_RE.test(manifest.dnsZone) && !isAllowedPlaceholder(manifest.dnsZone, manifestType))) {
-      push('dnsZone', 'must be a hostname without protocol or path');
-    } else if (
-      HOSTNAME_RE.test(manifest.dnsZone) &&
-      HOSTNAME_RE.test(manifest.publicDomain) &&
-      manifest.publicDomain !== manifest.dnsZone &&
-      !manifest.publicDomain.endsWith(`.${manifest.dnsZone}`)
-    ) {
-      push('dnsZone', 'must own the configured publicDomain');
+    push('dnsZone', 'legacy per-installation DNS zone ownership is forbidden; use domain.mode and domain.platformId');
+  }
+
+  if (!isObject(manifest.domain)) {
+    push('domain', 'is required');
+  } else {
+    const domainKeys = Object.keys(manifest.domain).sort();
+    if (domainKeys.length !== 2 || domainKeys[0] !== 'mode' || domainKeys[1] !== 'platformId') {
+      push('domain', 'must contain exactly mode and platformId');
+    }
+    if (!DOMAIN_MODES.has(manifest.domain.mode)) {
+      push('domain.mode', 'must be saas-custom-hostname or provider-domain');
+    }
+    if (typeof manifest.domain.platformId !== 'string' || !ID_RE.test(manifest.domain.platformId)) {
+      push('domain.platformId', 'must be a lowercase platform slug');
     }
   }
 

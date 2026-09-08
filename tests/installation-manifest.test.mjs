@@ -15,6 +15,7 @@ function validConcrete(overrides = {}) {
     appWorker: 'mklms-alpha-academy',
     mediaWorker: 'mklms-media-alpha-academy',
     publicDomain: 'learn.alpha.example',
+    domain: { mode: 'saas-custom-hostname', platformId: 'mkety-saas' },
     r2Bucket: 'alpha-academy-media',
     hyperdrive: { freshId: 'alpha-fresh', cachedId: 'alpha-cached' },
     rateLimits: {
@@ -46,7 +47,7 @@ test('manifest filenames classify concrete, example and template files', async (
 
 test('concrete manifests enforce required fields and isolation inside one installation', async () => {
   const { validateManifest } = await import(manifestModulePath);
-  const requiredTopLevel = ['schemaVersion', 'kind', 'deployable', 'id', 'productionBranch', 'appWorker', 'mediaWorker', 'publicDomain', 'r2Bucket', 'hyperdrive', 'rateLimits', 'billingInstallationId'];
+  const requiredTopLevel = ['schemaVersion', 'kind', 'deployable', 'id', 'productionBranch', 'appWorker', 'mediaWorker', 'publicDomain', 'domain', 'r2Bucket', 'hyperdrive', 'rateLimits', 'billingInstallationId'];
 
   for (const field of requiredTopLevel) {
     const manifest = validConcrete();
@@ -58,6 +59,7 @@ test('concrete manifests enforce required fields and isolation inside one instal
   assert.ok(validateManifest(validConcrete({ id: 'Star Pips' }), { filename: 'x.json', manifestType: 'concrete' }).length > 0);
   assert.ok(validateManifest(validConcrete({ productionBranch: 'main' }), { filename: 'x.json', manifestType: 'concrete' }).length > 0);
   assert.ok(validateManifest(validConcrete({ mediaWorker: 'mklms-alpha-academy' }), { filename: 'x.json', manifestType: 'concrete' }).length > 0);
+  assert.ok(validateManifest(validConcrete({ dnsZone: 'alpha.example' }), { filename: 'x.json', manifestType: 'concrete' }).some((error) => error.includes('dnsZone')));
 
   const sameHyperdrive = validConcrete({ hyperdrive: { freshId: 'same', cachedId: 'same' } });
   assert.ok(validateManifest(sameHyperdrive, { filename: 'x.json', manifestType: 'concrete' }).length > 0);
@@ -182,6 +184,7 @@ test('Starpips reference manifest exactly matches known non-secret deployment id
     appWorker: 'mklms',
     mediaWorker: 'mklms-media-delivery',
     publicDomain: 'learn.starpipsforex.com',
+    domain: { mode: 'saas-custom-hostname', platformId: 'mkety-saas' },
     r2Bucket: 'spf-media',
     hyperdrive: {
       freshId: 'bb7c9f70c2fe402080c22e06d0c0f305',

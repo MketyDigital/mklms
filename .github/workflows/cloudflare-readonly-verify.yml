@@ -56,6 +56,16 @@ jobs:
           echo "MANIFEST_PATH=$MANIFEST_PATH" >> "$GITHUB_ENV"
           echo "APP_WORKER=$(jq -r '.appWorker' "$MANIFEST_PATH")" >> "$GITHUB_ENV"
           echo "MEDIA_WORKER=$(jq -r '.mediaWorker' "$MANIFEST_PATH")" >> "$GITHUB_ENV"
+          echo "PUBLIC_DOMAIN=$(jq -r '.publicDomain' "$MANIFEST_PATH")" >> "$GITHUB_ENV"
+          echo "DOMAIN_MODE=$(jq -r '.domain.mode' "$MANIFEST_PATH")" >> "$GITHUB_ENV"
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs';
+          import { loadConcreteInstallation } from './scripts/installation-config.mjs';
+          import { loadSaasPlatform } from './scripts/saas-platform.mjs';
+          const { manifest } = await loadConcreteInstallation(process.env.INSTALLATION_ID);
+          const { platform } = await loadSaasPlatform(manifest.domain.platformId);
+          appendFileSync(process.env.GITHUB_ENV, `PROVIDER_ZONE=${platform.providerZone}\n`);
+          NODE
 
       - name: Read and verify application Worker safely
         shell: bash
@@ -108,3 +118,52 @@ jobs:
           test "$(jq -r '.success' "$deployments_file")" = "true"
           echo "Media Worker deployments are readable."
           jq -r '"Deployment count: \(.result.deployments | length)"' "$deployments_file"
+
+      - name: Read and verify SaaS Custom Hostname and Worker route
+        if: env.DOMAIN_MODE == 'saas-custom-hostname'
+        shell: bash
+        run: |
+          set -euo pipefail
+          zone_file="$(mktemp)"
+          hostname_file="$(mktemp)"
+          routes_file="$(mktemp)"
+          trap 'rm -f "$zone_file" "$hostname_file" "$routes_file"' EXIT
+
+          curl --fail-with-body --silent --show-error --request GET \
+            "https://api.cloudflare.com/client/v4/zones?name=${PROVIDER_ZONE}&account.id=${CLOUDFLARE_ACCOUNT_ID}" \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --output "$zone_file"
+          test "$(jq -r '.success' "$zone_file")" = "true"
+          test "$(jq -r '.result | length' "$zone_file")" = "1"
+          ZONE_ID=$(jq -r '.result[0].id' "$zone_file")
+
+          curl --fail-with-body --silent --show-error --request GET --get \
+            "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/custom_hostnames" \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data-urlencode "hostname=${PUBLIC_DOMAIN}" \
+            --output "$hostname_file"
+
+          curl --fail-with-body --silent --show-error --request GET \
+            "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/workers/routes" \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --output "$routes_file"
+
+          node --input-type=module "$hostname_file" "$routes_file" <<'NODE'
+          import { readFileSync } from 'node:fs';
+          import { loadConcreteInstallation } from './scripts/installation-config.mjs';
+          import { loadSaasPlatform } from './scripts/saas-platform.mjs';
+          import { resolveSaasDomainPlan } from './scripts/cloudflare-saas-domain.mjs';
+          const [hostnamePath, routesPath] = process.argv.slice(2);
+          const { manifest } = await loadConcreteInstallation(process.env.INSTALLATION_ID);
+          const { platform } = await loadSaasPlatform(manifest.domain.platformId);
+          const customHostnames = JSON.parse(readFileSync(hostnamePath, 'utf8')).result ?? [];
+          const workerRoutes = JSON.parse(readFileSync(routesPath, 'utf8')).result ?? [];
+          const plan = resolveSaasDomainPlan({ manifest, platform, customHostnames, workerRoutes });
+          if (plan.createCustomHostname || plan.createWorkerRoute) throw new Error('SaaS domain provisioning is incomplete or does not match the selected installation.');
+          console.log(`SaaS Custom Hostname is present for ${plan.hostname}.`);
+          console.log(`Exact Worker route matches ${plan.routePattern} -> ${plan.appWorker}.`);
+          console.log(`SSL sub-status is informational; application HTTPS smoke is the readiness gate.`);
+          NODE

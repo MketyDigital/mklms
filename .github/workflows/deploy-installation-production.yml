@@ -91,18 +91,26 @@ jobs:
           import { appendFileSync } from 'node:fs';
           import { loadConcreteInstallation } from './scripts/installation-config.mjs';
           import { assertReleaseBranch } from './scripts/installation-release.mjs';
+          import { loadSaasPlatform } from './scripts/saas-platform.mjs';
+
           const { manifest } = await loadConcreteInstallation(process.env.INSTALLATION_ID);
-          if (!manifest.dnsZone || typeof manifest.dnsZone !== 'string') {
-            throw new Error('Production installation must declare dnsZone before custom-domain deployment.');
-          }
+          const { platform } = await loadSaasPlatform(manifest.domain.platformId);
           assertReleaseBranch(manifest, manifest.productionBranch);
+          if (manifest.domain.mode === 'provider-domain') {
+            const domain = manifest.publicDomain.toLowerCase();
+            const zone = platform.providerZone.toLowerCase();
+            if (domain !== zone && !domain.endsWith(`.${zone}`)) {
+              throw new Error('provider-domain hostname must be inside the configured MkLMS provider zone.');
+            }
+          }
           const pairs = {
             PRODUCTION_BRANCH: manifest.productionBranch,
             APP_WORKER: manifest.appWorker,
             MEDIA_WORKER: manifest.mediaWorker,
             R2_BUCKET: manifest.r2Bucket,
             PUBLIC_DOMAIN: manifest.publicDomain,
-            DNS_ZONE: manifest.dnsZone,
+            DOMAIN_MODE: manifest.domain.mode,
+            PROVIDER_ZONE: platform.providerZone,
             BILLING_INSTALLATION_ID: manifest.billingInstallationId,
           };
           for (const [key, value] of Object.entries(pairs)) appendFileSync(process.env.GITHUB_ENV, `${key}=${value}\n`);
@@ -212,11 +220,12 @@ jobs:
           npx wrangler secret bulk /tmp/app-secrets.json --name "$APP_WORKER"
           rm -f /tmp/app-secrets.json
 
-      - name: Attach selected production custom domain
+      - name: Attach provider-owned production custom domain
+        if: env.DOMAIN_MODE == 'provider-domain'
         shell: bash
         run: |
           set -euo pipefail
-          jq -n --arg hostname "$PUBLIC_DOMAIN" --arg service "$APP_WORKER" --arg zone "$DNS_ZONE" \
+          jq -n --arg hostname "$PUBLIC_DOMAIN" --arg service "$APP_WORKER" --arg zone "$PROVIDER_ZONE" \
             '{hostname:$hostname,service:$service,zone_name:$zone}' >/tmp/domain.json
           curl --silent --show-error --fail-with-body --request PUT \
             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/domains" \
@@ -224,6 +233,13 @@ jobs:
             --data @/tmp/domain.json >/tmp/domain-response.json
           jq -e '.success == true' /tmp/domain-response.json >/dev/null
           rm -f /tmp/domain.json /tmp/domain-response.json
+
+      - name: Preserve SaaS custom hostname routing
+        if: env.DOMAIN_MODE == 'saas-custom-hostname'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "SaaS Custom Hostname and customer DNS are provisioned separately and are not mutated by software releases."
 
       - name: Smoke test installation production
         shell: bash
