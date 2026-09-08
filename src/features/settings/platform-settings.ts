@@ -47,7 +47,7 @@ export interface PlatformSettings {
   faviconUrl?: string | null;
   primaryColor?: string | null;
   secondaryColor?: string | null;
-  fontFamily: string;
+  fontFamily?: string;
   supportName?: string | null;
   supportEmail?: string | null;
   publicBaseUrl: string;
