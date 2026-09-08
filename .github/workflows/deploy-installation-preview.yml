@@ -220,6 +220,6 @@ jobs:
           APP_URL: ${{ steps.urls.outputs.app_url }}
         run: |
           set -euo pipefail
-          curl --silent --show-error --fail --retry 5 --retry-delay 3 "$APP_URL/login" >/dev/null
-          curl --silent --show-error --fail --retry 5 --retry-delay 3 "$APP_URL/" >/dev/null
+          curl --silent --show-error --fail --retry 5 --retry-delay 3 --retry-all-errors "$APP_URL/login" >/dev/null
+          curl --silent --show-error --fail --retry 5 --retry-delay 3 --retry-all-errors "$APP_URL/" >/dev/null
           echo "Installation preview smoke checks passed: $APP_URL"
