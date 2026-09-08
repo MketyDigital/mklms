@@ -14,58 +14,16 @@ jobs:
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      MKLMS_ADMIN_ACCESS_KEY: ${{ secrets.MKLMS_ADMIN_ACCESS_KEY }}
+      MKLMS_ADMIN_SESSION_SECRET: ${{ secrets.MKLMS_ADMIN_SESSION_SECRET }}
+      MKLMS_MEDIA_SIGNING_SECRET: ${{ secrets.MKLMS_MEDIA_SIGNING_SECRET }}
     steps:
-      - name: Verify credentials are available
+      - name: Verify standardized Starpips release secret names
         shell: bash
         run: |
           set -euo pipefail
           test -n "${CLOUDFLARE_ACCOUNT_ID:-}"
           test -n "${CLOUDFLARE_API_TOKEN:-}"
-
-      - name: Audit mkety.com SaaS zone read-only
-        shell: bash
-        run: |
-          set -euo pipefail
-          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json')
-
-          curl --silent --show-error --fail-with-body "https://api.cloudflare.com/client/v4/zones?name=mkety.com&account.id=$CLOUDFLARE_ACCOUNT_ID" "${auth[@]}" > /tmp/zones.json
-          jq -e '.success == true and (.result|length) == 1' /tmp/zones.json >/dev/null
-          ZONE_ID=$(jq -r '.result[0].id' /tmp/zones.json)
-          echo "ZONE_ID=$ZONE_ID" >> "$GITHUB_ENV"
-          echo "mkety.com zone status: $(jq -r '.result[0].status' /tmp/zones.json)"
-
-          curl --silent --show-error --fail-with-body "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/custom_hostnames/fallback_origin" "${auth[@]}" > /tmp/fallback.json
-          jq -e '.success == true' /tmp/fallback.json >/dev/null
-          echo "fallback origin: $(jq -r '.result.origin // "<none>"' /tmp/fallback.json)"
-          echo "fallback status: $(jq -r '.result.status // "<none>"' /tmp/fallback.json)"
-
-          for name in saas-origin.mkety.com origin.mkety.com customers.mkety.com; do
-            curl --silent --show-error --fail-with-body --get "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" "${auth[@]}" --data-urlencode "name=$name" > /tmp/dns.json
-            jq -e '.success == true' /tmp/dns.json >/dev/null
-            echo "DNS $name: $(jq -c '[.result[] | {type,name,content,proxied}]' /tmp/dns.json)"
-          done
-
-          curl --silent --show-error --fail-with-body --get "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/custom_hostnames" "${auth[@]}" --data-urlencode "hostname=learn.starpipsforex.com" > /tmp/starpips-host.json
-          jq -e '.success == true' /tmp/starpips-host.json >/dev/null
-          echo "Starpips custom hostname count: $(jq -r '.result|length' /tmp/starpips-host.json)"
-          jq -c '.result[] | {id,hostname,status,ssl:{status:(.ssl.status // null),method:(.ssl.method // null),type:(.ssl.type // null),validation_records:(.ssl.validation_records // null),validation_errors:(.ssl.validation_errors // null)},ownership_verification:(.ownership_verification // null),ownership_verification_http:(.ownership_verification_http // null),custom_origin_server:(.custom_origin_server // null),custom_metadata:(.custom_metadata // null)}' /tmp/starpips-host.json
-
-          curl --silent --show-error --fail-with-body "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/workers/routes" "${auth[@]}" > /tmp/routes.json
-          jq -e '.success == true' /tmp/routes.json >/dev/null
-          echo "Worker routes:"
-          jq -c '.result[] | {pattern,script}' /tmp/routes.json
-
-      - name: Audit current Starpips and Mkety Workers read-only
-        shell: bash
-        run: |
-          set -euo pipefail
-          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json')
-          for worker in mklms mklms-media-delivery mklms-mkety-academy mklms-media-mkety-academy; do
-            code=$(curl --silent --show-error -o /tmp/worker.json -w '%{http_code}' "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$worker/settings" "${auth[@]}")
-            if [ "$code" = "200" ] && jq -e '.success == true' /tmp/worker.json >/dev/null; then
-              echo "$worker: present"
-              jq -c '[.result.bindings[]? | select(.type=="r2_bucket" or .type=="hyperdrive" or .type=="ratelimit") | {name,type,bucket_name,id,namespace_id}]' /tmp/worker.json
-            else
-              echo "$worker: not readable/present (HTTP $code)"
-            fi
+          for name in MKLMS_ADMIN_ACCESS_KEY MKLMS_ADMIN_SESSION_SECRET MKLMS_MEDIA_SIGNING_SECRET; do
+            if [ -n "${!name:-}" ]; then echo "$name: configured"; else echo "$name: missing"; fi
           done
