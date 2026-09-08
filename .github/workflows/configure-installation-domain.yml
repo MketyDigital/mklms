@@ -104,7 +104,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          jq -n --arg hostname "$PUBLIC_DOMAIN" '{hostname:$hostname,ssl:{method:"txt",type:"dv"}}' >/tmp/create-hostname.json
+          jq -n --arg hostname "$PUBLIC_DOMAIN" '{hostname:$hostname,ssl:{method:"http",type:"dv"}}' >/tmp/create-hostname.json
           curl --silent --show-error --fail-with-body --request POST \
             "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/custom_hostnames" \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json' \
