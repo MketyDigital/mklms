@@ -19,5 +19,11 @@
     "playback": "371518076",
     "certificate": "897396052"
   },
-  "billingInstallationId": "mkety-academy"
+  "billingInstallationId": "mkety-academy",
+  "databaseOrigin": {
+    "host": "db.vdblajgxrfndjesoyayy.supabase.co",
+    "port": 5432,
+    "database": "postgres",
+    "user": "mkety_academy_app"
+  }
 }
