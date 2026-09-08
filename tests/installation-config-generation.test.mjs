@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
 const STAR_PIPS = JSON.parse(readFileSync('deploy/installations/starpips.json', 'utf8'));
+const MKETY = JSON.parse(readFileSync('deploy/installations/mkety-academy.json', 'utf8'));
 
 test('generation module exposes deterministic config interfaces', async () => {
   const mod = await import('../scripts/installation-config.mjs');
@@ -56,10 +57,13 @@ test('rendering is deterministic and contains no secret material', async () => {
   assert.doesNotMatch(a, /DATABASE_URL|PASSWORD|SECRET|TOKEN|ACCESS_KEY/i);
 });
 
-test('production generation rejects unknown and non-deployable installations', async () => {
+test('production generation accepts concrete installations and rejects unknown/non-deployable ones', async () => {
   const { loadConcreteInstallation } = await import('../scripts/installation-config.mjs');
+  const mkety = await loadConcreteInstallation('mkety-academy');
+  assert.equal(mkety.id, MKETY.id);
+  assert.equal(mkety.appWorker, MKETY.appWorker);
+  assert.equal(mkety.mediaWorker, MKETY.mediaWorker);
   await assert.rejects(() => loadConcreteInstallation('does-not-exist'));
-  await assert.rejects(() => loadConcreteInstallation('mkety-academy'));
   await assert.rejects(() => loadConcreteInstallation('customer-template'));
 });
 
