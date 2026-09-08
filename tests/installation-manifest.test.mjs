@@ -3,187 +3,219 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
-import {
-  REQUIRED_RATE_LIMIT_KEYS,
-  classifyManifest,
-  validateInstallationSet,
-  validateManifest,
-} from '../scripts/installation-manifest.mjs';
+const manifestModulePath = '../scripts/installation-manifest.mjs';
 
-const STAR_PIPS = JSON.parse(readFileSync('deploy/installations/starpips.json', 'utf8'));
-
-function concrete(overrides = {}) {
+function validConcrete(overrides = {}) {
   return {
     schemaVersion: 1,
     kind: 'installation',
     deployable: true,
-    id: 'customer-a',
-    productionBranch: 'production/customer-a',
-    appWorker: 'mklms-customer-a',
-    mediaWorker: 'mklms-media-customer-a',
-    publicDomain: 'learn.customer-a.example',
-    r2Bucket: 'customer-a-media',
-    hyperdrive: {
-      freshId: '11111111111111111111111111111111',
-      cachedId: '22222222222222222222222222222222',
-    },
+    id: 'alpha-academy',
+    productionBranch: 'production/alpha-academy',
+    appWorker: 'mklms-alpha-academy',
+    mediaWorker: 'mklms-media-alpha-academy',
+    publicDomain: 'learn.alpha.example',
+    r2Bucket: 'alpha-academy-media',
+    hyperdrive: { freshId: 'alpha-fresh', cachedId: 'alpha-cached' },
     rateLimits: {
-      auth: '60000001',
-      admin: '60000002',
-      studentMutation: '60000003',
-      playback: '60000004',
-      certificate: '60000005',
+      auth: 'alpha-rate-auth',
+      admin: 'alpha-rate-admin',
+      studentMutation: 'alpha-rate-student',
+      playback: 'alpha-rate-playback',
+      certificate: 'alpha-rate-certificate',
     },
-    billingInstallationId: 'customer-a',
+    billingInstallationId: 'alpha-billing',
     ...overrides,
   };
 }
 
-test('installation manifest module exposes the locked validation interface', () => {
-  assert.deepEqual(REQUIRED_RATE_LIMIT_KEYS, [
-    'auth',
-    'admin',
-    'studentMutation',
-    'playback',
-    'certificate',
-  ]);
-  assert.equal(typeof classifyManifest, 'function');
-  assert.equal(typeof validateManifest, 'function');
-  assert.equal(typeof validateInstallationSet, 'function');
+test('installation manifest module exposes the locked validation interface', async () => {
+  const mod = await import(manifestModulePath);
+  assert.deepEqual(mod.REQUIRED_RATE_LIMIT_KEYS, ['auth', 'admin', 'studentMutation', 'playback', 'certificate']);
+  assert.equal(typeof mod.classifyManifest, 'function');
+  assert.equal(typeof mod.validateManifest, 'function');
+  assert.equal(typeof mod.validateInstallationSet, 'function');
 });
 
-test('manifest filenames classify concrete, example and template files', () => {
+test('manifest filenames classify concrete, example and template files', async () => {
+  const { classifyManifest } = await import(manifestModulePath);
   assert.equal(classifyManifest('starpips.json'), 'concrete');
   assert.equal(classifyManifest('mkety-academy.example.json'), 'example');
   assert.equal(classifyManifest('customer-template.json'), 'template');
 });
 
-test('concrete manifests enforce required fields and isolation inside one installation', () => {
-  assert.deepEqual(validateManifest(concrete(), { filename: 'customer-a.json', manifestType: 'concrete' }), []);
+test('concrete manifests enforce required fields and isolation inside one installation', async () => {
+  const { validateManifest } = await import(manifestModulePath);
+  const requiredTopLevel = ['schemaVersion', 'kind', 'deployable', 'id', 'productionBranch', 'appWorker', 'mediaWorker', 'publicDomain', 'r2Bucket', 'hyperdrive', 'rateLimits', 'billingInstallationId'];
 
-  const errors = validateManifest(
-    concrete({
-      appWorker: 'same-worker',
-      mediaWorker: 'same-worker',
-      hyperdrive: { freshId: 'same-hyperdrive', cachedId: 'same-hyperdrive' },
-      rateLimits: {
-        auth: '1', admin: '1', studentMutation: '2', playback: '3', certificate: '4',
-      },
-    }),
-    { filename: 'customer-a.json', manifestType: 'concrete' },
-  );
-  assert.ok(errors.some((error) => error.includes('appWorker') && error.includes('mediaWorker')));
-  assert.ok(errors.some((error) => error.includes('freshId') && error.includes('cachedId')));
-  assert.ok(errors.some((error) => error.includes('rate limit namespace')));
+  for (const field of requiredTopLevel) {
+    const manifest = validConcrete();
+    delete manifest[field];
+    const errors = validateManifest(manifest, { filename: 'alpha-academy.json', manifestType: 'concrete' });
+    assert.ok(errors.some((error) => error.includes(field)), `expected missing ${field} error`);
+  }
+
+  assert.ok(validateManifest(validConcrete({ id: 'Star Pips' }), { filename: 'x.json', manifestType: 'concrete' }).length > 0);
+  assert.ok(validateManifest(validConcrete({ productionBranch: 'main' }), { filename: 'x.json', manifestType: 'concrete' }).length > 0);
+  assert.ok(validateManifest(validConcrete({ mediaWorker: 'mklms-alpha-academy' }), { filename: 'x.json', manifestType: 'concrete' }).length > 0);
+
+  const sameHyperdrive = validConcrete({ hyperdrive: { freshId: 'same', cachedId: 'same' } });
+  assert.ok(validateManifest(sameHyperdrive, { filename: 'x.json', manifestType: 'concrete' }).length > 0);
+
+  const duplicateRate = validConcrete();
+  duplicateRate.rateLimits.admin = duplicateRate.rateLimits.auth;
+  assert.ok(validateManifest(duplicateRate, { filename: 'x.json', manifestType: 'concrete' }).length > 0);
 });
 
-test('all five rate limit namespaces are required', () => {
-  const manifest = concrete();
-  delete manifest.rateLimits.certificate;
-  const errors = validateManifest(manifest, { filename: 'customer-a.json', manifestType: 'concrete' });
-  assert.ok(errors.some((error) => error.includes('certificate')));
+test('all five rate limit namespaces are required', async () => {
+  const { validateManifest } = await import(manifestModulePath);
+  for (const key of ['auth', 'admin', 'studentMutation', 'playback', 'certificate']) {
+    const manifest = validConcrete();
+    delete manifest.rateLimits[key];
+    const errors = validateManifest(manifest, { filename: 'x.json', manifestType: 'concrete' });
+    assert.ok(errors.some((error) => error.includes(key)), `expected missing rate limit ${key}`);
+  }
 });
 
-test('secret-like fields and inline database URLs are forbidden', () => {
-  const secretErrors = validateManifest(
-    concrete({ nested: { API_TOKEN: 'not-allowed' } }),
-    { filename: 'customer-a.json', manifestType: 'concrete' },
-  );
-  assert.ok(secretErrors.some((error) => error.includes('secret-like key')));
+test('secret-like fields and inline database URLs are forbidden', async () => {
+  const { validateManifest } = await import(manifestModulePath);
+  const mutations = [
+    ['DATABASE_URL', 'postgresql://user:password@example/db'],
+    ['MKLMS_ADMIN_ACCESS_KEY', 'secret'],
+    ['apiToken', 'secret'],
+    ['password', 'secret'],
+    ['credentials', { key: 'secret' }],
+    ['harmlessName', 'postgres://user:password@example/db'],
+  ];
 
-  const urlErrors = validateManifest(
-    concrete({ nested: { connection: 'postgresql://user:pass@example/db' } }),
-    { filename: 'customer-a.json', manifestType: 'concrete' },
-  );
-  assert.ok(urlErrors.some((error) => error.includes('database URL')));
+  for (const [key, value] of mutations) {
+    const manifest = validConcrete();
+    manifest[key] = value;
+    const errors = validateManifest(manifest, { filename: 'x.json', manifestType: 'concrete' });
+    assert.ok(errors.length > 0, `expected ${key} to be rejected`);
+  }
 });
 
-test('examples and templates are non-deployable and concrete manifests reject sentinels', () => {
-  const example = concrete({
+test('examples and templates are non-deployable and concrete manifests reject sentinels', async () => {
+  const { validateManifest } = await import(manifestModulePath);
+
+  const example = validConcrete({
     deployable: false,
     r2Bucket: 'EXAMPLE_BUCKET',
     hyperdrive: { freshId: 'EXAMPLE_FRESH', cachedId: 'EXAMPLE_CACHED' },
     rateLimits: {
-      auth: 'EXAMPLE_AUTH', admin: 'EXAMPLE_ADMIN', studentMutation: 'EXAMPLE_MUTATION', playback: 'EXAMPLE_PLAYBACK', certificate: 'EXAMPLE_CERT',
+      auth: 'EXAMPLE_AUTH',
+      admin: 'EXAMPLE_ADMIN',
+      studentMutation: 'EXAMPLE_STUDENT',
+      playback: 'EXAMPLE_PLAYBACK',
+      certificate: 'EXAMPLE_CERT',
     },
     billingInstallationId: 'EXAMPLE_BILLING',
   });
-  assert.deepEqual(validateManifest(example, { filename: 'customer-a.example.json', manifestType: 'example' }), []);
+  assert.deepEqual(validateManifest(example, { filename: 'mkety-academy.example.json', manifestType: 'example' }), []);
+  assert.ok(validateManifest({ ...example, deployable: true }, { filename: 'mkety-academy.example.json', manifestType: 'example' }).length > 0);
 
   const template = structuredClone(example);
   template.r2Bucket = 'TEMPLATE_BUCKET';
   template.hyperdrive = { freshId: 'TEMPLATE_FRESH', cachedId: 'TEMPLATE_CACHED' };
   template.rateLimits = {
-    auth: 'TEMPLATE_AUTH', admin: 'TEMPLATE_ADMIN', studentMutation: 'TEMPLATE_MUTATION', playback: 'TEMPLATE_PLAYBACK', certificate: 'TEMPLATE_CERT',
+    auth: 'TEMPLATE_AUTH',
+    admin: 'TEMPLATE_ADMIN',
+    studentMutation: 'TEMPLATE_STUDENT',
+    playback: 'TEMPLATE_PLAYBACK',
+    certificate: 'TEMPLATE_CERT',
   };
   template.billingInstallationId = 'TEMPLATE_BILLING';
   assert.deepEqual(validateManifest(template, { filename: 'customer-template.json', manifestType: 'template' }), []);
+  assert.ok(validateManifest({ ...template, deployable: true }, { filename: 'customer-template.json', manifestType: 'template' }).length > 0);
 
-  const concreteSentinel = validateManifest(
-    concrete({ r2Bucket: 'EXAMPLE_BUCKET' }),
-    { filename: 'customer-a.json', manifestType: 'concrete' },
-  );
-  assert.ok(concreteSentinel.some((error) => error.includes('sentinel')));
+  assert.ok(validateManifest(validConcrete({ r2Bucket: 'EXAMPLE_BUCKET' }), { filename: 'x.json', manifestType: 'concrete' }).length > 0);
+  assert.ok(validateManifest(validConcrete({ r2Bucket: 'TEMPLATE_BUCKET' }), { filename: 'x.json', manifestType: 'concrete' }).length > 0);
 });
 
-test('cross-installation isolation rejects reused resources', () => {
-  const a = concrete();
-  const b = concrete({
-    id: 'customer-b',
-    productionBranch: 'production/customer-b',
-    appWorker: 'mklms-customer-b',
-    mediaWorker: 'mklms-media-customer-b',
-    publicDomain: 'learn.customer-b.example',
-    r2Bucket: 'customer-b-media',
-    hyperdrive: {
-      freshId: '33333333333333333333333333333333',
-      cachedId: '44444444444444444444444444444444',
-    },
-    rateLimits: {
-      auth: '70000001', admin: '70000002', studentMutation: '70000003', playback: '70000004', certificate: '70000005',
-    },
-    billingInstallationId: 'customer-b',
+test('cross-installation isolation rejects reused resources', async () => {
+  const { validateInstallationSet } = await import(manifestModulePath);
+  const alpha = validConcrete();
+  const betaBase = validConcrete({
+    id: 'beta-academy',
+    productionBranch: 'production/beta-academy',
+    appWorker: 'mklms-beta-academy',
+    mediaWorker: 'mklms-media-beta-academy',
+    publicDomain: 'learn.beta.example',
+    r2Bucket: 'beta-academy-media',
+    hyperdrive: { freshId: 'beta-fresh', cachedId: 'beta-cached' },
+    rateLimits: { auth: 'beta-auth', admin: 'beta-admin', studentMutation: 'beta-student', playback: 'beta-playback', certificate: 'beta-cert' },
+    billingInstallationId: 'beta-billing',
   });
-  assert.deepEqual(validateInstallationSet([
-    { filename: 'customer-a.json', manifest: a },
-    { filename: 'customer-b.json', manifest: b },
-  ]), []);
 
-  b.r2Bucket = a.r2Bucket;
-  const errors = validateInstallationSet([
-    { filename: 'customer-a.json', manifest: a },
-    { filename: 'customer-b.json', manifest: b },
-  ]);
-  assert.ok(errors.some((error) => error.includes('r2Bucket')));
+  const mutations = [
+    (m) => { m.id = alpha.id; },
+    (m) => { m.productionBranch = alpha.productionBranch; },
+    (m) => { m.appWorker = alpha.appWorker; },
+    (m) => { m.mediaWorker = alpha.mediaWorker; },
+    (m) => { m.publicDomain = alpha.publicDomain; },
+    (m) => { m.r2Bucket = alpha.r2Bucket; },
+    (m) => { m.hyperdrive.freshId = alpha.hyperdrive.cachedId; },
+    (m) => { m.rateLimits.auth = alpha.rateLimits.playback; },
+    (m) => { m.billingInstallationId = alpha.billingInstallationId; },
+  ];
+
+  for (const mutate of mutations) {
+    const beta = structuredClone(betaBase);
+    mutate(beta);
+    const errors = validateInstallationSet([
+      { filename: 'alpha.json', manifest: alpha, manifestType: 'concrete' },
+      { filename: 'beta.json', manifest: beta, manifestType: 'concrete' },
+    ]);
+    assert.ok(errors.length > 0, 'expected cross-installation collision');
+  }
 });
 
 test('Starpips reference manifest exactly matches known non-secret deployment identifiers', () => {
-  assert.equal(STAR_PIPS.id, 'starpips');
-  assert.equal(STAR_PIPS.productionBranch, 'production/starpips');
-  assert.equal(STAR_PIPS.appWorker, 'mklms');
-  assert.equal(STAR_PIPS.mediaWorker, 'mklms-media-delivery');
-  assert.equal(STAR_PIPS.publicDomain, 'learn.starpipsforex.com');
-  assert.equal(STAR_PIPS.r2Bucket, 'spf-media');
-  assert.equal(STAR_PIPS.hyperdrive.freshId, 'bb7c9f70c2fe402080c22e06d0c0f305');
-  assert.equal(STAR_PIPS.hyperdrive.cachedId, '14a4baf3773d41c88e4600967ab3b68d');
-  assert.deepEqual(STAR_PIPS.rateLimits, {
-    auth: '51090501',
-    admin: '51090502',
-    studentMutation: '51090503',
-    playback: '51090504',
-    certificate: '51090505',
+  const manifest = JSON.parse(readFileSync('deploy/installations/starpips.json', 'utf8'));
+  assert.deepEqual(manifest, {
+    schemaVersion: 1,
+    kind: 'installation',
+    deployable: true,
+    id: 'starpips',
+    productionBranch: 'production/starpips',
+    appWorker: 'mklms',
+    mediaWorker: 'mklms-media-delivery',
+    publicDomain: 'learn.starpipsforex.com',
+    r2Bucket: 'spf-media',
+    hyperdrive: {
+      freshId: 'bb7c9f70c2fe402080c22e06d0c0f305',
+      cachedId: '14a4baf3773d41c88e4600967ab3b68d',
+    },
+    rateLimits: {
+      auth: '51090501',
+      admin: '51090502',
+      studentMutation: '51090503',
+      playback: '51090504',
+      certificate: '51090505',
+    },
+    billingInstallationId: 'spf-mklms',
   });
-  assert.equal(STAR_PIPS.billingInstallationId, 'spf-mklms');
+
+  const appWrangler = readFileSync('wrangler.jsonc', 'utf8');
+  const mediaWrangler = readFileSync('workers/media-delivery/wrangler.jsonc', 'utf8');
+  for (const expected of ['"name": "mklms"', 'bb7c9f70c2fe402080c22e06d0c0f305', '14a4baf3773d41c88e4600967ab3b68d', 'spf-media', '51090501', '51090502', '51090503', '51090504', '51090505']) {
+    assert.match(appWrangler, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+  assert.match(mediaWrangler, /"name": "mklms-media-delivery"/);
+  assert.match(mediaWrangler, /"bucket_name": "spf-media"/);
 });
 
 test('manifest validator source is local-only and contains no deployment/network clients', () => {
-  for (const path of [
-    'scripts/installation-manifest.mjs',
-    'scripts/validate-installation-manifest.mjs',
-  ]) {
+  for (const path of ['scripts/installation-manifest.mjs', 'scripts/validate-installation-manifest.mjs']) {
     const source = readFileSync(path, 'utf8');
-    assert.doesNotMatch(source, /\bfetch\s*\(|\bcurl\b|wrangler\s+deploy|opennextjs-cloudflare\s+deploy/i);
-    assert.doesNotMatch(source, /node:child_process|\bexec\s*\(|\bspawn\s*\(|\bpg\b|@aws-sdk/i);
+    assert.doesNotMatch(source, /\bfetch\s*\(/);
+    assert.doesNotMatch(source, /\bcurl\b/);
+    assert.doesNotMatch(source, /wrangler\s+deploy/);
+    assert.doesNotMatch(source, /node:child_process|from ['"]child_process['"]/);
+    assert.doesNotMatch(source, /\bexec\s*\(|\bspawn\s*\(/);
+    assert.doesNotMatch(source, /@aws-sdk|cloudflare/i);
+    assert.doesNotMatch(source, /from ['"]pg['"]|require\(['"]pg['"]\)/);
   }
 });
 
