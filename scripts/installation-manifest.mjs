@@ -71,6 +71,13 @@ function hasWrongPlaceholder(value, allowedPrefix) {
   return found;
 }
 
+function isAllowedPlaceholder(value, manifestType) {
+  if (typeof value !== 'string') return false;
+  if (manifestType === 'example') return value.startsWith('EXAMPLE_');
+  if (manifestType === 'template') return value.startsWith('TEMPLATE_');
+  return false;
+}
+
 export function validateManifest(manifest, { filename, manifestType }) {
   const errors = [];
   const push = (field, message) => errors.push(`${field}: ${message}`);
@@ -86,6 +93,38 @@ export function validateManifest(manifest, { filename, manifestType }) {
   if (typeof manifest.mediaWorker !== 'string' || !manifest.mediaWorker) push('mediaWorker', 'is required');
   if (manifest.appWorker && manifest.mediaWorker && manifest.appWorker === manifest.mediaWorker) push('mediaWorker', 'must differ from appWorker');
   if (typeof manifest.publicDomain !== 'string' || !HOSTNAME_RE.test(manifest.publicDomain)) push('publicDomain', 'must be a hostname without protocol or path');
+
+  if (manifest.cloudflareZone !== undefined) {
+    if (typeof manifest.cloudflareZone !== 'string' || (!HOSTNAME_RE.test(manifest.cloudflareZone) && !isAllowedPlaceholder(manifest.cloudflareZone, manifestType))) {
+      push('cloudflareZone', 'must be a hostname without protocol or path');
+    } else if (
+      HOSTNAME_RE.test(manifest.cloudflareZone) &&
+      HOSTNAME_RE.test(manifest.publicDomain) &&
+      manifest.publicDomain !== manifest.cloudflareZone &&
+      !manifest.publicDomain.endsWith(`.${manifest.cloudflareZone}`)
+    ) {
+      push('cloudflareZone', 'must own the configured publicDomain');
+    }
+  }
+
+  if (manifest.databaseOrigin !== undefined) {
+    if (!isObject(manifest.databaseOrigin)) {
+      push('databaseOrigin', 'must be an object');
+    } else {
+      const { host, port, database, user } = manifest.databaseOrigin;
+      if (typeof host !== 'string' || (!HOSTNAME_RE.test(host) && !isAllowedPlaceholder(host, manifestType))) {
+        push('databaseOrigin.host', 'must be a hostname without protocol or path');
+      }
+      if (!Number.isInteger(port) || port < 1 || port > 65535) push('databaseOrigin.port', 'must be an integer from 1 to 65535');
+      if (typeof database !== 'string' || !database.trim() || (!isAllowedPlaceholder(database, manifestType) && /[\s/?#]/.test(database))) {
+        push('databaseOrigin.database', 'must be a non-secret database name');
+      }
+      if (typeof user !== 'string' || !user.trim() || (!isAllowedPlaceholder(user, manifestType) && /\s/.test(user))) {
+        push('databaseOrigin.user', 'must be a non-secret database role/user');
+      }
+    }
+  }
+
   if (typeof manifest.r2Bucket !== 'string' || !manifest.r2Bucket) push('r2Bucket', 'is required');
 
   if (!isObject(manifest.hyperdrive)) {
