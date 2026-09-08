@@ -19,5 +19,11 @@
     "playback": "EXAMPLE_MKETY_RATE_PLAYBACK",
     "certificate": "EXAMPLE_MKETY_RATE_CERTIFICATE"
   },
-  "billingInstallationId": "EXAMPLE_MKETY_BILLING_INSTALLATION_ID"
+  "billingInstallationId": "EXAMPLE_MKETY_BILLING_INSTALLATION_ID",
+  "databaseOrigin": {
+    "host": "EXAMPLE_DATABASE_HOST",
+    "port": 5432,
+    "database": "EXAMPLE_DATABASE_NAME",
+    "user": "EXAMPLE_DATABASE_USER"
+  }
 }
