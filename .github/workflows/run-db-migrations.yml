@@ -4,19 +4,21 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: "Type MIGRATE to apply pending migrations to the configured database"
+        description: "Type MIGRATE to apply pending Starpips migrations to the configured database"
         required: true
         type: string
+
+permissions:
+  contents: read
 
 jobs:
   migrate:
     if: ${{ github.event.inputs.confirm == 'MIGRATE' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    environment: database-migrations
     env:
-      DATABASE_URL: ${{ secrets.MKLMS_DATABASE_URL }}
-      DATABASE_SSL: ${{ secrets.MKLMS_DATABASE_SSL }}
+      DATABASE_URL: ${{ secrets.STARPIPS_DATABASE_URL }}
+      DATABASE_SSL: ${{ secrets.STARPIPS_DATABASE_SSL }}
     steps:
       - name: Checkout release branch
         uses: actions/checkout@v4
@@ -26,15 +28,16 @@ jobs:
         with:
           node-version: 24
 
-      - name: Verify migration database secret
+      - name: Verify Starpips migration database secret
         shell: bash
         run: |
-          if [ -z "$DATABASE_URL" ]; then
-            echo "Missing GitHub secret MKLMS_DATABASE_URL"
+          set -euo pipefail
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "Missing repository secret STARPIPS_DATABASE_URL"
             exit 1
           fi
-          if [ -z "$DATABASE_SSL" ]; then
-            echo "DATABASE_SSL not set; defaulting to require"
+          if [ -z "${DATABASE_SSL:-}" ]; then
+            echo "STARPIPS_DATABASE_SSL not set; defaulting to require"
             echo "DATABASE_SSL=require" >> "$GITHUB_ENV"
           fi
 
