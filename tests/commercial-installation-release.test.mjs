@@ -15,7 +15,7 @@ function sampleManifest(overrides = {}) {
     appWorker: 'mklms-customer-a',
     mediaWorker: 'mklms-media-customer-a',
     publicDomain: 'academy.customer-a.example',
-    cloudflareZone: 'customer-a.example',
+    dnsZone: 'customer-a.example',
     r2Bucket: 'customer-a-media',
     hyperdrive: { freshId: 'fresh-a', cachedId: 'cached-a' },
     rateLimits: {
@@ -39,12 +39,12 @@ test('release helper exposes generic commercial installation interfaces', async 
   }
 });
 
-test('commercial manifest validation rejects malformed database origins and unrelated Cloudflare zones', async () => {
+test('commercial manifest validation rejects malformed database origins and unrelated DNS zones', async () => {
   const { validateManifest } = await import(manifestModulePath);
   const options = { filename: 'customer-a.json', manifestType: 'concrete' };
   assert.deepEqual(validateManifest(sampleManifest(), options), []);
-  assert.ok(validateManifest(sampleManifest({ cloudflareZone: 'other.example' }), options).some((error) => error.includes('cloudflareZone')));
-  assert.ok(validateManifest(sampleManifest({ cloudflareZone: 'https://customer-a.example' }), options).some((error) => error.includes('cloudflareZone')));
+  assert.ok(validateManifest(sampleManifest({ dnsZone: 'other.example' }), options).some((error) => error.includes('dnsZone')));
+  assert.ok(validateManifest(sampleManifest({ dnsZone: 'https://customer-a.example' }), options).some((error) => error.includes('dnsZone')));
   assert.ok(validateManifest(sampleManifest({ databaseOrigin: { host: 'https://bad', port: 5432, database: 'postgres', user: 'u' } }), options).some((error) => error.includes('databaseOrigin')));
   assert.ok(validateManifest(sampleManifest({ databaseOrigin: { host: 'db.example.com', port: 0, database: 'postgres', user: 'u' } }), options).some((error) => error.includes('databaseOrigin')));
 });
@@ -77,7 +77,7 @@ test('selected installation isolation rejects collisions with another concrete p
     appWorker: 'mklms-customer-b',
     mediaWorker: 'mklms-media-customer-b',
     publicDomain: 'academy.customer-b.example',
-    cloudflareZone: 'customer-b.example',
+    dnsZone: 'customer-b.example',
     r2Bucket: 'customer-b-media',
     hyperdrive: { freshId: 'fresh-b', cachedId: 'cached-b' },
     rateLimits: { auth: '62000001', admin: '62000002', studentMutation: '62000003', playback: '62000004', certificate: '62000005' },
@@ -123,6 +123,7 @@ test('production deployment uses manifest Worker names only from the selected pr
   assert.match(source, /assertReleaseBranch/);
   assert.match(source, /workers\/domains/);
   assert.match(source, /publicDomain/);
+  assert.match(source, /dnsZone/);
   assert.match(source, /R2_DIRECT_UPLOAD_ACCESS_KEY_ID/);
   assert.doesNotMatch(source, /-preview/);
   assert.doesNotMatch(source, /MKETY_DB_|mklms-mkety-academy|mkety-academy-media/);
