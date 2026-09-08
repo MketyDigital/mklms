@@ -1,0 +1,204 @@
+name: Deploy MkLMS installation preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      installation_id:
+        description: "Concrete installation id from deploy/installations/<id>.json"
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      installation_id:
+        required: true
+        type: string
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID:
+        required: true
+      CLOUDFLARE_API_TOKEN:
+        required: true
+      MKLMS_ADMIN_ACCESS_KEY:
+        required: true
+      MKLMS_ADMIN_SESSION_SECRET:
+        required: true
+      MKLMS_MEDIA_SIGNING_SECRET:
+        required: true
+      MKLMS_BILLING_SERVICE_URL:
+        required: false
+      MKLMS_BILLING_SHARED_SECRET:
+        required: false
+      R2_DIRECT_UPLOAD_ACCESS_KEY_ID:
+        required: false
+      R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.installation_id }}
+    env:
+      INSTALLATION_ID: ${{ inputs.installation_id }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      ADMIN_ACCESS_KEY: ${{ secrets.MKLMS_ADMIN_ACCESS_KEY }}
+      ADMIN_SESSION_SECRET: ${{ secrets.MKLMS_ADMIN_SESSION_SECRET }}
+      MEDIA_SIGNING_SECRET: ${{ secrets.MKLMS_MEDIA_SIGNING_SECRET }}
+      BILLING_SERVICE_URL: ${{ secrets.MKLMS_BILLING_SERVICE_URL }}
+      BILLING_SHARED_SECRET: ${{ secrets.MKLMS_BILLING_SHARED_SECRET }}
+      R2_DIRECT_UPLOAD_ACCESS_KEY_ID: ${{ secrets.R2_DIRECT_UPLOAD_ACCESS_KEY_ID }}
+      R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY: ${{ secrets.R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Validate selected concrete installation and required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN ADMIN_ACCESS_KEY ADMIN_SESSION_SECRET MEDIA_SIGNING_SECRET; do
+            test -n "${!name:-}" || { echo "Missing required installation deployment secret: $name"; exit 1; }
+          done
+          npm run installation:validate
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs';
+          import { loadConcreteInstallation } from './scripts/installation-config.mjs';
+          const { manifest } = await loadConcreteInstallation(process.env.INSTALLATION_ID);
+          const pairs = {
+            APP_WORKER: manifest.appWorker,
+            MEDIA_WORKER: manifest.mediaWorker,
+            R2_BUCKET: manifest.r2Bucket,
+            PUBLIC_DOMAIN: manifest.publicDomain,
+            BILLING_INSTALLATION_ID: manifest.billingInstallationId,
+          };
+          for (const [key, value] of Object.entries(pairs)) appendFileSync(process.env.GITHUB_ENV, `${key}=${value}\n`);
+          NODE
+
+      - name: Generate installation Wrangler configs
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/generate-installation-config.mjs "$INSTALLATION_ID"
+          test -f ".generated/$INSTALLATION_ID/app.wrangler.jsonc"
+          test -f ".generated/$INSTALLATION_ID/media.wrangler.jsonc"
+
+      - name: Package installation Workers before deployment
+        shell: bash
+        env:
+          DATABASE_URL: postgresql://build:build@127.0.0.1:5432/mklms
+          MKLMS_ADMIN_ACCESS_KEY: build-admin
+          MKLMS_ADMIN_SESSION_SECRET: build-session
+        run: |
+          set -euo pipefail
+          npm run cf:build
+          npx wrangler deploy --config ".generated/$INSTALLATION_ID/app.wrangler.jsonc" --dry-run --outdir .generated/installation-app-dry-run --x-provision=false
+          npx wrangler deploy --config ".generated/$INSTALLATION_ID/media.wrangler.jsonc" --dry-run --outdir .generated/installation-media-dry-run --x-provision=false
+
+      - name: Deploy installation media Worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --config ".generated/$INSTALLATION_ID/media.wrangler.jsonc" --x-provision=false
+          jq -n --arg signing "$MEDIA_SIGNING_SECRET" '{MKLMS_MEDIA_SIGNING_SECRET:$signing}' >/tmp/media-secrets.json
+          npx wrangler secret bulk /tmp/media-secrets.json --name "$MEDIA_WORKER"
+          rm -f /tmp/media-secrets.json
+          curl --silent --show-error --fail-with-body --request POST \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$MEDIA_WORKER/subdomain" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json' \
+            --data '{"enabled":true,"previews_enabled":true}' >/tmp/media-subdomain.json
+          jq -e '.success == true' /tmp/media-subdomain.json >/dev/null
+          rm -f /tmp/media-subdomain.json
+
+      - name: Resolve installation Workers.dev URLs
+        id: urls
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --silent --show-error --fail-with-body --request GET \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" >/tmp/account-subdomain.json
+          jq -e '.success == true' /tmp/account-subdomain.json >/dev/null
+          subdomain=$(jq -r '.result.subdomain' /tmp/account-subdomain.json)
+          test -n "$subdomain"
+          echo "media_url=https://$MEDIA_WORKER.$subdomain.workers.dev" >> "$GITHUB_OUTPUT"
+          echo "app_url=https://$APP_WORKER.$subdomain.workers.dev" >> "$GITHUB_OUTPUT"
+          rm -f /tmp/account-subdomain.json
+
+      - name: Configure private R2 direct-upload CORS
+        shell: bash
+        env:
+          APP_URL: ${{ steps.urls.outputs.app_url }}
+        run: |
+          set -euo pipefail
+          jq -n --arg preview "$APP_URL" --arg production "https://$PUBLIC_DOMAIN" \
+            '{rules:[{allowed:{methods:["PUT"],origins:[$preview,$production],headers:["Content-Type"]},exposeHeaders:["ETag"],maxAgeSeconds:3600}]}' >/tmp/r2-cors.json
+          curl --silent --show-error --fail-with-body --request PUT \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/$R2_BUCKET/cors" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json' \
+            --data @/tmp/r2-cors.json >/tmp/r2-cors-response.json
+          jq -e '.success == true' /tmp/r2-cors-response.json >/dev/null
+          rm -f /tmp/r2-cors.json /tmp/r2-cors-response.json
+
+      - name: Deploy installation application Worker
+        shell: bash
+        env:
+          MEDIA_URL: ${{ steps.urls.outputs.media_url }}
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --config ".generated/$INSTALLATION_ID/app.wrangler.jsonc" --x-provision=false
+          jq -n \
+            --arg adminKey "$ADMIN_ACCESS_KEY" \
+            --arg adminSession "$ADMIN_SESSION_SECRET" \
+            --arg mediaUrl "$MEDIA_URL" \
+            --arg mediaSigning "$MEDIA_SIGNING_SECRET" \
+            --arg billingId "$BILLING_INSTALLATION_ID" \
+            --arg billingUrl "$BILLING_SERVICE_URL" \
+            --arg billingShared "$BILLING_SHARED_SECRET" \
+            --arg bucket "$R2_BUCKET" \
+            --arg endpoint "https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com" \
+            --arg r2Access "$R2_DIRECT_UPLOAD_ACCESS_KEY_ID" \
+            --arg r2Secret "$R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY" \
+            '{
+              MKLMS_ADMIN_ACCESS_KEY:$adminKey,
+              MKLMS_ADMIN_SESSION_SECRET:$adminSession,
+              MKLMS_ACCESS_CODE_PREFIX:"ACCESS",
+              MKLMS_CLAIM_VERIFICATION_STRATEGY:"preauth-only",
+              MKLMS_STUDENT_SESSION_TTL_SECONDS:"1209600",
+              MKLMS_MEDIA_DELIVERY_BASE_URL:$mediaUrl,
+              MKLMS_MEDIA_SIGNING_SECRET:$mediaSigning,
+              MKLMS_BILLING_INSTALLATION_ID:$billingId,
+              MKLMS_R2_DIRECT_UPLOAD_BUCKET:$bucket,
+              MKLMS_R2_DIRECT_UPLOAD_ENDPOINT:$endpoint
+            }
+            + (if $billingUrl == "" then {} else {MKLMS_BILLING_SERVICE_URL:$billingUrl} end)
+            + (if $billingShared == "" then {} else {MKLMS_BILLING_SHARED_SECRET:$billingShared} end)
+            + (if $r2Access == "" then {} else {MKLMS_R2_DIRECT_UPLOAD_ACCESS_KEY_ID:$r2Access} end)
+            + (if $r2Secret == "" then {} else {MKLMS_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY:$r2Secret} end)' >/tmp/app-secrets.json
+          npx wrangler secret bulk /tmp/app-secrets.json --name "$APP_WORKER"
+          rm -f /tmp/app-secrets.json
+          curl --silent --show-error --fail-with-body --request POST \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$APP_WORKER/subdomain" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json' \
+            --data '{"enabled":true,"previews_enabled":true}' >/tmp/app-subdomain.json
+          jq -e '.success == true' /tmp/app-subdomain.json >/dev/null
+          rm -f /tmp/app-subdomain.json
+
+      - name: Smoke test installation preview
+        shell: bash
+        env:
+          APP_URL: ${{ steps.urls.outputs.app_url }}
+        run: |
+          set -euo pipefail
+          curl --silent --show-error --fail --retry 5 --retry-delay 3 "$APP_URL/login" >/dev/null
+          curl --silent --show-error --fail --retry 5 --retry-delay 3 "$APP_URL/" >/dev/null
+          echo "Installation preview smoke checks passed: $APP_URL"
