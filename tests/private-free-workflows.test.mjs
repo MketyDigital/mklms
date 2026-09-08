@@ -66,6 +66,17 @@ test('private Free readiness workflow verifies required repository secrets witho
   assert.doesNotMatch(workflow, /echo\s+.*\$\{\{\s*secrets\./);
 });
 
+test('public-only readiness job proves copied Starpips repo secrets equal the old environment secrets', () => {
+  const workflow = readFileSync('.github/workflows/private-free-readiness.yml', 'utf8');
+  assert.match(workflow, /environment:\s*database-migrations/);
+  assert.match(workflow, /secrets\.MKLMS_DATABASE_URL/);
+  assert.match(workflow, /secrets\.MKLMS_DATABASE_SSL/);
+  assert.match(workflow, /secrets\.STARPIPS_DATABASE_URL/);
+  assert.match(workflow, /secrets\.STARPIPS_DATABASE_SSL/);
+  assert.match(workflow, /github\.event\.repository\.private\s*==\s*false/);
+  assert.match(workflow, /OLD_DATABASE_URL.*NEW_DATABASE_URL/s);
+});
+
 test('PR CI cancels superseded runs to preserve private-repo Actions minutes', () => {
   const workflow = readFileSync('.github/workflows/phase1-ci.yml', 'utf8');
   assert.match(workflow, /concurrency:/);
