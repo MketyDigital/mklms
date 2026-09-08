@@ -87,8 +87,8 @@ jobs:
           import { loadConcreteInstallation } from './scripts/installation-config.mjs';
           import { assertReleaseBranch } from './scripts/installation-release.mjs';
           const { manifest } = await loadConcreteInstallation(process.env.INSTALLATION_ID);
-          if (!manifest.cloudflareZone || typeof manifest.cloudflareZone !== 'string') {
-            throw new Error('Production installation must declare cloudflareZone before custom-domain deployment.');
+          if (!manifest.dnsZone || typeof manifest.dnsZone !== 'string') {
+            throw new Error('Production installation must declare dnsZone before custom-domain deployment.');
           }
           assertReleaseBranch(manifest, manifest.productionBranch);
           const pairs = {
@@ -97,12 +97,12 @@ jobs:
             MEDIA_WORKER: manifest.mediaWorker,
             R2_BUCKET: manifest.r2Bucket,
             PUBLIC_DOMAIN: manifest.publicDomain,
-            CLOUDFLARE_ZONE: manifest.cloudflareZone,
+            DNS_ZONE: manifest.dnsZone,
             BILLING_INSTALLATION_ID: manifest.billingInstallationId,
           };
           for (const [key, value] of Object.entries(pairs)) appendFileSync(process.env.GITHUB_ENV, `${key}=${value}\n`);
           NODE
-          git fetch origin "$PRODUCTION_BRANCH" --force
+          git fetch origin "$PRODUCTION_BRANCH:refs/remotes/origin/$PRODUCTION_BRANCH" --force
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
           test "$(git rev-parse "origin/$PRODUCTION_BRANCH")" = "$RELEASE_SHA" || {
             echo "Release SHA is not the current selected production branch pointer"
@@ -211,7 +211,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          jq -n --arg hostname "$PUBLIC_DOMAIN" --arg service "$APP_WORKER" --arg zone "$CLOUDFLARE_ZONE" \
+          jq -n --arg hostname "$PUBLIC_DOMAIN" --arg service "$APP_WORKER" --arg zone "$DNS_ZONE" \
             '{hostname:$hostname,service:$service,zone_name:$zone}' >/tmp/domain.json
           curl --silent --show-error --fail-with-body --request PUT \
             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/domains" \
