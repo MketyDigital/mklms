@@ -75,8 +75,10 @@ jobs:
           import { loadConcreteInstallation } from './scripts/installation-config.mjs';
           const { manifest } = await loadConcreteInstallation(process.env.INSTALLATION_ID);
           const pairs = {
-            APP_WORKER: manifest.appWorker,
-            MEDIA_WORKER: manifest.mediaWorker,
+            APP_WORKER: `${manifest.appWorker}-preview`,
+            MEDIA_WORKER: `${manifest.mediaWorker}-preview`,
+            PRODUCTION_APP_WORKER: manifest.appWorker,
+            PRODUCTION_MEDIA_WORKER: manifest.mediaWorker,
             R2_BUCKET: manifest.r2Bucket,
             PUBLIC_DOMAIN: manifest.publicDomain,
             BILLING_INSTALLATION_ID: manifest.billingInstallationId,
@@ -84,15 +86,34 @@ jobs:
           for (const [key, value] of Object.entries(pairs)) appendFileSync(process.env.GITHUB_ENV, `${key}=${value}\n`);
           NODE
 
-      - name: Generate installation Wrangler configs
+      - name: Generate isolated preview Wrangler configs
         shell: bash
         run: |
           set -euo pipefail
           node scripts/generate-installation-config.mjs "$INSTALLATION_ID"
-          test -f ".generated/$INSTALLATION_ID/app.wrangler.jsonc"
-          test -f ".generated/$INSTALLATION_ID/media.wrangler.jsonc"
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto';
+          import { readFile, writeFile } from 'node:fs/promises';
+          const base = `.generated/${process.env.INSTALLATION_ID}`;
+          const appPath = `${base}/app.wrangler.jsonc`;
+          const mediaPath = `${base}/media.wrangler.jsonc`;
+          const app = JSON.parse(await readFile(appPath, 'utf8'));
+          const media = JSON.parse(await readFile(mediaPath, 'utf8'));
+          app.name = process.env.APP_WORKER;
+          media.name = process.env.MEDIA_WORKER;
+          const productionIds = new Set(app.ratelimits.map((entry) => String(entry.namespace_id)));
+          for (const entry of app.ratelimits) {
+            let value = (createHash('sha256').update(`${process.env.INSTALLATION_ID}:preview:${entry.name}`).digest().readUInt32BE(0) % 900000000) + 100000000;
+            while (productionIds.has(String(value))) value = value >= 999999999 ? 100000000 : value + 1;
+            entry.namespace_id = String(value);
+          }
+          await writeFile(appPath, `${JSON.stringify(app, null, 2)}\n`);
+          await writeFile(mediaPath, `${JSON.stringify(media, null, 2)}\n`);
+          NODE
+          test "$APP_WORKER" != "$PRODUCTION_APP_WORKER"
+          test "$MEDIA_WORKER" != "$PRODUCTION_MEDIA_WORKER"
 
-      - name: Package installation Workers before deployment
+      - name: Package installation preview Workers before deployment
         shell: bash
         env:
           DATABASE_URL: postgresql://build:build@127.0.0.1:5432/mklms
@@ -101,10 +122,10 @@ jobs:
         run: |
           set -euo pipefail
           npm run cf:build
-          npx wrangler deploy --config ".generated/$INSTALLATION_ID/app.wrangler.jsonc" --dry-run --outdir .generated/installation-app-dry-run --x-provision=false
-          npx wrangler deploy --config ".generated/$INSTALLATION_ID/media.wrangler.jsonc" --dry-run --outdir .generated/installation-media-dry-run --x-provision=false
+          npx wrangler deploy --config ".generated/$INSTALLATION_ID/app.wrangler.jsonc" --dry-run --outdir .generated/installation-app-preview-dry-run --x-provision=false
+          npx wrangler deploy --config ".generated/$INSTALLATION_ID/media.wrangler.jsonc" --dry-run --outdir .generated/installation-media-preview-dry-run --x-provision=false
 
-      - name: Deploy installation media Worker
+      - name: Deploy isolated preview media Worker
         shell: bash
         run: |
           set -euo pipefail
@@ -119,7 +140,7 @@ jobs:
           jq -e '.success == true' /tmp/media-subdomain.json >/dev/null
           rm -f /tmp/media-subdomain.json
 
-      - name: Resolve installation Workers.dev URLs
+      - name: Resolve isolated preview Workers.dev URLs
         id: urls
         shell: bash
         run: |
@@ -134,7 +155,7 @@ jobs:
           echo "app_url=https://$APP_WORKER.$subdomain.workers.dev" >> "$GITHUB_OUTPUT"
           rm -f /tmp/account-subdomain.json
 
-      - name: Configure private R2 direct-upload CORS
+      - name: Configure private R2 direct-upload CORS for preview and production origins
         shell: bash
         env:
           APP_URL: ${{ steps.urls.outputs.app_url }}
@@ -149,7 +170,7 @@ jobs:
           jq -e '.success == true' /tmp/r2-cors-response.json >/dev/null
           rm -f /tmp/r2-cors.json /tmp/r2-cors-response.json
 
-      - name: Deploy installation application Worker
+      - name: Deploy isolated preview application Worker
         shell: bash
         env:
           MEDIA_URL: ${{ steps.urls.outputs.media_url }}
