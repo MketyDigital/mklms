@@ -17,10 +17,23 @@ for (const [name, workflow] of [['provision', provision], ['deploy', deploy]]) {
   });
 }
 
-test('deploy workflow builds DATABASE_URL at runtime without printing it', () => {
-  assert.match(deploy, /Construct Mkety DATABASE_URL/);
-  assert.match(deploy, /new URL\('postgresql:\/\/'\)/);
-  assert.match(deploy, /GITHUB_ENV/);
+test('deploy workflow uses Supavisor session pooling for GitHub Actions migrations only', () => {
+  assert.match(deploy, /MKETY_MIGRATION_DB_HOST:\s*aws-0-eu-west-1\.pooler\.supabase\.com/);
+  assert.match(deploy, /MKETY_MIGRATION_DB_PORT:\s*5432/);
+  assert.match(deploy, /MKETY_MIGRATION_DB_USER:\s*mkety_academy_app\.vdblajgxrfndjesoyayy/);
+  assert.match(deploy, /Construct Mkety migration DATABASE_URL/);
+  assert.match(deploy, /process\.env\.MKETY_MIGRATION_DB_HOST/);
+  assert.match(deploy, /process\.env\.MKETY_MIGRATION_DB_USER/);
+  assert.match(deploy, /MIGRATION_DATABASE_URL/);
+  assert.match(deploy, /DATABASE_URL:\s*\$MIGRATION_DATABASE_URL/);
+});
+
+test('deploy workflow keeps the application DATABASE_URL on the direct Mkety database coordinates', () => {
+  assert.match(deploy, /Construct Mkety application DATABASE_URL/);
+  assert.match(deploy, /process\.env\.MKETY_DB_HOST/);
+  assert.match(deploy, /process\.env\.MKETY_DB_USER/);
+  assert.match(deploy, /APP_DATABASE_URL/);
+  assert.match(deploy, /--arg database \"\$APP_DATABASE_URL\"/);
   assert.match(deploy, /DATABASE_SSL:\s*require/);
-  assert.doesNotMatch(deploy, /echo\s+\"?\$DATABASE_URL/);
+  assert.doesNotMatch(deploy, /echo\s+\"?\$(MIGRATION_DATABASE_URL|APP_DATABASE_URL)/);
 });
