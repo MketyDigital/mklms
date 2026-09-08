@@ -4,16 +4,23 @@ import { readFileSync } from 'node:fs';
 
 const workflowPath = '.github/workflows/release-starpips-production.yml';
 
-test('Starpips production release is manual, confirmation-gated and exact-pointer gated', () => {
+test('Starpips production release runs only from the deliberate production pointer', () => {
   const workflow = readFileSync(workflowPath, 'utf8');
-  assert.match(workflow, /workflow_dispatch:/);
-  assert.doesNotMatch(workflow, /\bpush:/);
-  assert.match(workflow, /confirmation:/);
-  assert.match(workflow, /RELEASE_STARPIPS/);
-  assert.match(workflow, /release_sha:/);
+  assert.match(workflow, /push:/);
   assert.match(workflow, /production\/starpips/);
+  assert.doesNotMatch(workflow, /production\/\*\*/);
   assert.match(workflow, /git rev-parse "origin\/\$PRODUCTION_BRANCH"/);
-  assert.match(workflow, /RELEASE_SHA/);
+  assert.match(workflow, /GITHUB_SHA/);
+});
+
+test('Starpips release verifies migration history and applies only migration 017 before code deploy', () => {
+  const workflow = readFileSync(workflowPath, 'utf8');
+  assert.match(workflow, /environment: database-migrations/);
+  assert.match(workflow, /MKLMS_DATABASE_URL/);
+  assert.match(workflow, /starpips-migration-guard\.mjs verify/);
+  assert.match(workflow, /starpips-migration-guard\.mjs apply/);
+  assert.match(workflow, /017_tenant_font_branding\.sql/);
+  assert.doesNotMatch(workflow, /npm run db:migrate/);
 });
 
 test('Starpips release deploys existing Workers without rotating or deleting live secrets', () => {
