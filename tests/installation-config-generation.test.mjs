@@ -60,9 +60,10 @@ test('rendering is deterministic and contains no secret material', async () => {
 test('production generation accepts concrete installations and rejects unknown/non-deployable ones', async () => {
   const { loadConcreteInstallation } = await import('../scripts/installation-config.mjs');
   const mkety = await loadConcreteInstallation('mkety-academy');
-  assert.equal(mkety.id, MKETY.id);
-  assert.equal(mkety.appWorker, MKETY.appWorker);
-  assert.equal(mkety.mediaWorker, MKETY.mediaWorker);
+  assert.equal(mkety.manifest.id, MKETY.id);
+  assert.equal(mkety.manifest.appWorker, MKETY.appWorker);
+  assert.equal(mkety.manifest.mediaWorker, MKETY.mediaWorker);
+  assert.equal(mkety.manifestType, 'concrete');
   await assert.rejects(() => loadConcreteInstallation('does-not-exist'));
   await assert.rejects(() => loadConcreteInstallation('customer-template'));
 });
