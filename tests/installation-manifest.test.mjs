@@ -227,5 +227,5 @@ test('package wires the pure local installation validation command', () => {
 test('repository installation validation CLI succeeds locally', () => {
   const result = spawnSync(process.execPath, ['scripts/validate-installation-manifest.mjs'], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /Validated 3 installation manifest files\./);
+  assert.match(result.stdout, /Validated 4 installation manifest files\./);
 });

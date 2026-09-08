@@ -9,6 +9,7 @@ on:
         type: choice
         options:
           - starpips
+          - mkety-academy
 
 permissions:
   contents: read
