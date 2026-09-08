@@ -1,0 +1,6 @@
+BEGIN;
+
+ALTER TABLE platform_settings
+  ADD COLUMN IF NOT EXISTS font_family TEXT NOT NULL DEFAULT 'Geist';
+
+COMMIT;

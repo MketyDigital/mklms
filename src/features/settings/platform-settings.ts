@@ -1,4 +1,5 @@
 import type { ClaimVerificationStrategy } from "../access/domain/claim-verification";
+import { DEFAULT_PORTAL_FONT_FAMILY } from "./font-branding";
 
 export type AccessProviderType =
   | "access-code"
@@ -46,6 +47,7 @@ export interface PlatformSettings {
   faviconUrl?: string | null;
   primaryColor?: string | null;
   secondaryColor?: string | null;
+  fontFamily?: string;
   supportName?: string | null;
   supportEmail?: string | null;
   publicBaseUrl: string;
@@ -65,6 +67,7 @@ export interface PlatformSettings {
 export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   organizationName: "Your Organization",
   productName: "Learning Portal",
+  fontFamily: DEFAULT_PORTAL_FONT_FAMILY,
   publicBaseUrl: "http://localhost:3000",
   timezone: "UTC",
   locale: "en",
