@@ -78,6 +78,7 @@ jobs:
           url.port = process.env.MKETY_MIGRATION_DB_PORT;
           url.pathname = `/${process.env.MKETY_DB_NAME}`;
           url.searchParams.set('sslmode', 'require');
+          url.searchParams.set('uselibpqcompat', 'true');
           appendFileSync(process.env.GITHUB_ENV, `MIGRATION_DATABASE_URL=${url.toString()}\n`, { encoding: 'utf8' });
           NODE
 
