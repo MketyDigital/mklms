@@ -25,6 +25,10 @@ export function buildPreparedProposal({ publicDomain = 'academy.mkety.com' } = {
     appWorker: 'mklms-mkety-academy',
     mediaWorker: 'mklms-media-mkety-academy',
     publicDomain,
+    domain: {
+      mode: 'provider-domain',
+      platformId: 'mkety-saas',
+    },
     r2Bucket: 'mkety-academy-media',
     hyperdrive: {
       freshId: 'EXAMPLE_MKETY_HYPERDRIVE_FRESH_ID',
