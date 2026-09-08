@@ -41,7 +41,8 @@ test('font branding accepts arbitrary safe Google family names while rejecting C
   assert.equal(normalizePortalFontFamily('https://evil.example/font.css'), null);
   assert.equal(
     googleFontStylesheetUrl('Ubuntu'),
-    'https://fonts.googleapis.com/css2?family=Ubuntu:wght@300;400;500;600;700&display=swap',
+    'https://fonts.googleapis.com/css2?family=Ubuntu&display=swap',
   );
   assert.equal(googleFontStylesheetUrl('system-ui'), null);
+  assert.equal(googleFontStylesheetUrl('Geist'), null);
 });
