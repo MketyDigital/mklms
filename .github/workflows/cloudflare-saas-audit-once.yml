@@ -39,7 +39,7 @@ jobs:
           echo "fallback origin: $(jq -r '.result.origin // "<none>"' /tmp/fallback.json)"
           echo "fallback status: $(jq -r '.result.status // "<none>"' /tmp/fallback.json)"
 
-          for name in origin.mkety.com customers.mkety.com; do
+          for name in saas-origin.mkety.com origin.mkety.com customers.mkety.com; do
             curl --silent --show-error --fail-with-body --get "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" "${auth[@]}" --data-urlencode "name=$name" > /tmp/dns.json
             jq -e '.success == true' /tmp/dns.json >/dev/null
             echo "DNS $name: $(jq -c '[.result[] | {type,name,content,proxied}]' /tmp/dns.json)"
@@ -48,7 +48,7 @@ jobs:
           curl --silent --show-error --fail-with-body --get "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/custom_hostnames" "${auth[@]}" --data-urlencode "hostname=learn.starpipsforex.com" > /tmp/starpips-host.json
           jq -e '.success == true' /tmp/starpips-host.json >/dev/null
           echo "Starpips custom hostname count: $(jq -r '.result|length' /tmp/starpips-host.json)"
-          jq -c '.result[] | {id,hostname,status,ssl_status:(.ssl.status // null),custom_origin_server:(.custom_origin_server // null),custom_metadata:(.custom_metadata // null)}' /tmp/starpips-host.json
+          jq -c '.result[] | {id,hostname,status,ssl:{status:(.ssl.status // null),method:(.ssl.method // null),type:(.ssl.type // null),validation_records:(.ssl.validation_records // null),validation_errors:(.ssl.validation_errors // null)},ownership_verification:(.ownership_verification // null),ownership_verification_http:(.ownership_verification_http // null),custom_origin_server:(.custom_origin_server // null),custom_metadata:(.custom_metadata // null)}' /tmp/starpips-host.json
 
           curl --silent --show-error --fail-with-body "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/workers/routes" "${auth[@]}" > /tmp/routes.json
           jq -e '.success == true' /tmp/routes.json >/dev/null
