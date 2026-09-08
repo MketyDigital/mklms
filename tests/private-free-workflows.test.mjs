@@ -42,9 +42,36 @@ test('Mkety release wrapper maps installation-prefixed repository secrets', () =
   assert.match(workflow, /secrets\.CLOUDFLARE_API_TOKEN/);
 });
 
-test('generic provisioning documents wrapper-secret requirement for Hyperdrive password', () => {
+test('generic provisioning supports wrapper-scoped Hyperdrive database passwords', () => {
   const workflow = readFileSync('.github/workflows/provision-installation.yml', 'utf8');
   assert.match(workflow, /workflow_call:/);
   assert.match(workflow, /DATABASE_PASSWORD:/);
   assert.match(workflow, /required:\s*false/);
+  assert.doesNotMatch(workflow, /^\s*environment:\s*\$\{\{\s*inputs\.installation_id\s*\}\}/m);
+});
+
+test('private Free readiness workflow verifies required repository secrets without printing values', () => {
+  const workflow = readFileSync('.github/workflows/private-free-readiness.yml', 'utf8');
+  for (const name of [
+    'CLOUDFLARE_ACCOUNT_ID',
+    'CLOUDFLARE_API_TOKEN',
+    'STARPIPS_DATABASE_URL',
+    'MKETY_ADMIN_ACCESS_KEY',
+    'MKETY_ADMIN_SESSION_SECRET',
+    'MKETY_MEDIA_SIGNING_SECRET',
+  ]) {
+    assert.match(workflow, new RegExp(`secrets\\.${name}`));
+  }
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /echo\s+.*\$\{\{\s*secrets\./);
+});
+
+test('private Free operations guide records CodeQL and Actions-plan tradeoffs', () => {
+  const guide = readFileSync('docs/operations/github-free-private.md', 'utf8');
+  assert.match(guide, /GitHub Free/i);
+  assert.match(guide, /private/i);
+  assert.match(guide, /CodeQL/i);
+  assert.match(guide, /Actions minutes/i);
+  assert.match(guide, /STARPIPS_DATABASE_URL/);
+  assert.match(guide, /customers\.mkety\.com/);
 });
