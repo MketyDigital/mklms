@@ -16,6 +16,9 @@ jobs:
       MKETY_DB_PORT: 5432
       MKETY_DB_NAME: postgres
       MKETY_DB_USER: mkety_academy_app
+      MKETY_MIGRATION_DB_HOST: aws-0-eu-west-1.pooler.supabase.com
+      MKETY_MIGRATION_DB_PORT: 5432
+      MKETY_MIGRATION_DB_USER: mkety_academy_app.vdblajgxrfndjesoyayy
       MKETY_DB_PASSWORD: ${{ secrets.MKETY_DB_PASSWORD }}
       DATABASE_SSL: require
       MKETY_ADMIN_ACCESS_KEY: ${{ secrets.MKETY_ADMIN_ACCESS_KEY }}
@@ -62,7 +65,23 @@ jobs:
           if (errors.length) throw new Error(errors.join('\n'));
           NODE
 
-      - name: Construct Mkety DATABASE_URL
+      - name: Construct Mkety migration DATABASE_URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs';
+          const url = new URL('postgresql://');
+          url.username = process.env.MKETY_MIGRATION_DB_USER;
+          url.password = process.env.MKETY_DB_PASSWORD;
+          url.hostname = process.env.MKETY_MIGRATION_DB_HOST;
+          url.port = process.env.MKETY_MIGRATION_DB_PORT;
+          url.pathname = `/${process.env.MKETY_DB_NAME}`;
+          url.searchParams.set('sslmode', 'require');
+          appendFileSync(process.env.GITHUB_ENV, `MIGRATION_DATABASE_URL=${url.toString()}\n`, { encoding: 'utf8' });
+          NODE
+
+      - name: Construct Mkety application DATABASE_URL
         shell: bash
         run: |
           set -euo pipefail
@@ -75,14 +94,14 @@ jobs:
           url.port = process.env.MKETY_DB_PORT;
           url.pathname = `/${process.env.MKETY_DB_NAME}`;
           url.searchParams.set('sslmode', 'require');
-          appendFileSync(process.env.GITHUB_ENV, `DATABASE_URL=${url.toString()}\n`, { encoding: 'utf8' });
+          appendFileSync(process.env.GITHUB_ENV, `APP_DATABASE_URL=${url.toString()}\n`, { encoding: 'utf8' });
           NODE
 
       - name: Apply Mkety database migrations
         shell: bash
         run: |
           set -euo pipefail
-          npm run db:migrate
+          DATABASE_URL="$MIGRATION_DATABASE_URL" npm run db:migrate
 
       - name: Generate Mkety Wrangler configs
         shell: bash
@@ -141,7 +160,7 @@ jobs:
           set -euo pipefail
           npx wrangler deploy --config .generated/mkety-academy/app.wrangler.jsonc --x-provision=false
           jq -n \
-            --arg database "$DATABASE_URL" \
+            --arg database "$APP_DATABASE_URL" \
             --arg databaseSsl "$DATABASE_SSL" \
             --arg adminKey "$MKETY_ADMIN_ACCESS_KEY" \
             --arg adminSession "$MKETY_ADMIN_SESSION_SECRET" \
