@@ -11,6 +11,7 @@ import type {
   StudentAccessStatus,
   UpdatePendingPreauthorizationInput,
 } from "./admin-access.repository";
+import type { ClaimVerificationStrategy } from "../domain/claim-verification";
 import type { AccessCodeHash, PreauthorizationRecord } from "../types";
 
 type PreauthorizationRow = {
@@ -168,6 +169,76 @@ export class PostgresAdminAccessRepository implements AdminAccessRepository {
          ) VALUES ($1,$2,'access-code',$3,$4,$5,$6,$7,'ACTIVE')`,
         [randomUUID(), studentId, credential.lookupHash, credential.hash.hash, credential.hash.salt, credential.hash.algorithm, credential.prefix],
       );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async prepareStudentReclaim(
+    studentId: string,
+    input: { claimStrategy: ClaimVerificationStrategy; claimCodeHash?: string | null },
+  ): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const student = await client.query<{ id: string }>(
+        `SELECT id FROM students WHERE id = $1 FOR UPDATE`,
+        [studentId],
+      );
+      if (!student.rows[0]) throw new Error("Student was not found.");
+
+      const claimed = await client.query<{ id: string }>(
+        `SELECT id
+         FROM preauthorizations
+         WHERE claimed_by_student_id = $1 AND status = 'CLAIMED'
+         ORDER BY updated_at DESC, created_at DESC
+         LIMIT 1
+         FOR UPDATE`,
+        [studentId],
+      );
+      const preauthorizationId = claimed.rows[0]?.id;
+      if (!preauthorizationId) {
+        throw new Error("This student has no claimed authorization to reopen.");
+      }
+
+      await client.query(
+        `UPDATE students SET status = 'ACTIVE', updated_at = NOW() WHERE id = $1`,
+        [studentId],
+      );
+      await client.query(
+        `UPDATE student_sessions
+         SET revoked_at = NOW()
+         WHERE student_id = $1 AND revoked_at IS NULL`,
+        [studentId],
+      );
+      await client.query(
+        `UPDATE student_access_credentials
+         SET status = 'REVOKED', revoked_at = NOW(), updated_at = NOW()
+         WHERE student_id = $1
+           AND provider_type = 'access-code'
+           AND status = 'ACTIVE'`,
+        [studentId],
+      );
+      const reopened = await client.query(
+        `UPDATE preauthorizations
+         SET status = 'PREAUTHORIZED',
+             claimed_by_student_id = NULL,
+             claim_strategy = $2,
+             claim_code_hash = $3,
+             claim_requested_at = NULL,
+             manual_approved_at = NULL,
+             source = 'admin-reclaim',
+             updated_at = NOW()
+         WHERE id = $1 AND status = 'CLAIMED'`,
+        [preauthorizationId, input.claimStrategy, input.claimCodeHash ?? null],
+      );
+      if (reopened.rowCount !== 1) throw new Error("Student reclaim could not be prepared.");
+
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");
