@@ -1,0 +1,44 @@
+name: Mkety Academy release
+
+on:
+  push:
+    branches:
+      - preview/mkety-academy
+      - production/mkety-academy
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    if: github.ref_name == 'preview/mkety-academy'
+    uses: ./.github/workflows/deploy-installation-preview.yml
+    with:
+      installation_id: mkety-academy
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      MKLMS_ADMIN_ACCESS_KEY: ${{ secrets.MKETY_ADMIN_ACCESS_KEY }}
+      MKLMS_ADMIN_SESSION_SECRET: ${{ secrets.MKETY_ADMIN_SESSION_SECRET }}
+      MKLMS_MEDIA_SIGNING_SECRET: ${{ secrets.MKETY_MEDIA_SIGNING_SECRET }}
+      MKLMS_BILLING_SERVICE_URL: ${{ secrets.MKETY_BILLING_SERVICE_URL }}
+      MKLMS_BILLING_SHARED_SECRET: ${{ secrets.MKETY_BILLING_SHARED_SECRET }}
+      R2_DIRECT_UPLOAD_ACCESS_KEY_ID: ${{ secrets.MKETY_R2_DIRECT_UPLOAD_ACCESS_KEY_ID }}
+      R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY: ${{ secrets.MKETY_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY }}
+
+  production:
+    if: github.ref_name == 'production/mkety-academy'
+    uses: ./.github/workflows/deploy-installation-production.yml
+    with:
+      installation_id: mkety-academy
+      release_sha: ${{ github.sha }}
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      MKLMS_ADMIN_ACCESS_KEY: ${{ secrets.MKETY_ADMIN_ACCESS_KEY }}
+      MKLMS_ADMIN_SESSION_SECRET: ${{ secrets.MKETY_ADMIN_SESSION_SECRET }}
+      MKLMS_MEDIA_SIGNING_SECRET: ${{ secrets.MKETY_MEDIA_SIGNING_SECRET }}
+      MKLMS_BILLING_SERVICE_URL: ${{ secrets.MKETY_BILLING_SERVICE_URL }}
+      MKLMS_BILLING_SHARED_SECRET: ${{ secrets.MKETY_BILLING_SHARED_SECRET }}
+      R2_DIRECT_UPLOAD_ACCESS_KEY_ID: ${{ secrets.MKETY_R2_DIRECT_UPLOAD_ACCESS_KEY_ID }}
+      R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY: ${{ secrets.MKETY_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY }}
