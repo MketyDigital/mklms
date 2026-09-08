@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const releaseModulePath = '../scripts/installation-release.mjs';
+const manifestModulePath = '../scripts/installation-manifest.mjs';
 
 function sampleManifest(overrides = {}) {
   return {
@@ -14,6 +15,7 @@ function sampleManifest(overrides = {}) {
     appWorker: 'mklms-customer-a',
     mediaWorker: 'mklms-media-customer-a',
     publicDomain: 'academy.customer-a.example',
+    cloudflareZone: 'customer-a.example',
     r2Bucket: 'customer-a-media',
     hyperdrive: { freshId: 'fresh-a', cachedId: 'cached-a' },
     rateLimits: {
@@ -35,6 +37,16 @@ test('release helper exposes generic commercial installation interfaces', async 
   for (const name of ['assertReleaseBranch', 'assertProvisionableDatabaseOrigin', 'buildDatabaseUrl', 'assertSelectedInstallationIsolation']) {
     assert.equal(typeof mod[name], 'function', `${name} must be exported`);
   }
+});
+
+test('commercial manifest validation rejects malformed database origins and unrelated Cloudflare zones', async () => {
+  const { validateManifest } = await import(manifestModulePath);
+  const options = { filename: 'customer-a.json', manifestType: 'concrete' };
+  assert.deepEqual(validateManifest(sampleManifest(), options), []);
+  assert.ok(validateManifest(sampleManifest({ cloudflareZone: 'other.example' }), options).some((error) => error.includes('cloudflareZone')));
+  assert.ok(validateManifest(sampleManifest({ cloudflareZone: 'https://customer-a.example' }), options).some((error) => error.includes('cloudflareZone')));
+  assert.ok(validateManifest(sampleManifest({ databaseOrigin: { host: 'https://bad', port: 5432, database: 'postgres', user: 'u' } }), options).some((error) => error.includes('databaseOrigin')));
+  assert.ok(validateManifest(sampleManifest({ databaseOrigin: { host: 'db.example.com', port: 0, database: 'postgres', user: 'u' } }), options).some((error) => error.includes('databaseOrigin')));
 });
 
 test('release branch must exactly match the selected installation production pointer', async () => {
@@ -65,6 +77,7 @@ test('selected installation isolation rejects collisions with another concrete p
     appWorker: 'mklms-customer-b',
     mediaWorker: 'mklms-media-customer-b',
     publicDomain: 'academy.customer-b.example',
+    cloudflareZone: 'customer-b.example',
     r2Bucket: 'customer-b-media',
     hyperdrive: { freshId: 'fresh-b', cachedId: 'cached-b' },
     rateLimits: { auth: '62000001', admin: '62000002', studentMutation: '62000003', playback: '62000004', certificate: '62000005' },
