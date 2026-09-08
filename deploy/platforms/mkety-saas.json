@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "kind": "saas-platform",
+  "id": "mkety-saas",
+  "providerZone": "mkety.com",
+  "customerCnameTarget": "customers.mkety.com",
+  "routingOrigin": "origin.mkety.com"
+}
