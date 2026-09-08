@@ -16,6 +16,7 @@ test('Cloudflare verification workflow is manual and read-only', () => {
   assert.match(workflow, /installation:/);
   assert.match(workflow, /type:\s*choice/);
   assert.match(workflow, /-\s+starpips/);
+  assert.match(workflow, /-\s+mkety-academy/);
   assert.match(workflow, /curl[^\n]*--request\s+GET/);
   assert.doesNotMatch(workflow, /--request\s+(POST|PUT|PATCH|DELETE)|-X\s+(POST|PUT|PATCH|DELETE)/);
 });
