@@ -21,7 +21,8 @@ test('SaaS onboarding reads existing hostname and routes before any writes and p
   assert.match(source, /resolveSaasDomainPlan/);
   assert.match(source, /customerCnameTarget|CNAME/);
   assert.match(source, /--request POST/);
-  assert.match(source, /ssl.*method.*txt|method.*txt/si);
+  assert.match(source, /ssl.*method.*http|method.*http/si);
+  assert.doesNotMatch(source, /ssl.*method.*txt|method.*txt/si);
 });
 
 test('SaaS onboarding never manages customer DNS zones or unrelated fallback origin', () => {
