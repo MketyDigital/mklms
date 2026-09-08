@@ -50,5 +50,12 @@ export interface AdminAccessRepository {
       prefix: string;
     },
   ): Promise<void>;
+  prepareStudentReclaim(
+    studentId: string,
+    input: {
+      claimStrategy: ClaimVerificationStrategy;
+      claimCodeHash?: string | null;
+    },
+  ): Promise<void>;
   setStudentStatus(studentId: string, status: StudentAccessStatus): Promise<void>;
 }

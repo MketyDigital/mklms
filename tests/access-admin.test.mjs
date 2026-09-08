@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { verifyAccessCode } from '../src/features/access/domain/access-code.ts';
+import { verifyClaimCode } from '../src/features/access/domain/claim-code.ts';
 import { AccessAdminService } from '../src/features/access/services/access-admin.service.ts';
 
 class InMemoryAdminRepository {
@@ -23,6 +24,10 @@ class InMemoryAdminRepository {
 
   async replaceAccessCredential(studentId, credential) {
     this.credentials.push({ studentId, ...credential });
+  }
+
+  async prepareStudentReclaim(studentId, input) {
+    this.reclaim = { studentId, ...input };
   }
 
   async setStudentStatus(studentId, status) {
@@ -93,6 +98,30 @@ test('admin reset issues a new access code while persisting only secure credenti
   assert.equal(repo.credentials.length, 1);
   assert.notEqual(repo.credentials[0].hash.hash, result.accessCode);
   assert.equal(verifyAccessCode(result.accessCode, repo.credentials[0].hash), true);
+});
+
+test('admin can prepare a claimed student to reclaim without deleting their student record', async () => {
+  const repo = new InMemoryAdminRepository();
+  const service = new AccessAdminService(repo, { accessCodePrefix: 'LEARN', claimCodePrefix: 'CLAIM' });
+
+  const result = await service.prepareStudentReclaim('student-1', 'claim-code');
+
+  assert.match(result.claimCode, /^CLAIM-/);
+  assert.equal(repo.reclaim.studentId, 'student-1');
+  assert.equal(repo.reclaim.claimStrategy, 'claim-code');
+  assert.equal(typeof repo.reclaim.claimCodeHash, 'string');
+  assert.notEqual(repo.reclaim.claimCodeHash, result.claimCode);
+  assert.equal(verifyClaimCode(result.claimCode, repo.reclaim.claimCodeHash), true);
+});
+
+test('preauth-only reclaim does not invent or expose a claim code', async () => {
+  const repo = new InMemoryAdminRepository();
+  const service = new AccessAdminService(repo, { accessCodePrefix: 'LEARN', claimCodePrefix: 'CLAIM' });
+
+  const result = await service.prepareStudentReclaim('student-1', 'preauth-only');
+
+  assert.equal(result.claimCode, undefined);
+  assert.deepEqual(repo.reclaim, { studentId: 'student-1', claimStrategy: 'preauth-only', claimCodeHash: null });
 });
 
 test('admin can suspend a student access identity', async () => {
