@@ -42,7 +42,7 @@ export function buildDatabaseUrl(manifest, password) {
   if (typeof password !== 'string' || password.length === 0) {
     throw new Error('Database password is required.');
   }
-  const url = new URL('postgresql://');
+  const url = new URL('postgresql://placeholder/');
   url.username = origin.user;
   url.password = password;
   url.hostname = origin.host;
