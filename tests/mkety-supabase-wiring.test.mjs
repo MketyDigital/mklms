@@ -25,7 +25,7 @@ test('deploy workflow uses Supavisor session pooling for GitHub Actions migratio
   assert.match(deploy, /process\.env\.MKETY_MIGRATION_DB_HOST/);
   assert.match(deploy, /process\.env\.MKETY_MIGRATION_DB_USER/);
   assert.match(deploy, /MIGRATION_DATABASE_URL/);
-  assert.match(deploy, /DATABASE_URL:\s*\$MIGRATION_DATABASE_URL/);
+  assert.match(deploy, /DATABASE_URL=\"\$MIGRATION_DATABASE_URL\"\s+npm run db:migrate/);
 });
 
 test('deploy workflow keeps the application DATABASE_URL on the direct Mkety database coordinates', () => {
