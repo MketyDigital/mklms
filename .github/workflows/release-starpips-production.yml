@@ -16,11 +16,10 @@ jobs:
   migrate:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    environment: database-migrations
     env:
       PRODUCTION_BRANCH: production/starpips
-      DATABASE_URL: ${{ secrets.MKLMS_DATABASE_URL }}
-      DATABASE_SSL: ${{ secrets.MKLMS_DATABASE_SSL }}
+      DATABASE_URL: ${{ secrets.STARPIPS_DATABASE_URL }}
+      DATABASE_SSL: ${{ secrets.STARPIPS_DATABASE_SSL }}
     steps:
       - name: Checkout exact Starpips production pointer
         uses: actions/checkout@v4
@@ -40,7 +39,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${DATABASE_URL:-}" || { echo "Missing MKLMS_DATABASE_URL in database-migrations environment"; exit 1; }
+          test -n "${DATABASE_URL:-}" || { echo "Missing repository secret STARPIPS_DATABASE_URL"; exit 1; }
           git fetch origin "$PRODUCTION_BRANCH:refs/remotes/origin/$PRODUCTION_BRANCH" --force
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(git rev-parse "origin/$PRODUCTION_BRANCH")" = "$GITHUB_SHA" || {
@@ -61,7 +60,6 @@ jobs:
     needs: migrate
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    environment: starpips
     env:
       RELEASE_SHA: ${{ github.sha }}
       PRODUCTION_BRANCH: production/starpips
@@ -86,8 +84,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${CLOUDFLARE_ACCOUNT_ID:-}" || { echo "Missing CLOUDFLARE_ACCOUNT_ID"; exit 1; }
-          test -n "${CLOUDFLARE_API_TOKEN:-}" || { echo "Missing CLOUDFLARE_API_TOKEN"; exit 1; }
+          test -n "${CLOUDFLARE_ACCOUNT_ID:-}" || { echo "Missing repository secret CLOUDFLARE_ACCOUNT_ID"; exit 1; }
+          test -n "${CLOUDFLARE_API_TOKEN:-}" || { echo "Missing repository secret CLOUDFLARE_API_TOKEN"; exit 1; }
           npm run installation:validate
           node --input-type=module <<'NODE'
           import { loadConcreteInstallation } from './scripts/installation-config.mjs';
