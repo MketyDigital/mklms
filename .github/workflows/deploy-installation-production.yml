@@ -225,6 +225,6 @@ jobs:
         run: |
           set -euo pipefail
           APP_URL="https://$PUBLIC_DOMAIN"
-          curl --silent --show-error --fail --retry 8 --retry-delay 5 "$APP_URL/login" >/dev/null
-          curl --silent --show-error --fail --retry 8 --retry-delay 5 "$APP_URL/" >/dev/null
+          curl --silent --show-error --fail --retry 8 --retry-delay 5 --retry-all-errors "$APP_URL/login" >/dev/null
+          curl --silent --show-error --fail --retry 8 --retry-delay 5 --retry-all-errors "$APP_URL/" >/dev/null
           echo "Installation production smoke checks passed: $APP_URL"
