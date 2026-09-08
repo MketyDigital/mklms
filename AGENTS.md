@@ -1,285 +1,247 @@
 # MkLMS Agent Handoff
 
-This file is the current operational source of truth for `MketyDigital/mklms`. Read it before making changes. It records what is shipped, what remains account-side, the intended production architecture, and the next safe starting point.
+This file is the current operational source of truth for `MketyDigital/mklms`. Read it before changing architecture, deployment, migrations, production branches, or Cloudflare resources.
 
-## Current release state
+## Canonical release model
 
-- Production branch: `main`.
-- Latest merged media-admin cleanup: `706714a8837029da6f9ffc84b6519c65047049c5` (2026-08-31), from PR `#29`.
-- Earlier integrated release merge: `caa4a9c116a4e11f10498e3f3a2f1a48974d8b0f` (2026-08-31).
-- The merged `main` media-admin cleanup passed domain tests, lint, Next.js production build, OpenNext build, main Worker dry-run, protected-media Worker dry-run, billing Worker dry-run, and CodeQL.
-- Production incident repair is on `fix/production-incident-end-to-end`, PR `#32`; implementation head `11e71dc1fb682d370e98a62f681b0fd16cee8f16` passed the complete CI gate and CodeQL before this handoff-only update.
-- No application/database migration was added for the incident repair. Numbered migrations remain `001` through `011`.
-- A prior Cloudflare production build had failed even though the same release code built successfully in preview/CI; if production deployment still fails after bindings/secrets are configured, treat that as a Cloudflare account/configuration/deploy gate and inspect the production build log rather than assuming an application compile regression.
+- `main` is the canonical shared product/development branch.
+- Every customer production is an independent controlled release pointer under `production/<installation>`.
+- A production branch does **not** move automatically when `main` changes.
+- Releases are promoted deliberately to selected productions only after verification.
+- Tenant/customer differences belong in installation manifests, infrastructure, secrets, database state, and branding/settings — not in MkLMS domain logic.
+- Never use a shared tenant database as the default commercial model. Managed enterprise installations are infrastructure-isolated.
+
+Current named productions:
+
+```text
+main
+├── production/starpips
+└── production/mkety-academy   # create/promote only after Mkety preview is green
+```
+
+Starpips is the existing live production and must not be moved as a side effect of Mkety or future customer work.
 
 ## Product boundaries that must not regress
 
 1. MkLMS is reusable and white-label. Keep customer/provider specifics out of domain logic.
-2. Payments/acquisition are external to the LMS. MkLMS begins at preauthorization/access/enrollment.
-3. Built-in admin and student authentication are valid production paths; no external auth vendor is required.
+2. Payments/acquisition are external. MkLMS begins at preauthorization/access/enrollment.
+3. Built-in admin and student authentication are valid production paths.
 4. Paid Courses require enrollment, published content, sequential/prerequisite access, active session, and protected playback authorization.
-5. Live Classes are standalone from Courses and remain public/free only while their scheduled session resolves `LIVE`. They do not require a paid enrollment.
-6. The server, not the browser, is authoritative for simulated-live state and playback offset.
-7. Protected video bytes never pass through PostgreSQL or the main Next/OpenNext Worker during playback.
-8. Direct private MP4 is the current production media format. HLS application support remains available for future adapters.
-9. PostgreSQL is portable: Supabase, self-hosted PostgreSQL, or another compatible managed PostgreSQL are supported.
-10. Cloudflare/OpenNext is the primary runtime, while Vercel and normal Node/OCI/VPS remain supported through portable adapters/env variables.
-11. Do not expose database credentials, admin secrets, media signing secrets, storage keys, billing secrets, SMTP passwords, or Telegram bot tokens client-side.
+5. Free Live Classes are standalone from paid Courses and remain public/free only while the server resolves the session `LIVE`.
+6. The server is authoritative for simulated-live state and playback offset.
+7. Protected media bytes never pass through PostgreSQL or the main Next/OpenNext Worker during playback.
+8. Direct private H.264/AAC MP4 in R2 is the current primary production media path; HLS/provider adapters remain portable options.
+9. PostgreSQL remains portable; Cloudflare/OpenNext is the primary runtime but app logic must not depend on Cloudflare-specific domain rules.
+10. Never expose database credentials, admin secrets, media-signing secrets, R2/S3 keys, billing secrets, SMTP credentials, or Telegram bot tokens client-side.
 
-## Database migrations: final one-click operator path
+## Installation manifests
 
-The repository currently contains numbered migrations `001` through `011`.
+Concrete installations live in `deploy/installations/*.json` and are the non-secret source of truth for:
 
-Preferred production operation:
+- installation ID;
+- production branch;
+- application Worker;
+- media Worker;
+- public hostname;
+- domain mode/platform ID;
+- private R2 bucket;
+- fresh/cached Hyperdrive IDs;
+- five isolated rate-limit namespace IDs;
+- billing installation ID;
+- non-secret database origin coordinates where required.
 
-1. GitHub → Actions → **Run MkLMS DB migrations**.
-2. Click **Run workflow** on the release branch, normally `main`.
-3. Enter `MIGRATE` in the confirmation field.
-4. Run it.
-5. Require the final **Verify database is current** step to pass before production testing.
+Secrets and full database URLs are forbidden in manifests.
 
-Required GitHub Actions secret:
+Cross-installation validation must reject reuse of production branches, Workers, public domains, R2 buckets, Hyperdrive IDs, rate-limit namespace IDs, or billing installation IDs.
 
-- `MKLMS_DATABASE_URL`
+## Cloudflare for SaaS domain model
 
-Optional secret:
-
-- `MKLMS_DATABASE_SSL` (workflow defaults to `require` if omitted).
-
-The migration runner is checksum-protected and idempotent at the migration level: already-applied files are skipped; changed historical migration contents cause a hard failure. Never edit an applied migration. Add a new numbered migration instead.
-
-Running the workflow again after the DB is current is safe: all migrations should be reported as already applied/current.
-
-## Current Cloudflare architecture
-
-### Worker 1 — `mklms`
-
-Main LMS/OpenNext application.
-
-Bindings already declared in root `wrangler.jsonc`:
-
-- `ASSETS`
-- `HYPERDRIVE_FRESH` → fresh consistency-sensitive PostgreSQL path
-- `HYPERDRIVE_CACHED` → explicitly cache-tolerant stable public reads
-- `APP_STORAGE_BUCKET` → private R2 bucket `spf-media`
-
-`APP_STORAGE_BUCKET` is the preferred Cloudflare storage path for certificates/general private application objects and admin direct MP4 uploads. On Cloudflare, S3 access-key env variables are not required merely for this application storage.
-
-### Worker 2 — `mklms-media-delivery`
-
-Separate protected media-delivery Worker in `workers/media-delivery/`.
-
-Binding:
-
-- `MEDIA_BUCKET` → private R2 bucket `spf-media`
-
-Required shared secret:
-
-- `MKLMS_MEDIA_SIGNING_SECRET` — exact same value on main app and media Worker.
-
-Optional CORS defense-in-depth variable:
-
-- `MKLMS_MEDIA_ALLOWED_ORIGINS`
-
-The Worker validates the existing short-lived HMAC URL contract and serves private objects with GET/HEAD/Range support. It never exposes an R2 S3 origin URL.
-
-### Worker 3 — `mkety-managed-hosting-billing`
-
-Reusable NOWPayments billing Worker in `workers/billing/`.
-
-It requires no PostgreSQL, Hyperdrive, or R2 binding.
-
-Worker secrets:
-
-- `NOWPAYMENTS_API_KEY`
-- `NOWPAYMENTS_IPN_SECRET`
-- `MKETY_BILLING_CUSTOMERS_JSON`
-
-Main-installation connection variables:
-
-- `MKLMS_BILLING_SERVICE_URL`
-- `MKLMS_BILLING_INSTALLATION_ID=spf-mklms`
-- `MKLMS_BILLING_SHARED_SECRET`
-
-Only a verified final/finished payment callback may automatically settle a managed-hosting month as paid. Manual PENDING/PAID/WAIVED operator controls remain available.
-
-## R2 layout and security
-
-Current private bucket: `spf-media`.
-
-Keep **Public Access disabled**.
-
-Recommended prefixes:
+MkLMS uses the existing Mkety Cloudflare-for-SaaS topology:
 
 ```text
-media/...
-certificates/...
-app/...
+customer hostname
+    CNAME -> customers.mkety.com
+                 |
+                 v
+             origin.mkety.com
+                 |
+                 v
+      exact Worker route for that installation
 ```
 
-Two separate Worker bindings may point to the same private bucket:
+Platform configuration is `deploy/platforms/mkety-saas.json`.
 
-- main app `APP_STORAGE_BUCKET`
-- protected delivery `MEDIA_BUCKET`
+Locked MkLMS values:
 
-Laptop/operator tools such as Cyberduck/rclone still need separately scoped R2 S3 credentials. Non-Cloudflare app installations can use the portable `MKLMS_STORAGE_*` S3-compatible variables.
+- platform zone: `mkety.com`;
+- customer CNAME target: `customers.mkety.com`;
+- MkLMS origin: `origin.mkety.com`.
 
-## Media direction: direct protected MP4
+`saas-origin.mkety.com` belongs to another project and must never be introduced into MkLMS manifests, automation, or verification.
 
-Current production direction is H.264/AAC MP4 stored privately in R2 and delivered by `mklms-media-delivery` through short-lived signed URLs.
+Domain modes:
 
-The old OCI Media Flow → R2 ingest system is **not required for current production**. Keep `MKLMS_OCI_MEDIA_AUTOMATION_ENABLED=false` unless a future installation deliberately chooses that adapter.
+- `saas-custom-hostname`: customer owns DNS; MkLMS manages the Custom Hostname under the Mkety SaaS zone plus the exact Worker route. MkLMS never manages the customer's DNS zone.
+- `provider-domain`: Mkety owns the hostname/zone and normal provider-domain attachment is allowed.
 
-Historical migration 009 and old ingest records are preserved for migration-history integrity. Do not rewrite/remove the migration merely because OCI is no longer the recommended media path.
+Starpips is `saas-custom-hostname` at `learn.starpipsforex.com`.
+Mkety Academy is `provider-domain` at `academy.mkety.com`.
 
-`/admin/media` now uses the portable direct upload/register path for current production media:
+### Domain lifecycle is separate from software releases
 
-- Cloudflare installation: upload/write through the bound private R2 application/storage adapter.
-- Non-Cloudflare installation: use the configured S3-compatible storage adapter or another provider adapter.
-- Uploaded MP4s are stored under `media/...`, remain private, and are registered as `DIRECT` media assets using the storage object reference rather than a permanent public URL.
-- Existing private MP4/HLS objects can be browsed from the configured storage adapter and registered into the MkLMS media library without moving or re-uploading the object.
-- Existing media records and supported source types remain intact, including `DIRECT`, `HLS`, `YOUTUBE`, `EXTERNAL_EMBED`, and `CUSTOM`.
-- Protected playback still uses the separate media-delivery provider; never hand browsers direct private-origin credentials or permanent R2 URLs.
-- Operator-uploaded R2 objects remain valid and unchanged; after registration, the same media record is available to both Courses and Live Classes.
+Use `.github/workflows/configure-installation-domain.yml` only for deliberate domain onboarding/reconciliation.
 
-The older OCI ingest implementation and historical records remain in the repository for migration/history compatibility, but the OCI control panel and active ingest-state querying are no longer part of the active `/admin/media` production workflow. Do not remove or rewrite historical migration 009 as part of future cleanup.
+For SaaS custom hostnames the workflow is idempotent:
 
-## Live-class media behavior to preserve
+1. read existing Custom Hostname;
+2. read existing Worker routes;
+3. reuse exact matching state;
+4. create only missing state;
+5. fail closed if the hostname route belongs to a different Worker;
+6. print the required customer CNAME to `customers.mkety.com`;
+7. re-read and verify final state.
 
-Public `/live/[slug]` is free without enrollment, but playback authorization is issued only while the server resolves the batch/session state as `LIVE`.
+Ordinary application releases must not recreate Custom Hostnames or routes.
+Cloudflare SSL sub-status alone is not the MkLMS production gate; successful HTTPS smoke tests on the real customer hostname are authoritative.
 
-Flow:
+## Cloudflare workers and storage
 
-```text
-/live/[slug]
-  → /api/live/[slug]/state
-  → state == LIVE
-  → POST /api/live/[slug]/playback
-  → short-lived signed DIRECT media URL
-  → video loads private MP4
-  → player seeks to server-authoritative live offset
-```
+Each installation owns an application Worker and a protected media Worker.
 
-The live client refreshes authorization before expiry. After the live window ends, no new authorization should be issued; an already-issued URL can only remain usable until its short expiry.
+Starpips currently uses:
 
-Paid course playback keeps its separate enrollment/session/course/lesson authorization rules.
+- app Worker: `mklms`;
+- media Worker: `mklms-media-delivery`;
+- private R2: `spf-media`;
+- public hostname: `learn.starpipsforex.com`.
 
-## Authoritative configuration docs
+Mkety Academy uses isolated resources defined in `deploy/installations/mkety-academy.json`, including:
 
-Use these together:
+- app Worker: `mklms-mkety-academy`;
+- media Worker: `mklms-media-mkety-academy`;
+- private R2: `mkety-academy-media`;
+- separate fresh/cached Hyperdrives;
+- separate rate-limit namespaces;
+- public hostname: `academy.mkety.com`.
 
-- `README.md` — current project overview and operator-facing production path.
-- `docs/deployment/environment-variables.md` — authoritative host-by-host env/binding reference.
-- `.env.cloudflare.example` — concrete three-Worker Cloudflare setup checklist.
-- `.env.example` — portable application env template.
-- `docs/deployment/r2-storage-layout.md` — R2 binding/layout guidance.
-- `docs/deployment/external-managed-hosting-billing.md` — billing flow.
-- `workers/media-delivery/README.md` — protected-media Worker behavior/setup.
-- `workers/billing/README.md` — billing Worker behavior/setup.
+R2 public access stays disabled. The main app and media Worker may bind the same installation-private bucket under different binding names.
 
-`agentmklms.md` contains historical architecture/progress notes and may mention the previously preferred OCI ingest path. This `AGENTS.md` is newer and takes precedence when the two disagree.
+## Database migrations
 
-## Production setup/test gate
+Current numbered migrations are `001` through `017`.
 
-Before calling a real environment production-ready:
+Latest migration:
 
-1. Create/deploy `mklms-media-delivery` and set its media signing secret.
-2. Create/deploy `mkety-managed-hosting-billing` and set its NOWPayments/customer-registry secrets if automatic managed billing is wanted.
-3. Configure the main `mklms` variables from `.env.cloudflare.example`.
-4. Confirm main bindings include both Hyperdrives, `ASSETS`, and `APP_STORAGE_BUCKET → spf-media`.
-5. Confirm media Worker has `MEDIA_BUCKET → spf-media`.
-6. Keep R2 public access disabled.
-7. Run GitHub DB migrations with `MIGRATE`; require final status green.
-8. Redeploy `mklms`; require the Cloudflare production build/deploy to pass.
-9. Test Admin → Media: verify existing private R2 MP4s appear, register one, and confirm the same media record appears in Courses and Live Classes.
-10. Test student access end-to-end: preauth-only, one-time claim-code, manual-approval request/approve/retry, issued persistent access-code login, and course enrollment visibility.
-11. Test a paid lesson authorization/refresh/progress path and protected Range seeking.
-12. Test a public live class before LIVE, during LIVE, and after ENDED using registered private media.
-13. Test Messages unread behavior and admin/student reply synchronization.
-14. Test certificate-template upload, certificate issuance/private object storage/download, and public verification.
-15. Test Settings save plus database/storage/media health cards on the production Cloudflare bindings.
-16. Test managed-hosting manual status controls.
-17. If automatic billing is enabled, run a deliberately small real payment and verify settlement only after the verified finished callback.
+- `017_tenant_font_branding.sql` — persists tenant-selected font branding.
 
-## Cost/plan principle
+Never edit an applied historical migration. Add a new numbered migration instead.
+The migration manifest/checksum tests must remain green.
 
-The architecture should continue to use free-tier/free-included capabilities whenever usage stays inside those allowances. A paid Cloudflare Workers plan is a capacity/safety margin, not a reason to introduce paid services unnecessarily. Do not design a feature that *requires* paid infrastructure when the same correct architecture can operate within included/free usage at small scale. Scale limits and provider pricing must still be checked before large production loads.
+### Mkety Academy migration ownership caveat
 
-## Final media-admin cleanup handoff
+Mkety Academy's isolated Supabase schema is `mkety_academy` in project `vdblajgxrfndjesoyayy`, using role `mkety_academy_app` with an isolated `search_path`.
 
-- Production merge: `706714a8837029da6f9ffc84b6519c65047049c5` on `main`, merged from PR `#29`.
-- Starting production SHA before cleanup: `62a979bfd40e26e6468e48c5aeb2e5fb4ce67872`.
-- Change: removed the active OCI Media Flow control panel/querying from `/admin/media`; added direct private MP4 upload through the existing configured storage adapter; uploaded objects use `media/...`; successful uploads register existing `DIRECT` media records; failed DB registration performs best-effort object cleanup.
-- Scope audit: the implementation diff was limited to `AGENTS.md`, `src/app/(admin)/admin/media/page.tsx`, `src/app/api/admin/media/upload/route.ts`, `src/features/media/components/media-upload-panel.tsx`, and `tests/admin-media-upload.test.mjs`. No migration, playback provider, media-delivery Worker, course, live-class, auth, certificate, billing, or database-architecture file changed in that implementation.
-- TDD evidence: the first admin-media contract commit failed the GitHub `Domain tests` step before implementation, as intended.
-- Verification: merged `main` commit `706714a8837029da6f9ffc84b6519c65047049c5` passed domain tests, lint, Next.js production build, Cloudflare OpenNext build, main Worker dry-run, protected-media Worker dry-run, billing Worker dry-run, and CodeQL.
-- Migrations added/run for this cleanup: none. Existing numbered migrations `001`–`011`, including historical migration 009, were not changed by the implementation.
-- Account-side action specific to this code change: none beyond the existing production requirement that `APP_STORAGE_BUCKET` (or the portable S3-compatible adapter) is configured and private.
-- Exact next safe starting point: run the one-click GitHub DB migration workflow with `MIGRATE`, require **Verify database is current** to pass, then begin the production test gate. Existing R2 videos do not need re-uploading.
+The schema was pre-created/audited outside the preview deployment flow, while `_mklms_migrations` exists with an empty ledger. Therefore:
 
-## Production-readiness audit handoff — PR #30
+- preview/production deployment must not blindly replay migrations into Mkety;
+- never blindly backfill `_mklms_migrations`;
+- if migration-ledger ownership is normalized later, first prove the live schema matches the expected numbered migrations and baseline only from verified evidence.
 
-- Branch: `fix/production-readiness-audit`.
-- Pull request: draft PR `#30` (`fix: production readiness audit`), open and not merged. Integration/merge remains an explicit user decision.
-- Production base for the audit: `3900c5add2818493be4bb2fb60c72da882185e06` on `main`.
-- Implementation head verified before this handoff-only update: `b4a7dd47e9dd0dd31715ef38f00a95d25d95905b`.
-- Primary production failures addressed:
-  - Cloudflare Hyperdrive adapter now supports dedicated transaction clients used by access-code credential creation/reset and live staged-chat replacement.
-  - Manual-approval claims record the request and allow the approved student to retry successfully.
-  - Student login uses the documented `MKLMS_STUDENT_SESSION_TTL_SECONDS` variable.
-  - Student onboarding uses saved claim settings and always permits a per-student one-time claim code when one was issued.
-  - Admin Access loads real Courses; single and bulk preauthorization validate course IDs so a typo cannot create a credential attached to a nonexistent course. Deliberate portal-only access remains supported.
-  - Admin Media can list compatible MP4/HLS files already present in private R2/S3-compatible storage and register them without moving/re-uploading. Registered records are shared by Courses and Live Classes.
-  - Active Media/Settings/Hosting UI no longer exposes OCI Media Flow or active OCI ingest accounting. Historical OCI code/migration 009 remain for history/checksum compatibility.
-  - Legacy saved `storage_provider=oci` / `media_provider=oci-media-flow` values are normalized when loading active Settings so old production rows do not block saves.
-  - Settings database health now recognizes the actual reachable Hyperdrive runtime instead of incorrectly requiring `DATABASE_URL` on Cloudflare.
-  - Live Class share URLs use saved `publicBaseUrl`.
-  - Admin Messages no longer mark every thread read when the page opens; conversations load lazily and only the opened thread is marked read.
-  - Hosting retains useful migration-recovery guidance but no free-deployment tutorial or OCI processing card.
-- Feature audit performed against the same production wiring:
-  - Admin Home/navigation; Access & Enrollments; Students; Courses; Media; Live Classes; Certificates; Certificate Templates; Messages; Hosting & Usage; Settings.
-  - Student claim/login/session/enrollment; paid course locking/progress/playback; public live state/playback; certificate issuance/delivery/verification; messaging; managed-hosting checkout/settlement; protected media Range delivery.
-- TDD evidence:
-  - initial production-readiness test commit failed Domain tests before implementation;
-  - later focused red runs caught per-student claim-code, unread-message, Settings/Hyperdrive, and course-assignment gaps before their fixes.
-- Verification evidence for implementation head `b4a7dd47e9dd0dd31715ef38f00a95d25d95905b`: GitHub Actions run `33432972943` passed Domain tests, lint, Next.js production build, Cloudflare OpenNext build, main Worker packaging dry-run, protected-media Worker packaging dry-run, and external billing Worker packaging dry-run.
-- A preceding run `33432486855` independently confirmed the R2 browser lint fix plus the same full build/three-Worker packaging chain.
-- Migrations added/changed: none. Numbered migrations remain `001`–`011`; migration 009 remains unchanged.
-- Account-side actions still required: after explicit merge approval, deploy/redeploy the main app and run the production smoke-test gate above against the real Cloudflare/PostgreSQL/R2 environment. Private browser interactions and a real NOWPayments settlement cannot be proven by CI alone.
-- Exact next safe starting point: require CI on the final PR head to be green, review PR `#30`, merge only with explicit user approval, deploy, then run the production smoke-test gate beginning with Admin → Media existing-R2 registration and the student claim/login/enrollment flow.
+For brand-new future installations, migrations should run against an empty isolated database/schema before production deployment and should own their checksum ledger normally.
 
-## Production incident repair handoff — PR #32
+## Generic commercial deployment lifecycle
 
-- Branch: `fix/production-incident-end-to-end`.
-- Pull request: PR `#32` (`fix: end-to-end production incident repair`).
-- Production base: `0dc9dd068e9495b4d3550e06871d16fcd0c6bb35` on `main`.
-- Verified implementation head before this handoff-only update: `11e71dc1fb682d370e98a62f681b0fd16cee8f16`.
-- Root causes fixed:
-  - student claim is now one PostgreSQL transaction and can recover an ACTIVE student row left by an earlier partial failure;
-  - claim/login routes return JSON-safe production failures instead of opaque 500s;
-  - pending preauthorizations can be edited/cancelled so an old bad strategy or sticky identity/course authorization can be repaired without manual SQL;
-  - active verification/settings choices are limited to implementations that can complete end-to-end in this release;
-  - Settings performs a real transaction probe in addition to schema/connectivity health;
-  - Courses, Modules, and Lessons have real edit/delete APIs and UI controls; destructive deletion is guarded when learner history exists;
-  - Live Classes and Sessions have real edit/delete controls and explicit ACTIVE/PUBLISHED public availability requirements;
-  - public live 404/unavailable responses are `no-store`, removing stale CDN "not available" results after activation;
-  - existing private R2 media registration and protected signed playback architecture remain unchanged.
-- Audit coverage included Admin navigation, Access, Students, Courses, Media, Live Classes, Certificates/Templates, Messages, Hosting/Billing, Settings, student claim/login/session/enrollment, paid learning/progress/playback, public live state/playback, certificates, messages, protected Range delivery, Hyperdrive, R2, and Worker bindings.
-- TDD evidence: the incident regression suite was committed red-first and failed against the prior implementation; subsequent CI also caught and forced correction of compatibility and lint regressions before the release gate.
-- Verification evidence for implementation head `11e71dc1fb682d370e98a62f681b0fd16cee8f16`: GitHub Actions run `33442789875` passed all 204 domain/integration contract tests, lint, Next.js production build, Cloudflare OpenNext build, main Worker packaging dry-run, protected-media Worker packaging dry-run, and external billing Worker packaging dry-run. CodeQL run `33442784383` also passed.
-- Migrations added/changed: none. Numbered migrations remain `001`–`011`; no historical migration was edited.
-- Account-side actions still required after merge: deploy/redeploy `main` to Cloudflare, run the one-click DB migration verification (safe/idempotent), open Settings and require database/schema/transaction health green, then perform the real production smoke-test gate. CI cannot itself submit a real browser claim against the production database or perform a real NOWPayments payment.
-- Exact next safe starting point after merge: deploy `main`, verify Cloudflare bindings/secrets, run DB migration verification, then test a fresh paid student claim → issued access code → login → enrolled course, followed by a real ACTIVE/PUBLISHED Live Class public URL.
+For a new managed installation:
 
-## Next project handoff
+1. prepare non-secret proposal/manifest;
+2. provision isolated Cloudflare resources;
+3. materialize the concrete manifest;
+4. validate cross-installation isolation and protected-resource guards;
+5. configure installation-scoped secrets;
+6. prepare/migrate the isolated database;
+7. deploy a preview without moving any production pointer;
+8. smoke-test preview Worker/application/media behavior;
+9. configure/reconcile the installation domain separately;
+10. promote the exact verified SHA to `production/<installation>`;
+11. deploy only that selected production;
+12. smoke-test the real production hostname.
 
-After MKLMS production testing begins, the next active repository is `MketyDigital/Trading`, particularly `cloudflare-v2/`. Do not modify `MketyDigital/Mkety` merely to complete the Trading copier project; the main MkSaaS upgrade is a later separate project.
+Generic workflows must stay installation-driven and must not contain customer resource constants except deliberate compatibility wrappers.
 
-Every meaningful future implementation/testing batch in this repo must update this file with:
+## Starpips compatibility release
 
-- what changed;
-- current branch/PR/merge state;
-- verification evidence;
-- migrations added/run;
-- account-side actions still required;
-- the exact next safe starting point.
+Starpips predates the standardized `MKLMS_*` GitHub release-secret contract. Its existing live Worker secrets must not be invented, rotated, or deleted merely to adopt the generic release system.
+
+Use `.github/workflows/release-starpips-production.yml` for Starpips releases.
+
+The workflow must:
+
+- be manual only;
+- require `RELEASE_STARPIPS` confirmation;
+- require the exact full SHA currently selected by `production/starpips`;
+- validate the Starpips manifest and expected Worker/domain identities;
+- generate/package the Starpips installation configuration;
+- deploy the existing media/app Workers without `wrangler secret put/bulk/delete`;
+- never mutate Custom Hostnames, Worker routes, customer DNS, Hyperdrive resources, or R2 resources;
+- require live HTTPS smoke success on `https://learn.starpipsforex.com/login` and `/`.
+
+Do not move `production/starpips` until the same candidate SHA has passed the full repository gate and has been proven on Mkety Academy first.
+
+## Read-only Cloudflare verification
+
+`.github/workflows/cloudflare-readonly-verify.yml` is manual and GET-only.
+
+It validates the selected installation manifest and checks application/media Worker bindings/deployments. For `saas-custom-hostname` installations it also verifies the Custom Hostname and exact Worker-route ownership without mutating Cloudflare state.
+
+Use this before and after production promotions when practical.
+
+## Production verification gate
+
+Before calling a release production-ready require fresh evidence for:
+
+1. `npm test` — zero failures;
+2. lint — zero errors;
+3. Next.js production build — exit 0;
+4. Cloudflare OpenNext build — exit 0;
+5. application Worker packaging dry-run — exit 0;
+6. protected media Worker packaging dry-run — exit 0;
+7. billing Worker packaging dry-run — exit 0;
+8. CodeQL/security checks where enabled;
+9. selected installation manifest/isolation validation;
+10. preview deployment for a new installation;
+11. public `/` and `/login` smoke tests;
+12. protected media and application binding verification;
+13. real HTTPS hostname smoke after domain onboarding/promotion.
+
+For functional release testing also preserve these flows: admin media, student claim/login/enrollment, paid sequential progression, quizzes, protected playback/Range, paid live, public free live before/during/after LIVE, messaging, certificates, tenant branding/settings health, and managed-hosting billing behavior.
+
+## Current implementation handoff — 2026-09-08
+
+Active implementation PR: `#64`, branch `feat/cloudflare-saas-installation-domains`.
+
+This batch introduces the corrected commercial domain/release architecture:
+
+- Mkety SaaS platform config;
+- explicit `domain.mode + platformId` installation semantics;
+- rejection of the obsolete per-installation `dnsZone` ownership assumption;
+- SaaS-domain planning/validation helpers;
+- idempotent one-time domain onboarding workflow;
+- read-only SaaS hostname/route verification;
+- production deployment separation so SaaS hostnames are not mutated on every release;
+- legacy-safe Starpips production release workflow;
+- tests locking all of the above.
+
+The TDD sequence intentionally observed RED failures before the missing platform/domain/release pieces were implemented.
+
+After PR #64 is fully green, the next safe sequence is:
+
+1. merge the exact green PR SHA to `main`;
+2. verify `main` again;
+3. deploy/prove Mkety Academy preview from that exact release;
+4. promote/create `production/mkety-academy` only after preview is green;
+5. deploy Mkety production and verify `academy.mkety.com`;
+6. verify Starpips Cloudflare state read-only;
+7. only then deliberately move `production/starpips` to that same proven release if a Starpips upgrade is desired;
+8. use the Starpips compatibility release workflow and require live smoke success.
+
+Never claim completion from code changes alone; use fresh CI/deployment/smoke evidence.
