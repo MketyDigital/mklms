@@ -6,8 +6,11 @@
   "productionBranch": "production/mkety-academy",
   "appWorker": "mklms-mkety-academy",
   "mediaWorker": "mklms-media-mkety-academy",
-  "publicDomain": "academy.example.com",
-  "dnsZone": "EXAMPLE_DNS_ZONE",
+  "publicDomain": "academy.mkety.com",
+  "domain": {
+    "mode": "provider-domain",
+    "platformId": "mkety-saas"
+  },
   "r2Bucket": "EXAMPLE_MKETY_ACADEMY_R2_BUCKET",
   "hyperdrive": {
     "freshId": "EXAMPLE_MKETY_HYPERDRIVE_FRESH_ID",
