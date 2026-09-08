@@ -33,3 +33,16 @@ test('Cloudflare verification derives known Workers from the validated manifest 
   assert.match(workflow, /workers\/scripts\/\$\{MEDIA_WORKER\}\/deployments/);
   assert.doesNotMatch(workflow, /wrangler\s+deploy|opennextjs-cloudflare\s+deploy|wrangler\s+secret/i);
 });
+
+test('Cloudflare verification understands SaaS custom hostnames and exact Worker routes', () => {
+  const workflow = readFileSync(workflowPath, 'utf8');
+  assert.match(workflow, /loadSaasPlatform|PROVIDER_ZONE/);
+  assert.match(workflow, /DOMAIN_MODE/);
+  assert.match(workflow, /saas-custom-hostname/);
+  assert.match(workflow, /custom_hostnames/);
+  assert.match(workflow, /workers\/routes/);
+  assert.match(workflow, /PUBLIC_DOMAIN/);
+  assert.match(workflow, /APP_WORKER/);
+  assert.doesNotMatch(workflow, /saas-origin\.mkety\.com/);
+  assert.doesNotMatch(workflow, /dnsZone|DNS_ZONE/);
+});
