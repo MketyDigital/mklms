@@ -1,0 +1,148 @@
+name: Configure MkLMS installation domain
+
+on:
+  workflow_dispatch:
+    inputs:
+      installation_id:
+        description: "Concrete installation id"
+        required: true
+        type: string
+      confirmation:
+        description: "Type CONFIGURE to create missing SaaS hostname/route state"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  configure:
+    runs-on: ubuntu-24.04
+    env:
+      INSTALLATION_ID: ${{ inputs.installation_id }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Validate selected installation and SaaS platform
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = "CONFIGURE" || { echo "confirmation must equal CONFIGURE"; exit 1; }
+          test -n "${CLOUDFLARE_ACCOUNT_ID:-}" || { echo "Missing CLOUDFLARE_ACCOUNT_ID"; exit 1; }
+          test -n "${CLOUDFLARE_API_TOKEN:-}" || { echo "Missing CLOUDFLARE_API_TOKEN"; exit 1; }
+          npm run installation:validate
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs';
+          import { loadConcreteInstallation } from './scripts/installation-config.mjs';
+          import { loadSaasPlatform } from './scripts/saas-platform.mjs';
+          const { manifest } = await loadConcreteInstallation(process.env.INSTALLATION_ID);
+          const { platform } = await loadSaasPlatform(manifest.domain.platformId);
+          const pairs = {
+            DOMAIN_MODE: manifest.domain.mode,
+            PUBLIC_DOMAIN: manifest.publicDomain,
+            APP_WORKER: manifest.appWorker,
+            PROVIDER_ZONE: platform.providerZone,
+            CUSTOMER_CNAME_TARGET: platform.customerCnameTarget,
+          };
+          for (const [key, value] of Object.entries(pairs)) appendFileSync(process.env.GITHUB_ENV, `${key}=${value}\n`);
+          NODE
+
+      - name: Provider-owned domain uses production deployment path
+        if: env.DOMAIN_MODE == 'provider-domain'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "$PUBLIC_DOMAIN is provider-owned; the production deployment workflow manages its direct Worker custom domain."
+
+      - name: Read current SaaS hostname and route state
+        if: env.DOMAIN_MODE == 'saas-custom-hostname'
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json')
+          curl --silent --show-error --fail-with-body "https://api.cloudflare.com/client/v4/zones?name=$PROVIDER_ZONE&account.id=$CLOUDFLARE_ACCOUNT_ID" "${auth[@]}" >/tmp/zones.json
+          jq -e '.success == true and (.result|length) == 1' /tmp/zones.json >/dev/null
+          ZONE_ID=$(jq -r '.result[0].id' /tmp/zones.json)
+          echo "ZONE_ID=$ZONE_ID" >> "$GITHUB_ENV"
+          curl --silent --show-error --fail-with-body --get "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/custom_hostnames" "${auth[@]}" --data-urlencode "hostname=$PUBLIC_DOMAIN" >/tmp/custom-hostnames.json
+          curl --silent --show-error --fail-with-body "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/workers/routes" "${auth[@]}" >/tmp/worker-routes.json
+          jq -e '.success == true' /tmp/custom-hostnames.json >/dev/null
+          jq -e '.success == true' /tmp/worker-routes.json >/dev/null
+
+      - name: Resolve idempotent SaaS domain plan
+        if: env.DOMAIN_MODE == 'saas-custom-hostname'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { readFileSync, appendFileSync } from 'node:fs';
+          import { loadConcreteInstallation } from './scripts/installation-config.mjs';
+          import { loadSaasPlatform } from './scripts/saas-platform.mjs';
+          import { resolveSaasDomainPlan } from './scripts/cloudflare-saas-domain.mjs';
+          const { manifest } = await loadConcreteInstallation(process.env.INSTALLATION_ID);
+          const { platform } = await loadSaasPlatform(manifest.domain.platformId);
+          const customHostnames = JSON.parse(readFileSync('/tmp/custom-hostnames.json', 'utf8')).result ?? [];
+          const workerRoutes = JSON.parse(readFileSync('/tmp/worker-routes.json', 'utf8')).result ?? [];
+          const plan = resolveSaasDomainPlan({ manifest, platform, customHostnames, workerRoutes });
+          appendFileSync(process.env.GITHUB_ENV, `CREATE_CUSTOM_HOSTNAME=${plan.createCustomHostname}\n`);
+          appendFileSync(process.env.GITHUB_ENV, `CREATE_WORKER_ROUTE=${plan.createWorkerRoute}\n`);
+          appendFileSync(process.env.GITHUB_ENV, `ROUTE_PATTERN=${plan.routePattern}\n`);
+          console.log(plan.cnameInstruction);
+          NODE
+
+      - name: Create missing Cloudflare SaaS Custom Hostname
+        if: env.DOMAIN_MODE == 'saas-custom-hostname' && env.CREATE_CUSTOM_HOSTNAME == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -n --arg hostname "$PUBLIC_DOMAIN" '{hostname:$hostname,ssl:{method:"txt",type:"dv"}}' >/tmp/create-hostname.json
+          curl --silent --show-error --fail-with-body --request POST \
+            "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/custom_hostnames" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json' \
+            --data @/tmp/create-hostname.json >/tmp/create-hostname-response.json
+          jq -e '.success == true' /tmp/create-hostname-response.json >/dev/null
+
+      - name: Create missing exact Worker route
+        if: env.DOMAIN_MODE == 'saas-custom-hostname' && env.CREATE_WORKER_ROUTE == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -n --arg pattern "$ROUTE_PATTERN" --arg script "$APP_WORKER" '{pattern:$pattern,script:$script}' >/tmp/create-route.json
+          curl --silent --show-error --fail-with-body --request POST \
+            "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/workers/routes" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json' \
+            --data @/tmp/create-route.json >/tmp/create-route-response.json
+          jq -e '.success == true' /tmp/create-route-response.json >/dev/null
+
+      - name: Verify final SaaS domain state and print customer DNS instruction
+        if: env.DOMAIN_MODE == 'saas-custom-hostname'
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json')
+          curl --silent --show-error --fail-with-body --get "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/custom_hostnames" "${auth[@]}" --data-urlencode "hostname=$PUBLIC_DOMAIN" >/tmp/custom-hostnames-final.json
+          curl --silent --show-error --fail-with-body "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/workers/routes" "${auth[@]}" >/tmp/worker-routes-final.json
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          import { loadConcreteInstallation } from './scripts/installation-config.mjs';
+          import { loadSaasPlatform } from './scripts/saas-platform.mjs';
+          import { resolveSaasDomainPlan } from './scripts/cloudflare-saas-domain.mjs';
+          const { manifest } = await loadConcreteInstallation(process.env.INSTALLATION_ID);
+          const { platform } = await loadSaasPlatform(manifest.domain.platformId);
+          const customHostnames = JSON.parse(readFileSync('/tmp/custom-hostnames-final.json', 'utf8')).result ?? [];
+          const workerRoutes = JSON.parse(readFileSync('/tmp/worker-routes-final.json', 'utf8')).result ?? [];
+          const plan = resolveSaasDomainPlan({ manifest, platform, customHostnames, workerRoutes });
+          if (plan.createCustomHostname !== false || plan.createWorkerRoute !== false) throw new Error('SaaS domain state is not fully configured after onboarding.');
+          console.log(`Domain routing configured for ${manifest.publicDomain} -> ${manifest.appWorker}`);
+          console.log(plan.cnameInstruction);
+          console.log('Cloudflare SSL sub-status is informational; final readiness is HTTPS smoke success after customer DNS points to the CNAME target.');
+          NODE
