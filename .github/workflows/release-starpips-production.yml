@@ -48,13 +48,22 @@ jobs:
           }
 
       - name: Verify Starpips historical migration ledger is safe
-        run: node scripts/starpips-migration-guard.mjs verify 017_tenant_font_branding.sql
+        run: >-
+          node scripts/starpips-migration-guard.mjs verify
+          018_certificate_visual_layout_and_starpips_calibration.sql
+          019_managed_hosting_daily_ledger.sql
 
-      - name: Apply only additive Starpips migration 017 when pending
-        run: node scripts/starpips-migration-guard.mjs apply 017_tenant_font_branding.sql
+      - name: Apply only guarded additive Starpips migrations 018 and 019 when pending
+        run: >-
+          node scripts/starpips-migration-guard.mjs apply
+          018_certificate_visual_layout_and_starpips_calibration.sql
+          019_managed_hosting_daily_ledger.sql
 
-      - name: Verify Starpips migration 017 is current
-        run: node scripts/starpips-migration-guard.mjs verify 017_tenant_font_branding.sql
+      - name: Verify Starpips migrations 018 and 019 are current
+        run: >-
+          node scripts/starpips-migration-guard.mjs verify
+          018_certificate_visual_layout_and_starpips_calibration.sql
+          019_managed_hosting_daily_ledger.sql
 
   release:
     needs: migrate
