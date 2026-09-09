@@ -1,16 +1,19 @@
 BEGIN;
 
 -- Starpips existing certificates were created before the visual placement editor.
--- Calibrate only SPF-prefixed templates that do not already have an explicit v2 layout.
+-- These normalized top-left positions are calibrated against the actual
+-- Starpips certificate artwork: name in the large blank name area, completion
+-- date above the dedicated DATE OF COMPLETION line, and the ID unobtrusively
+-- at the lower-left. Existing explicit v2 layouts are never overwritten.
 UPDATE certificate_templates
 SET layout_config_json = jsonb_set(
       COALESCE(layout_config_json, '{}'::jsonb),
       '{visualLayout}',
       '{
         "version": 2,
-        "name": {"xRatio": 0.19, "yRatio": 0.405, "widthRatio": 0.62, "fontSize": 28, "align": "center"},
-        "completionDate": {"xRatio": 0.39, "yRatio": 0.735, "widthRatio": 0.22, "fontSize": 11, "align": "center"},
-        "certificateId": {"xRatio": 0.035, "yRatio": 0.93, "widthRatio": 0.22, "fontSize": 9, "align": "left"}
+        "name": {"xRatio": 0.18, "yRatio": 0.60, "widthRatio": 0.64, "fontSize": 28, "align": "center"},
+        "completionDate": {"xRatio": 0.08, "yRatio": 0.81, "widthRatio": 0.25, "fontSize": 11, "align": "center"},
+        "certificateId": {"xRatio": 0.075, "yRatio": 0.93, "widthRatio": 0.20, "fontSize": 9, "align": "left"}
       }'::jsonb,
       TRUE
     ),
