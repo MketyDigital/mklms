@@ -9,14 +9,22 @@ async function source(path) {
   return readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 }
 
-test('certificate template upload accepts PDF PNG and JPEG and persists placement coordinates', async () => {
+test('certificate template upload accepts PDF PNG and JPEG and persists visual placement', async () => {
   const route = await source('src/app/api/admin/certificate-templates/route.ts');
+  const manager = await source('src/features/certificates/components/admin-certificate-template-manager.tsx');
+  const editor = await source('src/features/certificates/components/certificate-placement-editor.tsx');
   assert.match(route, /application\/pdf/);
   assert.match(route, /image\/png/);
   assert.match(route, /image\/jpeg/);
-  for (const key of ['nameX','nameY','nameFontSize','dateX','dateY','dateFontSize','idX','idY','idFontSize']) {
-    assert.match(route, new RegExp(key));
-  }
+  assert.match(route, /visualLayout/);
+  assert.match(route, /parseCertificateVisualLayout/);
+  assert.match(manager, /CertificatePlacementEditor/);
+  assert.match(manager, /formData\.set\("visualLayout"/);
+  assert.match(editor, /onPointerDown/);
+  assert.match(editor, /touch-none/);
+  assert.match(editor, /Student name/);
+  assert.match(editor, /Completion date/);
+  assert.match(editor, /Certificate ID/);
 });
 
 test('certificate renderer preserves uploaded background and overlays portal fields', async () => {
@@ -24,9 +32,11 @@ test('certificate renderer preserves uploaded background and overlays portal fie
   assert.match(renderer, /PDFDocument\.load\(background\.bytes\)/);
   assert.match(renderer, /embedPng\(background\.bytes\)/);
   assert.match(renderer, /embedJpg\(background\.bytes\)/);
+  assert.match(renderer, /parseCertificateVisualLayout/);
   assert.match(renderer, /certificate\.certificateNameSnapshot/);
   assert.match(renderer, /certificate\.completionDate/);
   assert.match(renderer, /certificate\.certificateId/);
+  assert.match(renderer, /Legacy templates keep their exact raw PDF coordinates/);
 });
 
 test('real certs/cert.png template renders a production-like certificate PDF', async () => {
