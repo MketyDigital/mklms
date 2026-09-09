@@ -13,6 +13,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { CertificatePlacementEditor } from "./certificate-placement-editor";
+import {
+  DEFAULT_CERTIFICATE_VISUAL_LAYOUT,
+  type CertificateVisualLayoutV2,
+} from "../providers/certificate-layout";
 
 interface CourseOption {
   id: string;
@@ -37,10 +42,15 @@ export function AdminCertificateTemplateManager({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [visualLayout, setVisualLayout] = useState<CertificateVisualLayoutV2>(
+    DEFAULT_CERTIFICATE_VISUAL_LAYOUT,
+  );
 
   async function submit(formData: FormData) {
     setBusy(true);
     setMessage(null);
+    formData.set("visualLayout", JSON.stringify(visualLayout));
     try {
       const response = await fetch("/api/admin/certificate-templates", {
         method: "POST",
@@ -50,7 +60,9 @@ export function AdminCertificateTemplateManager({
       if (!response.ok || !payload.ok) {
         throw new Error(payload.message ?? "Template upload failed.");
       }
-      setMessage("Certificate template uploaded and activated.");
+      setMessage("Certificate template uploaded, positioned and activated.");
+      setSelectedFile(null);
+      setVisualLayout(DEFAULT_CERTIFICATE_VISUAL_LAYOUT);
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Template upload failed.");
@@ -65,7 +77,7 @@ export function AdminCertificateTemplateManager({
         <CardHeader>
           <CardTitle className="text-base">Upload certificate template</CardTitle>
           <CardDescription>
-            Upload the finished certificate artwork as PDF, PNG, or JPEG. MkLMS preserves that artwork and overlays three portal fields: student name, completion date, and certificate ID. Leave blank spaces for those values in your design. The portal does not read or remove text such as “NAME HERE” from the artwork automatically, so remove placeholder words from the final artwork before uploading. Coordinates are measured from the bottom-left; leave them blank to use the defaults.
+            Upload the finished PDF, PNG or JPEG artwork, then drag the student name, completion date and certificate ID directly onto their intended blank areas. Placement is saved relative to the artwork so the same system works across installations and different certificate sizes.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -89,8 +101,16 @@ export function AdminCertificateTemplateManager({
             </label>
             <label className="space-y-1.5 text-sm md:col-span-2">
               <span className="font-medium">Template artwork</span>
-              <Input name="file" type="file" accept="application/pdf,image/png,image/jpeg" required />
-              <span className="block text-xs text-muted-foreground">Accepted: PDF, PNG, JPEG. Use the final artwork with blank spaces where dynamic values should appear.</span>
+              <Input
+                name="file"
+                type="file"
+                accept="application/pdf,image/png,image/jpeg"
+                required
+                onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+              />
+              <span className="block text-xs text-muted-foreground">
+                Accepted: PDF, PNG, JPEG. Remove placeholder words from the artwork itself before uploading.
+              </span>
             </label>
             <label className="space-y-1.5 text-sm">
               <span className="font-medium">Certificate ID prefix</span>
@@ -98,20 +118,12 @@ export function AdminCertificateTemplateManager({
             </label>
             <div className="hidden md:block" />
 
-            <div className="md:col-span-2">
-              <p className="mb-1 text-sm font-medium">Dynamic field placement</p>
-              <p className="mb-3 text-xs text-muted-foreground">X moves a field left/right. Y moves it up/down. Font size controls the overlaid portal text.</p>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <label className="space-y-1 text-xs"><span>Student name X</span><Input name="nameX" type="number" step="0.1" placeholder="Auto" /></label>
-                <label className="space-y-1 text-xs"><span>Student name Y</span><Input name="nameY" type="number" step="0.1" placeholder="Auto" /></label>
-                <label className="space-y-1 text-xs"><span>Student name size</span><Input name="nameFontSize" type="number" step="0.1" placeholder="28" /></label>
-                <label className="space-y-1 text-xs"><span>Completion date X</span><Input name="dateX" type="number" step="0.1" placeholder="Auto" /></label>
-                <label className="space-y-1 text-xs"><span>Completion date Y</span><Input name="dateY" type="number" step="0.1" placeholder="Auto" /></label>
-                <label className="space-y-1 text-xs"><span>Completion date size</span><Input name="dateFontSize" type="number" step="0.1" placeholder="11" /></label>
-                <label className="space-y-1 text-xs"><span>Certificate ID X</span><Input name="idX" type="number" step="0.1" placeholder="Auto" /></label>
-                <label className="space-y-1 text-xs"><span>Certificate ID Y</span><Input name="idY" type="number" step="0.1" placeholder="Auto" /></label>
-                <label className="space-y-1 text-xs"><span>Certificate ID size</span><Input name="idFontSize" type="number" step="0.1" placeholder="9" /></label>
-              </div>
+            <div className="min-w-0 md:col-span-2">
+              <CertificatePlacementEditor
+                file={selectedFile}
+                value={visualLayout}
+                onChange={setVisualLayout}
+              />
             </div>
 
             {message ? (
@@ -121,7 +133,7 @@ export function AdminCertificateTemplateManager({
             ) : null}
 
             <div className="md:col-span-2">
-              <Button type="submit" disabled={busy}>
+              <Button type="submit" disabled={busy || !selectedFile} className="w-full sm:w-auto">
                 {busy ? <Loader2 className="mr-1.5 size-4 animate-spin" /> : <FileUp className="mr-1.5 size-4" />}
                 Upload and activate
               </Button>
@@ -143,16 +155,16 @@ export function AdminCertificateTemplateManager({
           ) : (
             <div className="divide-y rounded-lg border">
               {templates.map((template) => (
-                <div key={template.id} className="flex items-center justify-between gap-3 p-3 text-sm">
-                  <div>
-                    <p className="font-medium">{template.name}</p>
+                <div key={template.id} className="flex flex-col gap-3 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="break-words font-medium">{template.name}</p>
                     <p className="text-xs text-muted-foreground">
                       {template.courseId
                         ? courses.find((course) => course.id === template.courseId)?.title ?? "Course-specific"
                         : "Global default"}
                     </p>
                   </div>
-                  <span className={`rounded-full px-2 py-1 text-xs ${template.active ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-muted text-muted-foreground"}`}>
+                  <span className={`w-fit rounded-full px-2 py-1 text-xs ${template.active ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-muted text-muted-foreground"}`}>
                     {template.active ? "Active" : "Inactive"}
                   </span>
                 </div>

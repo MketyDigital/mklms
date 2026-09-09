@@ -15,6 +15,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       STARPIPS_DATABASE_URL: ${{ secrets.STARPIPS_DATABASE_URL }}
       STARPIPS_DATABASE_SSL: ${{ secrets.STARPIPS_DATABASE_SSL }}
+      MKETY_DB_PASSWORD: ${{ secrets.MKETY_DB_PASSWORD }}
       MKETY_ADMIN_ACCESS_KEY: ${{ secrets.MKETY_ADMIN_ACCESS_KEY }}
       MKETY_ADMIN_SESSION_SECRET: ${{ secrets.MKETY_ADMIN_SESSION_SECRET }}
       MKETY_MEDIA_SIGNING_SECRET: ${{ secrets.MKETY_MEDIA_SIGNING_SECRET }}
@@ -32,6 +33,7 @@ jobs:
             CLOUDFLARE_API_TOKEN \
             STARPIPS_DATABASE_URL \
             STARPIPS_DATABASE_SSL \
+            MKETY_DB_PASSWORD \
             MKETY_ADMIN_ACCESS_KEY \
             MKETY_ADMIN_SESSION_SECRET \
             MKETY_MEDIA_SIGNING_SECRET
@@ -61,6 +63,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          grep -q 'secrets.MKETY_DB_PASSWORD' .github/workflows/mkety-academy-release.yml
           grep -q 'secrets.MKETY_ADMIN_ACCESS_KEY' .github/workflows/mkety-academy-release.yml
           grep -q 'workflow_call:' .github/workflows/deploy-installation-preview.yml
           grep -q 'workflow_call:' .github/workflows/deploy-installation-production.yml

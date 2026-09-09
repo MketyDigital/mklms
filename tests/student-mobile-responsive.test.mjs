@@ -4,10 +4,11 @@ import test from 'node:test';
 
 const read = (path) => fs.readFileSync(path, 'utf8');
 
-test('student app shell stacks on mobile while admin stays in the existing row layout', () => {
+test('student and admin app shell both stack on mobile and return to sidebar row at lg', () => {
   const source = read('src/components/layout/app-layout.tsx');
 
-  assert.match(source, /isAdmin\s*\?\s*['"]flex-row['"]\s*:\s*['"]flex-col lg:flex-row['"]/);
+  assert.match(source, /flex min-h-dvh flex-col lg:flex-row/);
+  assert.doesNotMatch(source, /isAdmin\s*\?\s*['"]flex-row['"]/);
   assert.match(source, /min-w-0 flex-1 overflow-x-hidden/);
 });
 

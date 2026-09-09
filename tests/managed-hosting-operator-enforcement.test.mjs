@@ -7,7 +7,7 @@ import * as hosting from '../src/features/hosting/domain/managed-hosting.ts';
 
 const source = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('existing managed-hosting accrual and usage calculation remains unchanged', () => {
+test('legacy watch-minute-only managed-hosting calculation remains compatible', () => {
   const policy = {
     enabled: true,
     minimumMonthlyFeeUsd: 15,
@@ -44,27 +44,43 @@ test('billing standing supports due overdue restricted paid and waived states', 
   assert.equal(resolve({ paymentStatus: 'WAIVED', dueAt, graceEndsAt, enforcementEnabled: true, now: new Date('2026-10-20T00:00:00Z') }).status, 'WAIVED');
 });
 
-test('operator policy is database-backed and not exposed through tenant admin controls', async () => {
-  const migrationPath = new URL('../db/migrations/015_managed_hosting_operator_policy_and_enforcement.sql', import.meta.url);
-  assert.equal(existsSync(migrationPath), true);
-  const migration = await readFile(migrationPath, 'utf8');
-  assert.match(migration, /managed_hosting_operator_policy/);
-  assert.match(migration, /amount_due_usd/);
-  assert.match(migration, /due_at/);
-  assert.match(migration, /grace_ends_at/);
-
+test('operator policy is private Mkety control and not exposed through tenant admin panel', async () => {
   const tenantPanel = await source('src/features/hosting/components/managed-hosting-panel.tsx');
-  assert.doesNotMatch(tenantPanel, /Accrued minimum|Usage-derived amount|minimumMonthlyFeeUsd|maximumMonthlyFeeUsd/);
-  assert.match(tenantPanel, /Managed Video Hosting & Maintenance/);
+  assert.doesNotMatch(tenantPanel, /Accrued minimum|Usage-derived amount|minimumMonthlyFeeUsd|maximumMonthlyFeeUsd|operatorNote/);
+  assert.match(tenantPanel, /Managed Video Hosting & Streaming/);
+  assert.match(tenantPanel, /Streaming activity/);
   assert.match(tenantPanel, /Amount due|Current hosting balance/);
 
+  const auth = await source('src/features/hosting/server/hosting-operator-auth.ts');
+  assert.match(auth, /MKETY_OPERATOR_INSTALLATION_ID = "mkety-academy"/);
+  assert.match(auth, /isTrustedMketyBillingOperatorContext/);
+  assert.match(auth, /MKLMS_BILLING_INSTALLATION_ID/);
+
   const operatorApiPath = new URL('../src/app/api/operator/hosting/policy/route.ts', import.meta.url);
+  const adjustmentApiPath = new URL('../src/app/api/operator/hosting/adjustment/route.ts', import.meta.url);
   const operatorPagePath = new URL('../src/app/operator/hosting/page.tsx', import.meta.url);
   assert.equal(existsSync(operatorApiPath), true);
+  assert.equal(existsSync(adjustmentApiPath), true);
   assert.equal(existsSync(operatorPagePath), true);
   const operatorApi = await readFile(operatorApiPath, 'utf8');
+  const adjustmentApi = await readFile(adjustmentApiPath, 'utf8');
   assert.match(operatorApi, /isValidManagedHostingOperatorKey/);
+  assert.match(adjustmentApi, /isValidManagedHostingOperatorKey/);
   assert.doesNotMatch(operatorApi, /hasValidAdminSession/);
+});
+
+test('daily hosting ledger is additive, auditable, and keeps customer metrics separate from price adjustments', async () => {
+  const migrationPath = new URL('../db/migrations/019_managed_hosting_daily_ledger.sql', import.meta.url);
+  assert.equal(existsSync(migrationPath), true);
+  const migration = await readFile(migrationPath, 'utf8');
+  assert.match(migration, /managed_hosting_daily_ledger/);
+  assert.match(migration, /operator_adjustment_usd/);
+  assert.match(migration, /operator_reason/);
+  assert.match(migration, /streaming_activity_band/);
+  const repository = await source('src/features/hosting/repositories/postgres-managed-hosting-ledger.repository.ts');
+  assert.match(repository, /setDailyOperatorAdjustment/);
+  assert.match(repository, /getMonthAdjustmentTotal/);
+  assert.match(repository, /ON CONFLICT \(billing_date\)/);
 });
 
 test('non-payment restriction gates all hosted upload paths and protected paid media while leaving free-live and Zoom join untouched', async () => {

@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
 import { PostgresCertificateTemplateRepository } from "@/features/certificates/repositories/postgres-certificate-template.repository";
+import {
+  DEFAULT_CERTIFICATE_VISUAL_LAYOUT,
+  parseCertificateVisualLayout,
+} from "@/features/certificates/providers/certificate-layout";
 import { getConfiguredStorageProvider } from "@/providers/s3-compatible-storage-provider";
 
 const MAX_TEMPLATE_BYTES = 15 * 1024 * 1024;
@@ -11,11 +15,15 @@ const ALLOWED_TYPES = new Set([
   "image/jpeg",
 ]);
 
-function numberField(form: FormData, key: string): number | undefined {
-  const raw = String(form.get(key) ?? "").trim();
-  if (!raw) return undefined;
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : undefined;
+function parseVisualLayout(form: FormData) {
+  const raw = String(form.get("visualLayout") ?? "").trim();
+  if (!raw) return DEFAULT_CERTIFICATE_VISUAL_LAYOUT;
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return parseCertificateVisualLayout({ visualLayout: parsed }) ?? DEFAULT_CERTIFICATE_VISUAL_LAYOUT;
+  } catch {
+    return DEFAULT_CERTIFICATE_VISUAL_LAYOUT;
+  }
 }
 
 export async function POST(request: Request) {
@@ -53,27 +61,12 @@ export async function POST(request: Request) {
       visibility: "private",
     });
 
-    const layoutConfig: Record<string, number> = {};
-    for (const keyName of [
-      "nameX",
-      "nameY",
-      "nameFontSize",
-      "dateX",
-      "dateY",
-      "dateFontSize",
-      "idX",
-      "idY",
-      "idFontSize",
-    ]) {
-      const value = numberField(form, keyName);
-      if (value !== undefined) layoutConfig[keyName] = value;
-    }
-
+    const visualLayout = parseVisualLayout(form);
     const id = await new PostgresCertificateTemplateRepository().createTemplate({
       name,
       courseId,
       backgroundAssetId: stored.assetId,
-      layoutConfig,
+      layoutConfig: { visualLayout },
       certificatePrefix: String(form.get("certificatePrefix") ?? "").trim() || "CERT",
       active: true,
     });

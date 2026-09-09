@@ -5,7 +5,9 @@ import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
 import {
   calculateManagedHostingAmountDue,
   getBillingMonthKey,
+  resolveManagedHostingPaymentWindow,
 } from "@/features/hosting/domain/managed-hosting";
+import { PostgresManagedHostingLedgerRepository } from "@/features/hosting/repositories/postgres-managed-hosting-ledger.repository";
 import { PostgresManagedHostingRepository } from "@/features/hosting/repositories/postgres-managed-hosting.repository";
 import { ensurePreviousManagedHostingInvoice } from "@/features/hosting/server/managed-hosting-access";
 import {
@@ -36,6 +38,7 @@ export async function POST() {
   }
 
   const repository = new PostgresManagedHostingRepository();
+  const ledgerRepository = new PostgresManagedHostingLedgerRepository();
   const effective = await getEffectiveManagedHostingPolicy(repository);
   const policy = effective.policy;
   if (!policy.enabled) {
@@ -48,13 +51,36 @@ export async function POST() {
   let monthKey: string;
   let amountUsd: number;
 
+  // Old unpaid invoices remain payable even before the current month's
+  // checkout window; the window only prevents paying an unfinished month.
   if (outstanding?.amountDueUsd != null && outstanding.amountDueUsd > 0) {
     monthKey = outstanding.monthKey;
     amountUsd = outstanding.amountDueUsd;
   } else {
+    const now = new Date();
+    const paymentWindow = resolveManagedHostingPaymentWindow(now);
+    if (!paymentWindow.isOpen) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message: `Payment becomes available on ${paymentWindow.opensAt.toLocaleDateString("en-US", {
+            timeZone: "UTC",
+            month: "long",
+            day: "numeric",
+            year: "numeric",
+          })}.`,
+          paymentOpensAt: paymentWindow.opensAt.toISOString(),
+        },
+        { status: 409 },
+      );
+    }
+
     const usage = await repository.getCurrentMonthUsage();
     monthKey = getBillingMonthKey(usage.monthStart);
-    const monthOverride = await repository.getMonthOverride(monthKey);
+    const [monthOverride, operatorAdjustmentUsd] = await Promise.all([
+      repository.getMonthOverride(monthKey),
+      ledgerRepository.getMonthAdjustmentTotal(monthKey),
+    ]);
     if (monthOverride?.paymentStatus === "PAID") {
       return NextResponse.json({ ok: false, message: "This month is already paid." }, { status: 409 });
     }
@@ -64,8 +90,14 @@ export async function POST() {
 
     const billing = calculateManagedHostingAmountDue({
       watchMinutes: usage.courseWatchMinutesMeasured + usage.liveAudienceMinutesEstimated,
+      usageSignals: {
+        courseWatchMinutesMeasured: usage.courseWatchMinutesMeasured,
+        liveAudienceMinutesEstimated: usage.liveAudienceMinutesEstimated,
+      },
       policy,
       monthlyMinimumFloorUsd: monthOverride?.minimumFloorUsd,
+      operatorAdjustmentUsd,
+      now,
     });
     if (billing.amountDueUsd <= 0) {
       return NextResponse.json({ ok: false, message: "There is no amount due." }, { status: 409 });
