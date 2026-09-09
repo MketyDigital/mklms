@@ -1,6 +1,13 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 import type { StorageProvider } from "@/providers/storage-provider";
+import {
+  alignedTextX,
+  fitFontSizeToWidth,
+  parseCertificateVisualLayout,
+  resolveCertificateFieldPlacement,
+  type CertificateFieldPlacement,
+} from "./certificate-layout.ts";
 import { REAL_CERTIFICATE_DEFAULT_LAYOUT } from "./default-certificate-layout.ts";
 import type {
   CertificateRenderer,
@@ -88,39 +95,93 @@ export class PdfLibCertificateRenderer implements CertificateRenderer {
     const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold);
     const { width, height } = page.getSize();
     const config = template.layoutConfig;
+    const visualLayout = parseCertificateVisualLayout(config);
 
-    const nameFontSize = numberSetting(config, "nameFontSize", REAL_CERTIFICATE_DEFAULT_LAYOUT.nameFontSize);
-    const dateFontSize = numberSetting(config, "dateFontSize", REAL_CERTIFICATE_DEFAULT_LAYOUT.dateFontSize);
-    const idFontSize = numberSetting(config, "idFontSize", REAL_CERTIFICATE_DEFAULT_LAYOUT.idFontSize);
+    function drawVisualText(input: {
+      text: string;
+      field: CertificateFieldPlacement;
+      bold?: boolean;
+      color: ReturnType<typeof rgb>;
+      minimumFontSize?: number;
+    }) {
+      const font = input.bold ? boldFont : regularFont;
+      const placement = resolveCertificateFieldPlacement({
+        field: input.field,
+        pageWidth: width,
+        pageHeight: height,
+      });
+      const fontSize = fitFontSizeToWidth({
+        text: input.text,
+        preferredFontSize: placement.fontSize,
+        maxWidth: placement.width,
+        minimumFontSize: input.minimumFontSize,
+        measure: (text, size) => font.widthOfTextAtSize(text, size),
+      });
+      const textWidth = font.widthOfTextAtSize(input.text, fontSize);
+      page.drawText(input.text, {
+        x: Math.max(8, alignedTextX({ placement, textWidth })),
+        y: Math.max(8, placement.y - fontSize),
+        size: fontSize,
+        font,
+        color: input.color,
+      });
+    }
 
-    const name = certificate.certificateNameSnapshot;
-    const nameWidth = boldFont.widthOfTextAtSize(name, nameFontSize);
-    const nameX = numberSetting(config, "nameX", centeredX(nameWidth, width));
-    const nameY = numberSetting(config, "nameY", height * REAL_CERTIFICATE_DEFAULT_LAYOUT.nameYRatio);
+    if (visualLayout) {
+      drawVisualText({
+        text: certificate.certificateNameSnapshot,
+        field: visualLayout.name,
+        bold: true,
+        color: rgb(0.08, 0.08, 0.08),
+        minimumFontSize: 14,
+      });
+      drawVisualText({
+        text: certificate.completionDate,
+        field: visualLayout.completionDate,
+        color: rgb(0.18, 0.18, 0.18),
+        minimumFontSize: 8,
+      });
+      drawVisualText({
+        text: certificate.certificateId,
+        field: visualLayout.certificateId,
+        color: rgb(0.25, 0.25, 0.25),
+        minimumFontSize: 7,
+      });
+    } else {
+      // Legacy templates keep their exact raw PDF coordinates.
+      const nameFontSize = numberSetting(config, "nameFontSize", REAL_CERTIFICATE_DEFAULT_LAYOUT.nameFontSize);
+      const dateFontSize = numberSetting(config, "dateFontSize", REAL_CERTIFICATE_DEFAULT_LAYOUT.dateFontSize);
+      const idFontSize = numberSetting(config, "idFontSize", REAL_CERTIFICATE_DEFAULT_LAYOUT.idFontSize);
 
-    page.drawText(name, {
-      x: nameX,
-      y: nameY,
-      size: nameFontSize,
-      font: boldFont,
-      color: rgb(0.08, 0.08, 0.08),
-    });
+      const name = certificate.certificateNameSnapshot;
+      const nameWidth = boldFont.widthOfTextAtSize(name, nameFontSize);
+      const nameX = numberSetting(config, "nameX", centeredX(nameWidth, width));
+      const nameY = numberSetting(config, "nameY", height * REAL_CERTIFICATE_DEFAULT_LAYOUT.nameYRatio);
 
-    page.drawText(certificate.completionDate, {
-      x: numberSetting(config, "dateX", width * REAL_CERTIFICATE_DEFAULT_LAYOUT.dateXRatio),
-      y: numberSetting(config, "dateY", height * REAL_CERTIFICATE_DEFAULT_LAYOUT.dateYRatio),
-      size: dateFontSize,
-      font: regularFont,
-      color: rgb(0.18, 0.18, 0.18),
-    });
+      page.drawText(name, {
+        x: nameX,
+        y: nameY,
+        size: nameFontSize,
+        font: boldFont,
+        color: rgb(0.08, 0.08, 0.08),
+      });
 
-    page.drawText(certificate.certificateId, {
-      x: numberSetting(config, "idX", width * REAL_CERTIFICATE_DEFAULT_LAYOUT.idXRatio),
-      y: numberSetting(config, "idY", height * REAL_CERTIFICATE_DEFAULT_LAYOUT.idYRatio),
-      size: idFontSize,
-      font: regularFont,
-      color: rgb(0.25, 0.25, 0.25),
-    });
+      page.drawText(certificate.completionDate, {
+        x: numberSetting(config, "dateX", width * REAL_CERTIFICATE_DEFAULT_LAYOUT.dateXRatio),
+        y: numberSetting(config, "dateY", height * REAL_CERTIFICATE_DEFAULT_LAYOUT.dateYRatio),
+        size: dateFontSize,
+        font: regularFont,
+        color: rgb(0.18, 0.18, 0.18),
+      });
+
+      page.drawText(certificate.certificateId, {
+        x: numberSetting(config, "idX", width * REAL_CERTIFICATE_DEFAULT_LAYOUT.idXRatio),
+        y: numberSetting(config, "idY", height * REAL_CERTIFICATE_DEFAULT_LAYOUT.idYRatio),
+        size: idFontSize,
+        font: regularFont,
+        color: rgb(0.25, 0.25, 0.25),
+      });
+    }
 
     const bytes = await pdf.save();
     return {
