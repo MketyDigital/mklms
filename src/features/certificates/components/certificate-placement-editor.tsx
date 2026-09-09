@@ -36,19 +36,15 @@ export function CertificatePlacementEditor({
   value: CertificateVisualLayoutV2;
   onChange: (value: CertificateVisualLayoutV2) => void;
 }) {
-  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const objectUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
   const [aspectRatio, setAspectRatio] = useState(16 / 9);
   const frameRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!file) {
-      setObjectUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(file);
-    setObjectUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [objectUrl]);
 
   const fields = useMemo(() => (["name", "completionDate", "certificateId"] as FieldKey[]), []);
 
