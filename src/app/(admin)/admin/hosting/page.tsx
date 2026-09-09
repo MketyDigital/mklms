@@ -3,7 +3,13 @@ import { AlertTriangle } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ManagedHostingPanel } from "@/features/hosting/components/managed-hosting-panel";
-import type { ManagedHostingMonthOverride } from "@/features/hosting/domain/managed-hosting";
+import {
+  calculateManagedHostingAmountDue,
+  getBillingMonthKey,
+  getStreamingActivityBand,
+  type ManagedHostingMonthOverride,
+} from "@/features/hosting/domain/managed-hosting";
+import { PostgresManagedHostingLedgerRepository } from "@/features/hosting/repositories/postgres-managed-hosting-ledger.repository";
 import { PostgresManagedHostingRepository } from "@/features/hosting/repositories/postgres-managed-hosting.repository";
 import { getManagedHostingServiceAccess } from "@/features/hosting/server/managed-hosting-access";
 import {
@@ -16,6 +22,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminHostingPage() {
   const hostingRepository = new PostgresManagedHostingRepository();
+  const ledgerRepository = new PostgresManagedHostingLedgerRepository();
   const settingsRepository = new PostgresSettingsRepository();
   const platformSettings = await settingsRepository.getPlatformSettings();
   const effective = await getEffectiveManagedHostingPolicy(hostingRepository);
@@ -24,14 +31,35 @@ export default async function AdminHostingPage() {
   let usage: Awaited<ReturnType<PostgresManagedHostingRepository["getCurrentMonthUsage"]>> | null = null;
   let monthOverride: ManagedHostingMonthOverride | null = null;
   let serviceAccess: Awaited<ReturnType<typeof getManagedHostingServiceAccess>> | null = null;
+  let operatorAdjustmentUsd = 0;
   let setupError: string | null = null;
 
   try {
     usage = await hostingRepository.getCurrentMonthUsage();
-    [monthOverride, serviceAccess] = await Promise.all([
-      hostingRepository.getMonthOverride(),
+    const monthKey = getBillingMonthKey(usage.monthStart);
+    [monthOverride, serviceAccess, operatorAdjustmentUsd] = await Promise.all([
+      hostingRepository.getMonthOverride(monthKey),
       getManagedHostingServiceAccess(hostingRepository),
+      ledgerRepository.getMonthAdjustmentTotal(monthKey),
     ]);
+
+    const usageSignals = {
+      courseWatchMinutesMeasured: usage.courseWatchMinutesMeasured,
+      liveAudienceMinutesEstimated: usage.liveAudienceMinutesEstimated,
+    };
+    const automatic = calculateManagedHostingAmountDue({
+      watchMinutes: usage.courseWatchMinutesMeasured + usage.liveAudienceMinutesEstimated,
+      usageSignals,
+      policy: effective.policy,
+      monthlyMinimumFloorUsd: monthOverride?.minimumFloorUsd,
+      operatorAdjustmentUsd: 0,
+    });
+    await ledgerRepository.recordDailySnapshot({
+      measuredWatchMinutes: usage.courseWatchMinutesMeasured,
+      estimatedLiveAudienceMinutes: usage.liveAudienceMinutesEstimated,
+      streamingActivityBand: getStreamingActivityBand(usageSignals),
+      automaticBalanceUsd: automatic.amountDueUsd,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     const looksLikeMissingSchema =
@@ -52,11 +80,11 @@ export default async function AdminHostingPage() {
       isAdmin={true}
       unreadMessages={0}
     >
-      <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-4xl px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold tracking-tight">Hosting & Billing</h1>
+          <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Hosting & Billing</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            View your current managed video-hosting balance, payment status and any payment notices.
+            View your current managed video-hosting balance, streaming activity, payment status and payment notices.
           </p>
         </div>
 
@@ -67,6 +95,7 @@ export default async function AdminHostingPage() {
             displayDescription={effective.displayDescription}
             monthStart={usage.monthStart}
             monthOverride={monthOverride}
+            operatorAdjustmentUsd={operatorAdjustmentUsd}
             serviceAccess={serviceAccess}
             billingAutomationEnabled={billingAutomationEnabled}
             usage={{
