@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MessageCircle, RefreshCw, RotateCcw, ShieldX } from "lucide-react";
+import { Download, Eye, MessageCircle, RefreshCw, RotateCcw, ShieldX } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -82,11 +82,11 @@ export function AdminCertificateManager({
           <Card key={certificate.id}>
             <CardHeader>
               <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-                <div>
-                  <CardTitle className="text-base">
+                <div className="min-w-0">
+                  <CardTitle className="break-words text-base">
                     {certificate.certificateNameSnapshot}
                   </CardTitle>
-                  <CardDescription className="mt-1">
+                  <CardDescription className="mt-1 break-words">
                     {certificate.courseTitle} · {certificate.completionDate}
                   </CardDescription>
                 </div>
@@ -102,8 +102,8 @@ export function AdminCertificateManager({
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-2 text-sm sm:grid-cols-3">
-                <div>
+              <div className="grid gap-3 text-sm sm:grid-cols-3">
+                <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">Certificate ID</p>
                   <p className="mt-1 break-all font-mono text-xs">{certificate.certificateId}</p>
                 </div>
@@ -113,16 +113,36 @@ export function AdminCertificateManager({
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Email</p>
-                  <p className="mt-1">{certificate.emailDeliveryStatus}</p>
+                  <p className="mt-1 break-words">{certificate.emailDeliveryStatus}</p>
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="grid gap-2 sm:flex sm:flex-wrap">
+                {certificate.pdfAssetId ? (
+                  <>
+                    <Button size="sm" variant="outline" asChild className="w-full sm:w-auto">
+                      <a
+                        href={`/api/admin/certificates/${certificate.id}/download`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <Eye className="mr-1.5 size-4" /> View certificate
+                      </a>
+                    </Button>
+                    <Button size="sm" variant="outline" asChild className="w-full sm:w-auto">
+                      <a href={`/api/admin/certificates/${certificate.id}/download`} download>
+                        <Download className="mr-1.5 size-4" /> Download PDF
+                      </a>
+                    </Button>
+                  </>
+                ) : null}
+
                 {certificate.status === "ISSUED" ? (
                   <>
                     <Button
                       size="sm"
                       variant="outline"
+                      className="w-full sm:w-auto"
                       disabled={busyId === certificate.id}
                       onClick={() => void runAction(certificate.id, "redeliver")}
                     >
@@ -132,6 +152,7 @@ export function AdminCertificateManager({
                     <Button
                       size="sm"
                       variant="outline"
+                      className="w-full sm:w-auto"
                       disabled={busyId === certificate.id}
                       onClick={() => void runAction(certificate.id, "message")}
                     >
@@ -141,6 +162,7 @@ export function AdminCertificateManager({
                     <Button
                       size="sm"
                       variant="destructive"
+                      className="w-full sm:w-auto"
                       disabled={busyId === certificate.id}
                       onClick={() => void runAction(certificate.id, "revoke")}
                     >
@@ -151,6 +173,7 @@ export function AdminCertificateManager({
                   <Button
                     size="sm"
                     variant="outline"
+                    className="w-full sm:w-auto"
                     disabled={busyId === certificate.id}
                     onClick={() => void runAction(certificate.id, "restore")}
                   >
