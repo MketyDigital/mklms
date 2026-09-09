@@ -135,9 +135,6 @@ export function calculateManagedHostingFee(input: {
   const policy = normalizeManagedHostingPolicy(input.policy);
   if (!policy.enabled) return 0;
 
-  // Preserve the historical thresholds for existing callers that only supply
-  // watchMinutes. New callers can provide mixed usage signals for smooth daily
-  // usage sensitivity.
   if (!input.usageSignals) {
     const watchMinutes = Math.max(0, Math.floor(input.watchMinutes));
     let ratio = 0;
@@ -172,11 +169,13 @@ export function calculateManagedHostingAmountDue(input: {
   policy: ManagedHostingPolicy;
   monthlyMinimumFloorUsd?: number | null;
   usageSignals?: ManagedHostingUsageSignals;
+  operatorAdjustmentUsd?: number | null;
   now?: Date;
 }): {
   usageDerivedFeeUsd: number;
   minimumFloorUsd: number;
   accruedMinimumUsd: number;
+  operatorAdjustmentUsd: number;
   amountDueUsd: number;
 } {
   const policy = normalizeManagedHostingPolicy(input.policy);
@@ -185,6 +184,7 @@ export function calculateManagedHostingAmountDue(input: {
       usageDerivedFeeUsd: 0,
       minimumFloorUsd: 0,
       accruedMinimumUsd: 0,
+      operatorAdjustmentUsd: 0,
       amountDueUsd: 0,
     };
   }
@@ -205,12 +205,15 @@ export function calculateManagedHostingAmountDue(input: {
   const minimumFloorUsd = hasExplicitHigherFloor
     ? roundUsd(requestedFloor)
     : accruedMinimumUsd;
-  const amountDueUsd = Math.max(minimumFloorUsd, usageDerivedFeeUsd);
+  const rawAdjustment = Number(input.operatorAdjustmentUsd);
+  const operatorAdjustmentUsd = Number.isFinite(rawAdjustment) ? roundUsd(rawAdjustment) : 0;
+  const amountDueUsd = Math.max(0, Math.max(minimumFloorUsd, usageDerivedFeeUsd) + operatorAdjustmentUsd);
 
   return {
     usageDerivedFeeUsd,
     minimumFloorUsd,
     accruedMinimumUsd,
+    operatorAdjustmentUsd,
     amountDueUsd: roundUsd(amountDueUsd),
   };
 }
