@@ -23,3 +23,12 @@ test('Mkety production release migrates its own Supabase schema before applicati
   assert.match(source, /npm run db:migrate/);
   assert.match(source, /needs:\s*migrate/);
 });
+
+test('Mkety production maps its private hosting operator secret into the generic production deploy', () => {
+  const wrapper = readFileSync('.github/workflows/mkety-academy-release.yml', 'utf8');
+  const deploy = readFileSync('.github/workflows/deploy-installation-production.yml', 'utf8');
+  assert.match(wrapper, /MKLMS_MANAGED_HOSTING_OPERATOR_KEY:\s*\$\{\{ secrets\.MKETY_MANAGED_HOSTING_OPERATOR_KEY \}\}/);
+  assert.match(deploy, /MKLMS_MANAGED_HOSTING_OPERATOR_KEY:/);
+  assert.match(deploy, /MANAGED_HOSTING_OPERATOR_KEY:\s*\$\{\{ secrets\.MKLMS_MANAGED_HOSTING_OPERATOR_KEY \}\}/);
+  assert.match(deploy, /MKLMS_MANAGED_HOSTING_OPERATOR_KEY:\$operatorKey/);
+});
