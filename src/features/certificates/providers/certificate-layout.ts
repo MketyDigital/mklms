@@ -50,11 +50,17 @@ function parseField(value: unknown, fallback: CertificateFieldPlacement): Certif
   };
 }
 
+/**
+ * Neutral starting zones for newly uploaded templates. They are intentionally
+ * easy to drag from the visual editor rather than pretending one certificate
+ * artwork can be auto-guessed perfectly. Starpips has its own calibrated
+ * migration based on its real artwork.
+ */
 export const DEFAULT_CERTIFICATE_VISUAL_LAYOUT: CertificateVisualLayoutV2 = {
   version: 2,
-  name: { xRatio: 0.19, yRatio: 0.405, widthRatio: 0.62, fontSize: 28, align: "center" },
-  completionDate: { xRatio: 0.42, yRatio: 0.735, widthRatio: 0.22, fontSize: 11, align: "center" },
-  certificateId: { xRatio: 0.035, yRatio: 0.93, widthRatio: 0.22, fontSize: 9, align: "left" },
+  name: { xRatio: 0.18, yRatio: 0.60, widthRatio: 0.64, fontSize: 28, align: "center" },
+  completionDate: { xRatio: 0.08, yRatio: 0.81, widthRatio: 0.25, fontSize: 11, align: "center" },
+  certificateId: { xRatio: 0.075, yRatio: 0.93, widthRatio: 0.20, fontSize: 9, align: "left" },
 };
 
 export function parseCertificateVisualLayout(
