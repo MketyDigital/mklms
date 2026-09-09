@@ -1,13 +1,15 @@
 BEGIN;
 
 -- Starpips existing certificates were created before the visual placement editor.
--- These normalized top-left positions are calibrated against the actual
--- Starpips certificate artwork: name in the large blank name area, completion
--- date above the dedicated DATE OF COMPLETION line, and the ID unobtrusively
--- at the lower-left. Existing explicit v2 layouts are never overwritten.
-UPDATE certificate_templates
+-- Issued certificate IDs use platform_settings.certificate_prefix, so use the
+-- platform's proven SPF identity rather than assuming the template prefix is
+-- also SPF. This keeps the migration inert in Mkety/enterprise databases.
+-- Positions are normalized from the top-left and calibrated against the real
+-- Starpips artwork: name in the large blank recipient area, completion date
+-- above DATE OF COMPLETION, and certificate ID unobtrusively at lower-left.
+UPDATE certificate_templates AS template
 SET layout_config_json = jsonb_set(
-      COALESCE(layout_config_json, '{}'::jsonb),
+      COALESCE(template.layout_config_json, '{}'::jsonb),
       '{visualLayout}',
       '{
         "version": 2,
@@ -18,7 +20,14 @@ SET layout_config_json = jsonb_set(
       TRUE
     ),
     updated_at = NOW()
-WHERE certificate_prefix = 'SPF'
-  AND NOT (COALESCE(layout_config_json, '{}'::jsonb) ? 'visualLayout');
+WHERE template.active = TRUE
+  AND template.background_asset_id IS NOT NULL
+  AND NOT (COALESCE(template.layout_config_json, '{}'::jsonb) ? 'visualLayout')
+  AND EXISTS (
+    SELECT 1
+    FROM platform_settings AS settings
+    WHERE settings.id = 'default'
+      AND settings.certificate_prefix = 'SPF'
+  );
 
 COMMIT;
