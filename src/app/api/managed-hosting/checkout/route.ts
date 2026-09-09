@@ -7,6 +7,7 @@ import {
   getBillingMonthKey,
   resolveManagedHostingPaymentWindow,
 } from "@/features/hosting/domain/managed-hosting";
+import { PostgresManagedHostingLedgerRepository } from "@/features/hosting/repositories/postgres-managed-hosting-ledger.repository";
 import { PostgresManagedHostingRepository } from "@/features/hosting/repositories/postgres-managed-hosting.repository";
 import { ensurePreviousManagedHostingInvoice } from "@/features/hosting/server/managed-hosting-access";
 import {
@@ -37,6 +38,7 @@ export async function POST() {
   }
 
   const repository = new PostgresManagedHostingRepository();
+  const ledgerRepository = new PostgresManagedHostingLedgerRepository();
   const effective = await getEffectiveManagedHostingPolicy(repository);
   const policy = effective.policy;
   if (!policy.enabled) {
@@ -75,7 +77,10 @@ export async function POST() {
 
     const usage = await repository.getCurrentMonthUsage();
     monthKey = getBillingMonthKey(usage.monthStart);
-    const monthOverride = await repository.getMonthOverride(monthKey);
+    const [monthOverride, operatorAdjustmentUsd] = await Promise.all([
+      repository.getMonthOverride(monthKey),
+      ledgerRepository.getMonthAdjustmentTotal(monthKey),
+    ]);
     if (monthOverride?.paymentStatus === "PAID") {
       return NextResponse.json({ ok: false, message: "This month is already paid." }, { status: 409 });
     }
@@ -91,6 +96,7 @@ export async function POST() {
       },
       policy,
       monthlyMinimumFloorUsd: monthOverride?.minimumFloorUsd,
+      operatorAdjustmentUsd,
       now,
     });
     if (billing.amountDueUsd <= 0) {
