@@ -23,6 +23,7 @@ export function ManagedHostingPanel({
   usage,
   monthStart,
   monthOverride,
+  operatorAdjustmentUsd = 0,
   billingAutomationEnabled = false,
   displayTitle = "Managed Video Hosting & Streaming",
   displayDescription,
@@ -32,6 +33,7 @@ export function ManagedHostingPanel({
   usage: ManagedHostingUsageClientSummary;
   monthStart: Date;
   monthOverride?: ManagedHostingMonthOverride | null;
+  operatorAdjustmentUsd?: number;
   billingAutomationEnabled?: boolean;
   displayTitle?: string;
   displayDescription?: string | null;
@@ -48,6 +50,7 @@ export function ManagedHostingPanel({
     usageSignals,
     policy,
     monthlyMinimumFloorUsd: monthOverride?.minimumFloorUsd,
+    operatorAdjustmentUsd,
   });
 
   if (!policy.enabled) return null;
