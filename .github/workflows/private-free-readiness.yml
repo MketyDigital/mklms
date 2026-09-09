@@ -19,6 +19,7 @@ jobs:
       MKETY_ADMIN_ACCESS_KEY: ${{ secrets.MKETY_ADMIN_ACCESS_KEY }}
       MKETY_ADMIN_SESSION_SECRET: ${{ secrets.MKETY_ADMIN_SESSION_SECRET }}
       MKETY_MEDIA_SIGNING_SECRET: ${{ secrets.MKETY_MEDIA_SIGNING_SECRET }}
+      MKETY_MANAGED_HOSTING_OPERATOR_KEY: ${{ secrets.MKETY_MANAGED_HOSTING_OPERATOR_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,7 +37,8 @@ jobs:
             MKETY_DB_PASSWORD \
             MKETY_ADMIN_ACCESS_KEY \
             MKETY_ADMIN_SESSION_SECRET \
-            MKETY_MEDIA_SIGNING_SECRET
+            MKETY_MEDIA_SIGNING_SECRET \
+            MKETY_MANAGED_HOSTING_OPERATOR_KEY
           do
             if [ -z "${!name:-}" ]; then
               echo "MISSING repository secret: $name"
@@ -65,6 +67,7 @@ jobs:
           set -euo pipefail
           grep -q 'secrets.MKETY_DB_PASSWORD' .github/workflows/mkety-academy-release.yml
           grep -q 'secrets.MKETY_ADMIN_ACCESS_KEY' .github/workflows/mkety-academy-release.yml
+          grep -q 'secrets.MKETY_MANAGED_HOSTING_OPERATOR_KEY' .github/workflows/mkety-academy-release.yml
           grep -q 'workflow_call:' .github/workflows/deploy-installation-preview.yml
           grep -q 'workflow_call:' .github/workflows/deploy-installation-production.yml
           grep -q 'workflow_call:' .github/workflows/provision-installation.yml
