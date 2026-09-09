@@ -4,6 +4,18 @@ export type HostingUsageKind =
   | "LIVE_MEASURED_AUDIENCE_MINUTES"
   | "LIVE_BASELINE_AUDIENCE_MINUTES";
 
+export type StreamingActivityBand = "Low" | "High";
+
+export interface ManagedHostingUsageSignals {
+  courseWatchMinutesMeasured?: number;
+  protectedPlaybackViewsMeasured?: number;
+  uniqueViewersMeasured?: number;
+  liveAudienceMinutesMeasured?: number;
+  liveAudienceMinutesEstimated?: number;
+  estimatedStreamingActivityUnits?: number;
+  portalVisits?: number;
+}
+
 export interface ManagedHostingPolicy {
   enabled: boolean;
   minimumMonthlyFeeUsd: number;
@@ -51,6 +63,11 @@ function roundUsd(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+function nonNegative(value: number | null | undefined): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+}
+
 export function normalizeManagedHostingPolicy(
   input: ManagedHostingPolicy,
 ): ManagedHostingPolicy {
@@ -73,24 +90,65 @@ export function normalizeManagedHostingPolicy(
 }
 
 /**
- * Usage-derived managed-service amount before the calendar minimum is applied.
- * The configured monthly minimum is intentionally NOT added here: it accrues
- * separately through the calendar month in calculateManagedHostingAmountDue().
+ * Converts mixed streaming evidence into an internal equivalent-usage score.
+ * Video consumption dominates. Ordinary authenticated portal visits have a
+ * deliberately small weight and can never masquerade as measured watch time.
  */
+export function calculateWeightedStreamingUsage(
+  signals: ManagedHostingUsageSignals,
+): number {
+  return Math.round(
+    nonNegative(signals.courseWatchMinutesMeasured) +
+      nonNegative(signals.liveAudienceMinutesMeasured) * 0.9 +
+      nonNegative(signals.liveAudienceMinutesEstimated) * 0.75 +
+      nonNegative(signals.protectedPlaybackViewsMeasured) * 8 +
+      nonNegative(signals.uniqueViewersMeasured) * 15 +
+      nonNegative(signals.estimatedStreamingActivityUnits) * 120 +
+      nonNegative(signals.portalVisits) * 0.3,
+  );
+}
+
+export function getStreamingActivityBand(
+  signals: ManagedHostingUsageSignals,
+): StreamingActivityBand {
+  return calculateWeightedStreamingUsage(signals) >= 10_000 ? "High" : "Low";
+}
+
+function usageRatio(equivalentUsage: number): number {
+  if (equivalentUsage <= 0) return 0;
+  if (equivalentUsage < 10_000) return 0.35 * (equivalentUsage / 10_000);
+  if (equivalentUsage < 50_000) {
+    return 0.35 + 0.35 * ((equivalentUsage - 10_000) / 40_000);
+  }
+  if (equivalentUsage < 150_000) {
+    return 0.7 + 0.3 * ((equivalentUsage - 50_000) / 100_000);
+  }
+  return 1;
+}
+
+/** Usage-derived managed-service amount before the calendar floor is applied. */
 export function calculateManagedHostingFee(input: {
   watchMinutes: number;
   policy: ManagedHostingPolicy;
+  usageSignals?: ManagedHostingUsageSignals;
 }): number {
   const policy = normalizeManagedHostingPolicy(input.policy);
   if (!policy.enabled) return 0;
-  const watchMinutes = Math.max(0, Math.floor(input.watchMinutes));
 
-  let ratio = 0;
-  if (watchMinutes >= 150_000) ratio = 1;
-  else if (watchMinutes >= 50_000) ratio = 0.7;
-  else if (watchMinutes >= 10_000) ratio = 0.35;
+  // Preserve the historical thresholds for existing callers that only supply
+  // watchMinutes. New callers can provide mixed usage signals for smooth daily
+  // usage sensitivity.
+  if (!input.usageSignals) {
+    const watchMinutes = Math.max(0, Math.floor(input.watchMinutes));
+    let ratio = 0;
+    if (watchMinutes >= 150_000) ratio = 1;
+    else if (watchMinutes >= 50_000) ratio = 0.7;
+    else if (watchMinutes >= 10_000) ratio = 0.35;
+    return roundUsd(policy.maximumMonthlyFeeUsd * ratio);
+  }
 
-  return roundUsd(policy.maximumMonthlyFeeUsd * ratio);
+  const equivalentUsage = calculateWeightedStreamingUsage(input.usageSignals);
+  return roundUsd(policy.maximumMonthlyFeeUsd * usageRatio(equivalentUsage));
 }
 
 export function calculateAccruedMonthlyMinimum(input: {
@@ -113,6 +171,7 @@ export function calculateManagedHostingAmountDue(input: {
   watchMinutes: number;
   policy: ManagedHostingPolicy;
   monthlyMinimumFloorUsd?: number | null;
+  usageSignals?: ManagedHostingUsageSignals;
   now?: Date;
 }): {
   usageDerivedFeeUsd: number;
@@ -133,6 +192,7 @@ export function calculateManagedHostingAmountDue(input: {
   const usageDerivedFeeUsd = calculateManagedHostingFee({
     watchMinutes: input.watchMinutes,
     policy,
+    usageSignals: input.usageSignals,
   });
   const accruedMinimumUsd = calculateAccruedMonthlyMinimum({
     policy,
@@ -153,6 +213,19 @@ export function calculateManagedHostingAmountDue(input: {
     accruedMinimumUsd,
     amountDueUsd: roundUsd(amountDueUsd),
   };
+}
+
+export function resolveManagedHostingPaymentWindow(now = new Date()): {
+  isOpen: boolean;
+  opensAt: Date;
+  openDay: number;
+} {
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth();
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const openDay = month === 1 ? lastDay : Math.min(30, lastDay);
+  const opensAt = new Date(Date.UTC(year, month, openDay, 0, 0, 0));
+  return { isOpen: now.getTime() >= opensAt.getTime(), opensAt, openDay };
 }
 
 export function getBillingMonthKey(now = new Date()): string {
