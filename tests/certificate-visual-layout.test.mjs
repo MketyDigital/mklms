@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -43,4 +44,15 @@ test('alignment and long-name fitting stay inside configured field', () => {
   });
   assert.ok(size < 30);
   assert.ok(size >= 12);
+});
+
+test('Starpips calibration is gated by the platform SPF identity and leaves explicit layouts untouched', () => {
+  const migration = readFileSync('db/migrations/018_certificate_visual_layout_and_starpips_calibration.sql', 'utf8');
+  assert.match(migration, /platform_settings/);
+  assert.match(migration, /settings\.certificate_prefix = 'SPF'/);
+  assert.match(migration, /template\.active = TRUE/);
+  assert.match(migration, /background_asset_id IS NOT NULL/);
+  assert.match(migration, /NOT \(COALESCE\(template\.layout_config_json/);
+  assert.match(migration, /"name": \{"xRatio": 0\.18, "yRatio": 0\.60/);
+  assert.match(migration, /"completionDate": \{"xRatio": 0\.08, "yRatio": 0\.81/);
 });
