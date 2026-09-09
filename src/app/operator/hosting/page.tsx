@@ -227,15 +227,15 @@ export default function OperatorHostingPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Today's Adjustment</CardTitle>
+          <CardTitle>Today’s Adjustment</CardTitle>
           <CardDescription>
-            Increase or correct today's hosting balance once. The automatic usage-sensitive calculation continues normally on following days; this adjustment is stored in the audit ledger and is not repeated automatically.
+            Increase or correct today’s hosting balance once. The automatic usage-sensitive calculation continues normally on following days; this adjustment is stored in the audit ledger and is not repeated automatically.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={saveDailyAdjustment}>
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="space-y-1 text-sm"><span>Today's adjustment (USD)</span><Input type="number" step="0.01" value={dailyAdjustment} onChange={(event) => setDailyAdjustment(Number(event.target.value))} /></label>
+              <label className="space-y-1 text-sm"><span>Today’s adjustment (USD)</span><Input type="number" step="0.01" value={dailyAdjustment} onChange={(event) => setDailyAdjustment(Number(event.target.value))} /></label>
               <div className="rounded-md border bg-muted/30 p-3 text-sm"><p className="text-xs text-muted-foreground">Adjustments this month</p><p className="mt-1 text-xl font-semibold">${monthAdjustmentTotal.toFixed(2)}</p></div>
             </div>
             <label className="block space-y-1 text-sm"><span>Reason</span><Input required minLength={3} value={dailyAdjustmentReason} onChange={(event) => setDailyAdjustmentReason(event.target.value)} placeholder="Reason for today's adjustment" /></label>
