@@ -31,10 +31,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
-      MKETY_DB_HOST: db.vdblajgxrfndjesoyayy.supabase.co
-      MKETY_DB_PORT: 5432
+      MKETY_MIGRATION_DB_HOST: aws-0-eu-west-1.pooler.supabase.com
+      MKETY_MIGRATION_DB_PORT: 5432
       MKETY_DB_NAME: postgres
-      MKETY_DB_USER: mkety_academy_app
+      MKETY_MIGRATION_DB_USER: mkety_academy_app.vdblajgxrfndjesoyayy
       MKETY_DB_PASSWORD: ${{ secrets.MKETY_DB_PASSWORD }}
       DATABASE_SSL: require
     steps:
@@ -60,12 +60,13 @@ jobs:
           node --input-type=module <<'NODE'
           import { appendFileSync } from 'node:fs';
           const url = new URL('postgresql://');
-          url.username = process.env.MKETY_DB_USER;
+          url.username = process.env.MKETY_MIGRATION_DB_USER;
           url.password = process.env.MKETY_DB_PASSWORD;
-          url.hostname = process.env.MKETY_DB_HOST;
-          url.port = process.env.MKETY_DB_PORT;
+          url.hostname = process.env.MKETY_MIGRATION_DB_HOST;
+          url.port = process.env.MKETY_MIGRATION_DB_PORT;
           url.pathname = `/${process.env.MKETY_DB_NAME}`;
           url.searchParams.set('sslmode', 'require');
+          url.searchParams.set('uselibpqcompat', 'true');
           appendFileSync(process.env.GITHUB_ENV, `DATABASE_URL=${url.toString()}\n`, { encoding: 'utf8' });
           NODE
 
