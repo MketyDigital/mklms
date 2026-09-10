@@ -4,8 +4,19 @@ import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
 import { PostgresCertificateRepository } from "@/features/certificates/repositories/postgres-certificate.repository";
 import { getConfiguredStorageProvider } from "@/providers/s3-compatible-storage-provider";
 
+function safeCertificateFilename(certificateId: string): string {
+  const safeId = certificateId.replace(/[^a-zA-Z0-9._-]+/g, "-");
+  return `certificate-${safeId || "issued"}.pdf`;
+}
+
+function copyToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
+
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ certificateId: string }> },
 ) {
   if (!(await hasValidAdminSession())) {
@@ -23,16 +34,28 @@ export async function GET(
 
   try {
     const storage = getConfiguredStorageProvider();
-    if (!storage.createReadAuthorization) {
+    if (!storage.getObject) {
       return NextResponse.json(
         { ok: false, message: "Certificate download is unavailable." },
         { status: 503 },
       );
     }
-    const authorization = await storage.createReadAuthorization(certificate.pdfAssetId, {
-      ttlSeconds: 120,
+
+    const stored = await storage.getObject(certificate.pdfAssetId);
+    const disposition =
+      new URL(request.url).searchParams.get("disposition") === "inline"
+        ? "inline"
+        : "attachment";
+
+    return new Response(copyToArrayBuffer(stored.bytes), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `${disposition}; filename="${safeCertificateFilename(certificate.certificateId)}"`,
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
     });
-    return NextResponse.redirect(authorization.url, { status: 307 });
   } catch {
     return NextResponse.json(
       { ok: false, message: "Certificate download is unavailable." },
