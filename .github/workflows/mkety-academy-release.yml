@@ -34,7 +34,8 @@ jobs:
       MKETY_MIGRATION_DB_HOST: aws-1-eu-west-1.pooler.supabase.com
       MKETY_MIGRATION_DB_PORT: 5432
       MKETY_DB_NAME: postgres
-      MKETY_MIGRATION_DB_USER: mkety_academy_app.vdblajgxrfndjesoyayy
+      MKETY_MIGRATION_DB_USER: mkety_academy_app
+      MKETY_MIGRATION_TENANT_REF: vdblajgxrfndjesoyayy
       MKETY_DB_PASSWORD: ${{ secrets.MKETY_DB_PASSWORD }}
       DATABASE_SSL: require
     steps:
@@ -67,6 +68,7 @@ jobs:
           url.pathname = `/${process.env.MKETY_DB_NAME}`;
           url.searchParams.set('sslmode', 'require');
           url.searchParams.set('uselibpqcompat', 'true');
+          url.searchParams.set('options', `--reference=${process.env.MKETY_MIGRATION_TENANT_REF}`);
           appendFileSync(process.env.GITHUB_ENV, `DATABASE_URL=${url.toString()}\n`, { encoding: 'utf8' });
           NODE
 
