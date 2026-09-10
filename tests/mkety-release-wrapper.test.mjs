@@ -19,7 +19,7 @@ test('Mkety production release migrates its own Supabase schema before applicati
   assert.match(source, /MKETY_DB_PASSWORD/);
   assert.match(source, /aws-0-eu-west-1\.pooler\.supabase\.com/);
   assert.match(source, /mkety_academy_app\.vdblajgxrfndjesoyayy/);
-  assert.match(source, /DATABASE_URL=\$\{url\.toString\(\)\}/);
+  assert.match(source, /uselibpqcompat/);
   assert.match(source, /npm run db:status/);
   assert.match(source, /npm run db:migrate/);
   assert.match(source, /needs:\s*migrate/);
