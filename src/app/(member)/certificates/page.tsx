@@ -91,7 +91,7 @@ export default async function CertificatesPage() {
                     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                       {active && certificate.pdfAssetId ? (
                         <Button size="sm" className="w-full sm:w-auto" asChild>
-                          <Link href={`/api/certificates/${certificate.id}/download`}>
+                          <Link href={`/api/certificates/${certificate.id}/download?disposition=attachment`}>
                             <Download className="mr-1.5 size-4" /> Download PDF
                           </Link>
                         </Button>
