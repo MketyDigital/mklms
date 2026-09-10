@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
-      MKETY_MIGRATION_DB_HOST: aws-0-eu-west-1.pooler.supabase.com
+      MKETY_MIGRATION_DB_HOST: aws-1-eu-west-1.pooler.supabase.com
       MKETY_MIGRATION_DB_PORT: 5432
       MKETY_DB_NAME: postgres
       MKETY_MIGRATION_DB_USER: mkety_academy_app.vdblajgxrfndjesoyayy
