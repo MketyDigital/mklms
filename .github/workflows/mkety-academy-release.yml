@@ -26,61 +26,12 @@ jobs:
       R2_DIRECT_UPLOAD_ACCESS_KEY_ID: ${{ secrets.MKETY_R2_DIRECT_UPLOAD_ACCESS_KEY_ID }}
       R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY: ${{ secrets.MKETY_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY }}
 
-  migrate:
-    if: github.ref_name == 'production/mkety-academy'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    env:
-      MKETY_MIGRATION_DB_HOST: aws-1-eu-west-1.pooler.supabase.com
-      MKETY_MIGRATION_DB_PORT: 5432
-      MKETY_DB_NAME: postgres
-      MKETY_MIGRATION_DB_USER: mkety_academy_app
-      MKETY_MIGRATION_TENANT_REF: vdblajgxrfndjesoyayy
-      MKETY_DB_PASSWORD: ${{ secrets.MKETY_DB_PASSWORD }}
-      DATABASE_SSL: require
-    steps:
-      - name: Checkout exact Mkety production release
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
-
-      - name: Verify Mkety database credential and construct connection URL
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "${MKETY_DB_PASSWORD:-}" || { echo "Missing repository secret MKETY_DB_PASSWORD"; exit 1; }
-          node --input-type=module <<'NODE'
-          import { appendFileSync } from 'node:fs';
-          const url = new URL('postgresql://');
-          url.username = process.env.MKETY_MIGRATION_DB_USER;
-          url.password = process.env.MKETY_DB_PASSWORD;
-          url.hostname = process.env.MKETY_MIGRATION_DB_HOST;
-          url.port = process.env.MKETY_MIGRATION_DB_PORT;
-          url.pathname = `/${process.env.MKETY_DB_NAME}`;
-          url.searchParams.set('sslmode', 'require');
-          url.searchParams.set('uselibpqcompat', 'true');
-          url.searchParams.set('options', `--reference=${process.env.MKETY_MIGRATION_TENANT_REF}`);
-          appendFileSync(process.env.GITHUB_ENV, `DATABASE_URL=${url.toString()}\n`, { encoding: 'utf8' });
-          NODE
-
-      - name: Apply only pending checksum-verified MkLMS migrations
-        run: npm run db:migrate
-
-      - name: Verify Mkety database is current
-        run: npm run db:status
-
+  # Mkety Academy's isolated database schema is pre-migrated and audited through Supabase
+  # before the production pointer is moved. GitHub-hosted runners do not mutate this
+  # database because the direct endpoint is IPv6-only and shared-pooler routing for the
+  # isolated custom role is not a reliable release dependency.
   production:
     if: github.ref_name == 'production/mkety-academy'
-    needs: migrate
     uses: ./.github/workflows/deploy-installation-production.yml
     with:
       installation_id: mkety-academy

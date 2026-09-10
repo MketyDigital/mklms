@@ -14,19 +14,13 @@ test('Mkety compatibility wrapper delegates to generic isolated preview and prod
   assert.doesNotMatch(source, /production\/starpips|learn\.starpipsforex\.com|spf-media/);
 });
 
-test('Mkety production release migrates its own Supabase schema before application deployment', () => {
+test('Mkety production release treats the isolated Supabase schema as pre-migrated and does not mutate it from GitHub-hosted runners', () => {
   const source = readFileSync('.github/workflows/mkety-academy-release.yml', 'utf8');
-  assert.match(source, /MKETY_DB_PASSWORD/);
-  assert.match(source, /pooler\.supabase\.com/);
-  assert.match(source, /MKETY_MIGRATION_DB_USER:\s*mkety_academy_app/);
-  assert.doesNotMatch(source, /MKETY_MIGRATION_DB_USER:\s*mkety_academy_app\.vdblajgxrfndjesoyayy/);
-  assert.match(source, /MKETY_MIGRATION_TENANT_REF:\s*vdblajgxrfndjesoyayy/);
-  assert.match(source, /url\.searchParams\.set\('options', `--reference=\$\{process\.env\.MKETY_MIGRATION_TENANT_REF\}`\)/);
-  assert.match(source, /DATABASE_URL=\$\{url\.toString\(\)\}/);
-  assert.match(source, /uselibpqcompat/);
-  assert.match(source, /npm run db:status/);
-  assert.match(source, /npm run db:migrate/);
-  assert.match(source, /needs:\s*migrate/);
+  assert.match(source, /pre-migrated and audited through Supabase/i);
+  assert.doesNotMatch(source, /npm run db:migrate|npm run db:status/);
+  assert.doesNotMatch(source, /pooler\.supabase\.com|MKETY_MIGRATION_DB_|MKETY_DB_PASSWORD/);
+  assert.doesNotMatch(source, /needs:\s*migrate/);
+  assert.match(source, /release_sha:\s*\$\{\{ github\.sha \}\}/);
 });
 
 test('Mkety production alone wires the managed-hosting operator key into the application Worker', () => {
