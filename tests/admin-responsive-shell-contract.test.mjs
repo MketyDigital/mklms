@@ -36,5 +36,6 @@ test('admin can view and download issued certificates without losing existing ac
   assert.match(manager, /Revoke/);
   assert.match(route, /hasValidAdminSession/);
   assert.match(route, /findListItemById/);
-  assert.match(route, /createReadAuthorization/);
+  assert.match(route, /storage\.getObject\(certificate\.pdfAssetId\)/);
+  assert.match(route, /Content-Disposition/);
 });
