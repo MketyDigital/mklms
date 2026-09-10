@@ -122,7 +122,7 @@ export function AdminCertificateManager({
                   <>
                     <Button size="sm" variant="outline" asChild className="w-full sm:w-auto">
                       <a
-                        href={`/api/admin/certificates/${certificate.id}/download`}
+                        href={`/api/admin/certificates/${certificate.id}/download?disposition=inline`}
                         target="_blank"
                         rel="noreferrer"
                       >
@@ -130,7 +130,7 @@ export function AdminCertificateManager({
                       </a>
                     </Button>
                     <Button size="sm" variant="outline" asChild className="w-full sm:w-auto">
-                      <a href={`/api/admin/certificates/${certificate.id}/download`} download>
+                      <a href={`/api/admin/certificates/${certificate.id}/download?disposition=attachment`}>
                         <Download className="mr-1.5 size-4" /> Download PDF
                       </a>
                     </Button>
