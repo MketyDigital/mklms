@@ -17,8 +17,9 @@ test('Mkety compatibility wrapper delegates to generic isolated preview and prod
 test('Mkety production release migrates its own Supabase schema before application deployment', () => {
   const source = readFileSync('.github/workflows/mkety-academy-release.yml', 'utf8');
   assert.match(source, /MKETY_DB_PASSWORD/);
-  assert.match(source, /db\.vdblajgxrfndjesoyayy\.supabase\.co/);
-  assert.match(source, /mkety_academy_app/);
+  assert.match(source, /aws-0-eu-west-1\.pooler\.supabase\.com/);
+  assert.match(source, /mkety_academy_app\.vdblajgxrfndjesoyayy/);
+  assert.match(source, /DATABASE_URL=\$\{url\.toString\(\)\}/);
   assert.match(source, /npm run db:status/);
   assert.match(source, /npm run db:migrate/);
   assert.match(source, /needs:\s*migrate/);
