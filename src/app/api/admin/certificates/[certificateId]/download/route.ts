@@ -9,6 +9,12 @@ function safeCertificateFilename(certificateId: string): string {
   return `certificate-${safeId || "issued"}.pdf`;
 }
 
+function copyToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
+
 export async function GET(
   request: Request,
   context: { params: Promise<{ certificateId: string }> },
@@ -28,13 +34,20 @@ export async function GET(
 
   try {
     const storage = getConfiguredStorageProvider();
+    if (!storage.getObject) {
+      return NextResponse.json(
+        { ok: false, message: "Certificate download is unavailable." },
+        { status: 503 },
+      );
+    }
+
     const stored = await storage.getObject(certificate.pdfAssetId);
     const disposition =
       new URL(request.url).searchParams.get("disposition") === "inline"
         ? "inline"
         : "attachment";
 
-    return new Response(stored.bytes, {
+    return new Response(copyToArrayBuffer(stored.bytes), {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
