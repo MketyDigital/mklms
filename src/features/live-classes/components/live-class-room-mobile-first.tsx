@@ -77,6 +77,7 @@ const LIVE_CHAT_INITIAL_CONTEXT = 10;
 const LIVE_CHAT_MAX_RENDERED = 80;
 const LIVE_CHAT_BOTTOM_THRESHOLD_PX = 48;
 const LIVE_STALL_RECOVERY_MS = 8_000;
+const LIVE_AUTHORIZATION_RETRY_MS = 2_000;
 
 type DirectSlot = 0 | 1;
 
@@ -152,6 +153,7 @@ export function LiveClassRoomMobileFirst({
   const serverClockOffsetMsRef = useRef(0);
   const mutedRef = useRef(true);
   const stallRecoveryTimerRef = useRef<number | null>(null);
+  const authorizationRetryTimerRef = useRef<number | null>(null);
   const previousStorageKeyRef = useRef<string | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const seenStagedMessageIdsRef = useRef<Set<string>>(new Set());
@@ -249,7 +251,13 @@ export function LiveClassRoomMobileFirst({
     }
   }, [clearStallRecovery]);
 
-  useEffect(() => () => clearStallRecovery(), [clearStallRecovery]);
+  useEffect(() => () => {
+    clearStallRecovery();
+    if (authorizationRetryTimerRef.current !== null) {
+      window.clearTimeout(authorizationRetryTimerRef.current);
+      authorizationRetryTimerRef.current = null;
+    }
+  }, [clearStallRecovery]);
 
   useEffect(() => {
     const previousKey = previousStorageKeyRef.current;
@@ -760,8 +768,14 @@ export function LiveClassRoomMobileFirst({
         } catch {
           // This is a hidden/preloading replacement. It must never change the
           // active player's mute/gesture UI while the current broadcast is still
-          // healthy and audible. Keep the current slot untouched; the normal
-          // authorization refresh cycle will retry with a fresh signed URL.
+          // healthy and audible. Keep the current slot untouched and retry a
+          // fresh authorization shortly instead of surfacing a false audio prompt.
+          if (authorizationRetryTimerRef.current === null) {
+            authorizationRetryTimerRef.current = window.setTimeout(() => {
+              authorizationRetryTimerRef.current = null;
+              void requestPlayback().catch(() => undefined);
+            }, LIVE_AUTHORIZATION_RETRY_MS);
+          }
           return;
         }
         if (generation !== directSwapGenerationRef.current) return;
@@ -804,6 +818,10 @@ export function LiveClassRoomMobileFirst({
         loadedMediaTypeRef.current = authorization.playbackType;
         loadedAuthorizationUrlRef.current = authorization.url;
         forceLiveEdgeOnNextAuthorizationRef.current = false;
+        if (authorizationRetryTimerRef.current !== null) {
+          window.clearTimeout(authorizationRetryTimerRef.current);
+          authorizationRetryTimerRef.current = null;
+        }
       };
 
       targetVideo.addEventListener("loadedmetadata", () => void promote(), { once: true });
@@ -970,7 +988,15 @@ export function LiveClassRoomMobileFirst({
         return;
       }
       forceLiveEdgeOnNextAuthorizationRef.current = true;
-      void requestPlayback().catch(() => setNeedsPlaybackGesture(true));
+      void requestPlayback().catch(() => {
+        const activeVideo = currentAudioVideo();
+        if (
+          activeVideo === video &&
+          (video.paused || video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA)
+        ) {
+          setNeedsPlaybackGesture(true);
+        }
+      });
     }, LIVE_STALL_RECOVERY_MS);
   }, [clearStallRecovery, currentAudioVideo, requestPlayback]);
 
