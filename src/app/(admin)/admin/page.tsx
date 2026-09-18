@@ -50,32 +50,32 @@ async function getAdminHostingNotice(): Promise<AdminHostingNotice | null> {
       serviceAccess.status === "RESTRICTED"
     ) {
       const amount = serviceAccess.amountDueUsd != null
-        ? \` $\${serviceAccess.amountDueUsd.toFixed(2)}\`
+        ? ` $${serviceAccess.amountDueUsd.toFixed(2)}`
         : "";
       if (serviceAccess.status === "RESTRICTED") {
         return {
           tone: "restricted",
           title: "Hosting payment requires attention",
-          message: \`The hosting payment\${amount} is still unpaid after the grace period. Open Hosting & Billing to complete payment.\`,
+          message: `The hosting payment${amount} is still unpaid after the grace period. Open Hosting & Billing to complete payment.`,
         };
       }
       if (serviceAccess.status === "OVERDUE") {
         const grace = serviceAccess.graceEndsAt
-          ? \` Grace ends \${serviceAccess.graceEndsAt.toLocaleDateString("en-US", { timeZone: "UTC" })}.\`
+          ? ` Grace ends ${serviceAccess.graceEndsAt.toLocaleDateString("en-US", { timeZone: "UTC" })}.`
           : "";
         return {
           tone: "overdue",
           title: "Hosting payment is overdue",
-          message: \`The hosting payment\${amount} has not been received.\${grace} Pay from Hosting & Billing before the grace period ends.\`,
+          message: `The hosting payment${amount} has not been received.${grace} Pay from Hosting & Billing before the grace period ends.`,
         };
       }
       const due = serviceAccess.dueAt
-        ? \` by \${serviceAccess.dueAt.toLocaleDateString("en-US", { timeZone: "UTC" })}\`
+        ? ` by ${serviceAccess.dueAt.toLocaleDateString("en-US", { timeZone: "UTC" })}`
         : "";
       return {
         tone: "due",
         title: "Hosting payment is due",
-        message: \`The hosting payment\${amount} is due\${due}. Open Hosting & Billing to complete payment.\`,
+        message: `The hosting payment${amount} is due${due}. Open Hosting & Billing to complete payment.`,
       };
     }
 
@@ -155,13 +155,13 @@ export default async function AdminHomePage() {
         {hostingNotice ? (
           <Link
             href="/admin/hosting"
-            className={\`mt-6 flex items-start gap-3 rounded-xl border p-4 transition hover:bg-muted/30 \${
+            className={`mt-6 flex items-start gap-3 rounded-xl border p-4 transition hover:bg-muted/30 ${
               hostingNotice.tone === "restricted"
                 ? "border-destructive/50 bg-destructive/10"
                 : hostingNotice.tone === "overdue"
                   ? "border-amber-500/50 bg-amber-500/10"
                   : "border-primary/40 bg-primary/5"
-            }\`}
+            }`}
           >
             {hostingNotice.tone === "due" ? (
               <CalendarClock className="mt-0.5 size-5 shrink-0" />
