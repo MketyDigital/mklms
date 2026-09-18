@@ -48,7 +48,19 @@ test('NOWPayments payload sorting is deep and stable for IPN verification', asyn
 
 test('billing order ids are validated and reversible', () => {
   const id = createOrderId('spf-mklms', '2026-09', 'abc12345');
-  assert.deepEqual(parseOrderId(id), { installationId: 'spf-mklms', monthKey: '2026-09', nonce: 'abc12345' });
+  assert.deepEqual(parseOrderId(id), {
+    installationId: 'spf-mklms',
+    monthKey: '2026-09',
+    nonce: 'abc12345',
+    reference: null,
+  });
+  const referenced = createOrderId('spf-mklms', '2026-09', 'abc12345', 'checkout_12345678');
+  assert.deepEqual(parseOrderId(referenced), {
+    installationId: 'spf-mklms',
+    monthKey: '2026-09',
+    nonce: 'abc12345',
+    reference: 'checkout_12345678',
+  });
   assert.equal(parseOrderId('bad|order'), null);
 });
 
@@ -60,6 +72,7 @@ test('signed invoice request calls NOWPayments with legacy API key and returns i
     amountUsd: 25,
     timestamp: now,
     nonce: 'abc12345',
+    reference: 'checkout_12345678',
   };
   const signature = await signHmacHex('sha256', customers['spf-mklms'].sharedSecret, canonicalCheckoutPayload(body));
   const calls = [];
@@ -80,7 +93,7 @@ test('signed invoice request calls NOWPayments with legacy API key and returns i
 });
 
 test('IPN fails closed without signature and only finished triggers settlement', async () => {
-  const orderId = createOrderId('spf-mklms', '2026-09', 'abc12345');
+  const orderId = createOrderId('spf-mklms', '2026-09', 'abc12345', 'checkout_12345678');
   const payload = {
     order_id: orderId,
     payment_id: 12345,
@@ -105,6 +118,7 @@ test('IPN fails closed without signature and only finished triggers settlement',
   assert.equal(finished.status, 200);
   assert.equal(calls.length, 1);
   assert.equal(calls[0][0], customers['spf-mklms'].settlementUrl);
+  assert.equal(JSON.parse(calls[0][1].body).billingReference, 'checkout_12345678');
 
   const confirmedPayload = { ...payload, payment_status: 'confirmed' };
   const confirmedSig = await signHmacHex('sha512', env.NOWPAYMENTS_IPN_SECRET, JSON.stringify(sortObjectDeep(confirmedPayload)));
