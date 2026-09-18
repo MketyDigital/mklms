@@ -459,6 +459,7 @@ export function LiveClassRoomMobileFirst({
         forceLiveEdgeOnNextAuthorizationRef.current = true;
         void requestPlayback().catch(() => {
           if (
+            video &&
             video === currentAudioVideo() &&
             (video.paused || video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA)
           ) {
@@ -1037,7 +1038,15 @@ export function LiveClassRoomMobileFirst({
       void keepPlaybackRunning(video, { preferAudio: false }).then((playing) => {
         if (playing) return;
         forceLiveEdgeOnNextAuthorizationRef.current = true;
-        void requestPlayback().catch(() => setNeedsPlaybackGesture(true));
+        void requestPlayback().catch(() => {
+          if (
+            video === currentAudioVideo() &&
+            (video.paused || video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA)
+          ) {
+            setActivePlaybackBlocked(true);
+            setNeedsPlaybackGesture(true);
+          }
+        });
       });
     }
   };
