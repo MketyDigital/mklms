@@ -14,7 +14,7 @@ test('live player renews authorization without jumping an active viewer backward
   assert.match(source, /currentVideo\.currentTime - targetVideo\.currentTime > 0\.75/);
   assert.match(source, /preservedPosition/);
   assert.match(source, /video\.currentTime\s*<\s*target/);
-  assert.match(source, /const recoveringPausedPlayback = needsPlaybackGesture \|\| video\.paused/);
+  assert.match(source, /const recoveringPausedPlayback =[\s\S]*video\.paused \|\| video\.readyState < HTMLMediaElement\.HAVE_FUTURE_DATA/);
   assert.match(source, /if \(recoveringPausedPlayback\)[\s\S]*correctPosition\(video\)/);
 });
 
@@ -49,6 +49,8 @@ test('mobile audio tap unmutes in the user gesture without seeking a player that
   assert.match(resume, /video\.muted = false/);
   assert.match(resume, /await video\.play\(\)/);
   assert.match(resume, /recoveringPausedPlayback/);
+  assert.match(resume, /video\.paused \|\| video\.readyState < HTMLMediaElement\.HAVE_FUTURE_DATA/);
+  assert.doesNotMatch(resume, /needsPlaybackGesture \|\| video\.paused/);
   assert.doesNotMatch(resume, /correctPosition\(video\);[\s\S]*const recoveringPausedPlayback/);
 });
 
