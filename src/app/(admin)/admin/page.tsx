@@ -1,7 +1,9 @@
 import Link from "next/link";
 import {
+  AlertTriangle,
   Award,
   BookOpen,
+  CalendarClock,
   Film,
   KeyRound,
   MessageCircle,
@@ -15,11 +17,86 @@ import { PostgresAdminAccessRepository } from "@/features/access/repositories/po
 import { PostgresCertificateRepository } from "@/features/certificates/repositories/postgres-certificate.repository";
 import { PostgresAdminLearningRepository } from "@/features/courses/repositories/postgres-admin-learning.repository";
 import { PostgresAdminLiveClassRepository } from "@/features/live-classes/repositories/postgres-admin-live-class.repository";
+import {
+  getBillingMonthKey,
+  resolveManagedHostingPaymentWindow,
+} from "@/features/hosting/domain/managed-hosting";
+import { PostgresManagedHostingRepository } from "@/features/hosting/repositories/postgres-managed-hosting.repository";
+import { getManagedHostingServiceAccess } from "@/features/hosting/server/managed-hosting-access";
+import { getEffectiveManagedHostingPolicy } from "@/features/hosting/server/managed-hosting-policy";
 import { PostgresAdminMediaRepository } from "@/features/media/repositories/postgres-admin-media.repository";
 import { PostgresMessageRepository } from "@/features/messages/repositories/postgres-message.repository";
 import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
 
 export const dynamic = "force-dynamic";
+
+type AdminHostingNotice = {
+  tone: "due" | "overdue" | "restricted";
+  title: string;
+  message: string;
+};
+
+async function getAdminHostingNotice(): Promise<AdminHostingNotice | null> {
+  try {
+    const repository = new PostgresManagedHostingRepository();
+    const now = new Date();
+    const effective = await getEffectiveManagedHostingPolicy(repository);
+    if (!effective.policy.enabled) return null;
+
+    const serviceAccess = await getManagedHostingServiceAccess(repository, now);
+    if (
+      serviceAccess.status === "DUE" ||
+      serviceAccess.status === "OVERDUE" ||
+      serviceAccess.status === "RESTRICTED"
+    ) {
+      const amount = serviceAccess.amountDueUsd != null
+        ? \` $\${serviceAccess.amountDueUsd.toFixed(2)}\`
+        : "";
+      if (serviceAccess.status === "RESTRICTED") {
+        return {
+          tone: "restricted",
+          title: "Hosting payment requires attention",
+          message: \`The hosting payment\${amount} is still unpaid after the grace period. Open Hosting & Billing to complete payment.\`,
+        };
+      }
+      if (serviceAccess.status === "OVERDUE") {
+        const grace = serviceAccess.graceEndsAt
+          ? \` Grace ends \${serviceAccess.graceEndsAt.toLocaleDateString("en-US", { timeZone: "UTC" })}.\`
+          : "";
+        return {
+          tone: "overdue",
+          title: "Hosting payment is overdue",
+          message: \`The hosting payment\${amount} has not been received.\${grace} Pay from Hosting & Billing before the grace period ends.\`,
+        };
+      }
+      const due = serviceAccess.dueAt
+        ? \` by \${serviceAccess.dueAt.toLocaleDateString("en-US", { timeZone: "UTC" })}\`
+        : "";
+      return {
+        tone: "due",
+        title: "Hosting payment is due",
+        message: \`The hosting payment\${amount} is due\${due}. Open Hosting & Billing to complete payment.\`,
+      };
+    }
+
+    const paymentWindow = resolveManagedHostingPaymentWindow(now);
+    if (!paymentWindow.isOpen) return null;
+
+    const usage = await repository.getCurrentMonthUsage();
+    const monthOverride = await repository.getMonthOverride(getBillingMonthKey(usage.monthStart));
+    if (monthOverride?.paymentStatus === "PAID" || monthOverride?.paymentStatus === "WAIVED") {
+      return null;
+    }
+
+    return {
+      tone: "due",
+      title: "Hosting payment is now due",
+      message: "This month’s hosting payment window is open. Open Hosting & Billing to review the balance and complete payment.",
+    };
+  } catch {
+    return null;
+  }
+}
 
 export default async function AdminHomePage() {
   const access = new PostgresAdminAccessRepository();
@@ -30,7 +107,7 @@ export default async function AdminHomePage() {
   const messages = new PostgresMessageRepository();
   const settingsRepository = new PostgresSettingsRepository();
 
-  const [students, preauthorizations, courses, assets, certificateRows, liveBatches, threads, settings] = await Promise.all([
+  const [students, preauthorizations, courses, assets, certificateRows, liveBatches, threads, settings, hostingNotice] = await Promise.all([
     access.listStudents(),
     access.listPreauthorizations(),
     learning.listCourses(),
@@ -39,6 +116,7 @@ export default async function AdminHomePage() {
     live.listBatches(),
     messages.listThreads(),
     settingsRepository.getPlatformSettings(),
+    getAdminHostingNotice(),
   ]);
 
   const unreadMessages = threads.filter((thread) => thread.unread).length;
@@ -73,6 +151,29 @@ export default async function AdminHomePage() {
             Operate student access, courses, media, certificates, messaging and live classes from one place.
           </p>
         </div>
+
+        {hostingNotice ? (
+          <Link
+            href="/admin/hosting"
+            className={\`mt-6 flex items-start gap-3 rounded-xl border p-4 transition hover:bg-muted/30 \${
+              hostingNotice.tone === "restricted"
+                ? "border-destructive/50 bg-destructive/10"
+                : hostingNotice.tone === "overdue"
+                  ? "border-amber-500/50 bg-amber-500/10"
+                  : "border-primary/40 bg-primary/5"
+            }\`}
+          >
+            {hostingNotice.tone === "due" ? (
+              <CalendarClock className="mt-0.5 size-5 shrink-0" />
+            ) : (
+              <AlertTriangle className="mt-0.5 size-5 shrink-0" />
+            )}
+            <div className="min-w-0">
+              <p className="font-semibold">{hostingNotice.title}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{hostingNotice.message}</p>
+            </div>
+          </Link>
+        ) : null}
 
         <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {cards.map((card) => (
