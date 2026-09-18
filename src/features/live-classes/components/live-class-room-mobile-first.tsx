@@ -81,21 +81,36 @@ const LIVE_STALL_RECOVERY_MS = 8_000;
 const LIVE_SILENT_FREEZE_RECOVERY_MS = 10_000;
 const LIVE_PROGRESS_SAMPLE_MS = 2_500;
 const LIVE_AUTHORIZATION_RETRY_MS = 2_000;
+const LIVE_FRAME_READY_TIMEOUT_MS = 5_000;
 
 type DirectSlot = 0 | 1;
 
-function waitForRenderableFrame(video: HTMLVideoElement): Promise<void> {
+function waitForRenderableFrame(video: HTMLVideoElement): Promise<boolean> {
   return new Promise((resolve) => {
-    const afterPaint = () => window.requestAnimationFrame(() => resolve());
+    let settled = false;
+    const onLoadedData = () => afterPaint();
+    const finish = (ready: boolean) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      video.removeEventListener("loadeddata", onLoadedData);
+      resolve(ready);
+    };
+    const afterPaint = () => window.requestAnimationFrame(() => finish(true));
+    const timeout = window.setTimeout(
+      () => finish(false),
+      LIVE_FRAME_READY_TIMEOUT_MS,
+    );
+
     if (typeof video.requestVideoFrameCallback === "function") {
-      video.requestVideoFrameCallback(() => resolve());
+      video.requestVideoFrameCallback(() => finish(true));
       return;
     }
     if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
       afterPaint();
       return;
     }
-    video.addEventListener("loadeddata", afterPaint, { once: true });
+    video.addEventListener("loadeddata", onLoadedData, { once: true });
   });
 }
 
@@ -862,8 +877,27 @@ export function LiveClassRoomMobileFirst({
           return;
         }
         if (generation !== directSwapGenerationRef.current) return;
-        await waitForRenderableFrame(targetVideo);
+        const frameReady = await waitForRenderableFrame(targetVideo);
         if (generation !== directSwapGenerationRef.current) return;
+        if (!frameReady) {
+          if (
+            currentVideo &&
+            currentVideo === currentAudioVideo() &&
+            (currentVideo.paused ||
+              currentVideo.readyState < HTMLMediaElement.HAVE_FUTURE_DATA)
+          ) {
+            setActivePlaybackBlocked(true);
+            setNeedsPlaybackGesture(true);
+          }
+          if (authorizationRetryTimerRef.current === null) {
+            authorizationRetryTimerRef.current = window.setTimeout(() => {
+              authorizationRetryTimerRef.current = null;
+              forceLiveEdgeOnNextAuthorizationRef.current = true;
+              void requestPlayback().catch(() => undefined);
+            }, LIVE_AUTHORIZATION_RETRY_MS);
+          }
+          return;
+        }
 
         if (
           sameLoadedMedia &&
@@ -871,8 +905,18 @@ export function LiveClassRoomMobileFirst({
           currentVideo.currentTime - targetVideo.currentTime > 0.75
         ) {
           targetVideo.currentTime = currentVideo.currentTime;
-          await waitForRenderableFrame(targetVideo);
+          const realignedFrameReady = await waitForRenderableFrame(targetVideo);
           if (generation !== directSwapGenerationRef.current) return;
+          if (!realignedFrameReady) {
+            if (authorizationRetryTimerRef.current === null) {
+              authorizationRetryTimerRef.current = window.setTimeout(() => {
+                authorizationRetryTimerRef.current = null;
+                forceLiveEdgeOnNextAuthorizationRef.current = true;
+                void requestPlayback().catch(() => undefined);
+              }, LIVE_AUTHORIZATION_RETRY_MS);
+            }
+            return;
+          }
         }
 
         // The replacement stays muted for the entire hidden preload so it can
