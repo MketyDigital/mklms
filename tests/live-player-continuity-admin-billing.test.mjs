@@ -131,6 +131,7 @@ test('returning to a healthy visible live player does not mute or rebuild it unn
   assert.match(refresh, /let needsRecovery =/);
   assert.match(refresh, /video\.paused/);
   assert.match(refresh, /video\.readyState < HTMLMediaElement\.HAVE_FUTURE_DATA/);
+  assert.match(refresh, /video\.currentTime < expectedSeconds/);
   assert.match(refresh, /shouldCorrectBroadcastPosition/);
   assert.match(refresh, /if \(!needsRecovery\)[\s\S]*forceLiveEdgeOnNextAuthorizationRef\.current = false[\s\S]*setActivePlaybackBlocked\(false\)[\s\S]*return/);
   assert.doesNotMatch(refresh, /setMuted\(true\)/);
