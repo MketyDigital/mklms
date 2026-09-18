@@ -64,16 +64,19 @@ export interface CheckoutSignatureInput {
   amountUsd: number;
   timestamp: number;
   nonce: string;
+  reference?: string;
 }
 
 export function canonicalCheckoutPayload(input: CheckoutSignatureInput): string {
-  return [
+  const parts = [
     input.installationId,
     input.monthKey,
     Number(input.amountUsd).toFixed(2),
     String(Math.trunc(input.timestamp)),
     input.nonce,
-  ].join("|");
+  ];
+  if (input.reference) parts.push(input.reference);
+  return parts.join("|");
 }
 
 export function canonicalSettlementPayload(input: Record<string, unknown>): string {
