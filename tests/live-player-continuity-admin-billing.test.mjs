@@ -186,6 +186,18 @@ test('audio overlay is defensively tied to explicit active playback health state
   assert.doesNotMatch(source, /const activeMedia = currentAudioVideo\(\)/);
 });
 
+test('hidden DIRECT recovery frame waits are bounded so a decoder cannot hang recovery forever', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+
+  assert.match(source, /LIVE_FRAME_READY_TIMEOUT_MS = 5_000/);
+  assert.match(source, /function waitForRenderableFrame\(video: HTMLVideoElement\): Promise<boolean>/);
+  assert.match(source, /window\.setTimeout\([\s\S]*finish\(false\)[\s\S]*LIVE_FRAME_READY_TIMEOUT_MS/);
+  assert.match(source, /const frameReady = await waitForRenderableFrame\(targetVideo\)/);
+  assert.match(source, /if \(!frameReady\)[\s\S]*forceLiveEdgeOnNextAuthorizationRef\.current = true[\s\S]*requestPlayback\(\)/);
+  assert.match(source, /const realignedFrameReady = await waitForRenderableFrame\(targetVideo\)/);
+  assert.match(source, /if \(!realignedFrameReady\)[\s\S]*requestPlayback\(\)/);
+});
+
 test('silent visible mobile freezes are detected even when the browser emits no waiting or stalled event', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
 
