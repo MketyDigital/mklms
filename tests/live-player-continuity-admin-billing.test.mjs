@@ -71,14 +71,46 @@ test('unexpected visible mobile pauses recover automatically in muted autoplay-s
   assert.match(source, /if \(playing\) return;[\s\S]*forceLiveEdgeOnNextAuthorizationRef\.current = true/);
 });
 
-test('mobile autoplay fallback keeps the live picture running if audible restart is rejected', () => {
+test('mobile autoplay fallback keeps the active live picture running if audible restart is rejected', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
 
   assert.match(source, /const keepPlaybackRunning = useCallback/);
   assert.match(source, /video\.muted = false;[\s\S]*await video\.play\(\)/);
   assert.match(source, /mutedRef\.current = true;[\s\S]*video\.muted = true;[\s\S]*await video\.play\(\)/);
-  assert.match(source, /const targetPlaying = await keepPlaybackRunning\(targetVideo\)/);
   assert.match(source, /void keepPlaybackRunning\(video\)\.then/);
+  assert.doesNotMatch(source, /keepPlaybackRunning\(targetVideo\)/);
+});
+
+test('hidden DIRECT authorization refresh cannot raise the active audio prompt or emit duplicate audio', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+  const directStart = source.indexOf('if (authorization.playbackType === "DIRECT")');
+  const hlsStart = source.indexOf('const video = hlsVideoRef.current', directStart);
+  const direct = source.slice(directStart, hlsStart);
+
+  assert.ok(directStart >= 0 && hlsStart > directStart, 'DIRECT handoff block must be present');
+  assert.match(direct, /targetVideo\.muted = true/);
+  assert.match(direct, /await targetVideo\.play\(\)/);
+  assert.match(direct, /LIVE_AUTHORIZATION_RETRY_MS/);
+  assert.match(direct, /const shouldStayMuted = mutedRef\.current/);
+  assert.match(direct, /setDirectSlot\(targetSlot\);[\s\S]*targetVideo\.muted = shouldStayMuted/);
+  assert.doesNotMatch(direct, /keepPlaybackRunning\(targetVideo\)/);
+
+  const preloadCatch = direct.slice(
+    direct.indexOf('try {\n          await targetVideo.play()'),
+    direct.indexOf('if (generation !== directSwapGenerationRef.current) return;', direct.indexOf('try {\n          await targetVideo.play()')),
+  );
+  assert.doesNotMatch(preloadCatch, /setNeedsPlaybackGesture\(true\)/);
+  assert.doesNotMatch(preloadCatch, /setMuted\(true\)/);
+});
+
+test('audio overlay is defensively tied to actual active media health', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+
+  assert.match(source, /shouldShowLiveAudioPrompt/);
+  assert.match(source, /hasActiveMedia: Boolean\(activeMedia\)/);
+  assert.match(source, /activeMediaPaused: activeMedia\?\.paused \?\? true/);
+  assert.match(source, /activeMediaReadyState: activeMedia\?\.readyState \?\? 0/);
+  assert.match(source, /\{showAudioPrompt \? \(/);
 });
 
 test('persistent waiting or stalled media recovers only after a guarded timeout and cancels on playing', () => {
