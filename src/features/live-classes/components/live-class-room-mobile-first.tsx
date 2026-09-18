@@ -1034,7 +1034,8 @@ export function LiveClassRoomMobileFirst({
       return;
     }
 
-    const recoveringPausedPlayback = needsPlaybackGesture || video.paused;
+    const recoveringPausedPlayback =
+      video.paused || video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA;
     mutedRef.current = false;
     setMuted(false);
     video.muted = false;
