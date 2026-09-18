@@ -892,7 +892,10 @@ export function LiveClassRoomMobileFirst({
   };
 
   const scheduleStallRecovery = useCallback((video: HTMLVideoElement) => {
-    if (video !== currentAudioVideo()) return;
+    if (
+      video !== currentAudioVideo() ||
+      loadedMediaSessionRef.current !== playbackRef.current?.sessionId
+    ) return;
     clearStallRecovery();
     stallRecoveryTimerRef.current = window.setTimeout(() => {
       stallRecoveryTimerRef.current = null;
