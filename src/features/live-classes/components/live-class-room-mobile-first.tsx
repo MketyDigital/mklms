@@ -216,6 +216,39 @@ export function LiveClassRoomMobileFirst({
     stallRecoveryTimerRef.current = null;
   }, []);
 
+  const keepPlaybackRunning = useCallback(async (
+    video: HTMLVideoElement,
+    options?: { preferAudio?: boolean },
+  ): Promise<boolean> => {
+    const preferAudio = options?.preferAudio !== false && !mutedRef.current;
+    if (preferAudio) {
+      video.muted = false;
+      try {
+        await video.play();
+        clearStallRecovery();
+        setNeedsPlaybackGesture(false);
+        return true;
+      } catch {
+        // Mobile Safari/Chrome may reject audible autoplay after a background,
+        // source renewal, or decoder suspension. Fall back to muted playback so
+        // the viewer remains at the live picture instead of seeing a paused stream.
+      }
+    }
+
+    mutedRef.current = true;
+    setMuted(true);
+    video.muted = true;
+    try {
+      await video.play();
+      clearStallRecovery();
+      setNeedsPlaybackGesture(false);
+      return true;
+    } catch {
+      setNeedsPlaybackGesture(true);
+      return false;
+    }
+  }, [clearStallRecovery]);
+
   useEffect(() => () => clearStallRecovery(), [clearStallRecovery]);
 
   useEffect(() => {
@@ -394,6 +427,16 @@ export function LiveClassRoomMobileFirst({
       void fetchChat().catch(() => undefined);
       void fetchSharedChat().catch(() => undefined);
       if (roomStateRef.current?.state === "LIVE") {
+        const video = currentAudioVideo();
+        if (video) {
+          // iOS Safari and Android Chromium are allowed to suspend background
+          // media and can reject automatic audible restart. A foreground recovery
+          // therefore rejoins LIVE muted first; the viewer can restore audio with
+          // one explicit tap without changing the playback position.
+          mutedRef.current = true;
+          setMuted(true);
+          video.muted = true;
+        }
         forceLiveEdgeOnNextAuthorizationRef.current = true;
         void requestPlayback().catch(() => setNeedsPlaybackGesture(true));
       }
@@ -402,8 +445,12 @@ export function LiveClassRoomMobileFirst({
       if (document.visibilityState === "visible") refreshVisiblePlayback();
     };
     const onPageShow = () => refreshVisiblePlayback();
+    const onOnline = () => {
+      if (document.visibilityState === "visible") refreshVisiblePlayback();
+    };
     document.addEventListener("visibilitychange", onVisibilityChange);
     window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("online", onOnline);
     return () => {
       active = false;
       window.clearTimeout(initialFetch);
@@ -411,8 +458,9 @@ export function LiveClassRoomMobileFirst({
       window.clearInterval(safetyRefresh);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("online", onOnline);
     };
-  }, [fetchChat, fetchSharedChat, fetchState, requestPlayback, synchronizedNowMs]);
+  }, [currentAudioVideo, fetchChat, fetchSharedChat, fetchState, requestPlayback, synchronizedNowMs]);
 
   useEffect(() => {
     if (!roomState) return;
@@ -722,12 +770,12 @@ export function LiveClassRoomMobileFirst({
           if (generation !== directSwapGenerationRef.current) return;
         }
 
-        setNeedsPlaybackGesture(false);
+        const targetPlaying = await keepPlaybackRunning(targetVideo);
+        if (!targetPlaying || generation !== directSwapGenerationRef.current) return;
+
         if (!sameLoadedMedia || targetSlot === currentSlot) {
-          targetVideo.muted = mutedRef.current;
           setDirectSlot(targetSlot);
         } else {
-          targetVideo.muted = mutedRef.current;
           if (currentVideo) currentVideo.muted = true;
           setDirectSlot(targetSlot);
           window.setTimeout(() => {
@@ -766,13 +814,13 @@ export function LiveClassRoomMobileFirst({
       } else {
         video.currentTime = preservedPosition;
       }
-      void video.play()
-        .then(() => setNeedsPlaybackGesture(false))
-        .catch(() => setNeedsPlaybackGesture(true));
-      loadedMediaSessionRef.current = playback.sessionId;
-      loadedMediaTypeRef.current = authorization.playbackType;
-      loadedAuthorizationUrlRef.current = authorization.url;
-      forceLiveEdgeOnNextAuthorizationRef.current = false;
+      void keepPlaybackRunning(video).then((playing) => {
+        if (!playing || destroyed) return;
+        loadedMediaSessionRef.current = playback.sessionId;
+        loadedMediaTypeRef.current = authorization.playbackType;
+        loadedAuthorizationUrlRef.current = authorization.url;
+        forceLiveEdgeOnNextAuthorizationRef.current = false;
+      });
     };
 
     if (video.canPlayType("application/vnd.apple.mpegurl")) {
@@ -806,6 +854,7 @@ export function LiveClassRoomMobileFirst({
   }, [
     correctPosition,
     directVideoForSlot,
+    keepPlaybackRunning,
     playback,
     roomState?.state,
     setDirectSlot,
@@ -931,19 +980,48 @@ export function LiveClassRoomMobileFirst({
   };
 
   const resumePlayback = () => {
-    setMuted(false);
-    setNeedsPlaybackGesture(false);
     const video = currentAudioVideo();
     if (!video) {
       void requestPlayback().catch(() => setNeedsPlaybackGesture(true));
       return;
     }
+
+    const recoveringPausedPlayback = needsPlaybackGesture || video.paused;
+    mutedRef.current = false;
+    setMuted(false);
     video.muted = false;
-    if (needsPlaybackGesture) correctPosition(video);
-    void video.play().catch(() => {
-      setNeedsPlaybackGesture(true);
-      void requestPlayback().catch(() => setNeedsPlaybackGesture(true));
-    });
+
+    const resume = async () => {
+      // A plain "Tap to hear audio" never seeks. Only an actually paused/
+      // suspended player is moved to the authoritative live edge before resume.
+      if (recoveringPausedPlayback) {
+        forceLiveEdgeOnNextAuthorizationRef.current = true;
+        correctPosition(video);
+      }
+
+      try {
+        await video.play();
+        clearStallRecovery();
+        setNeedsPlaybackGesture(false);
+      } catch {
+        // Keep the picture live even when a mobile browser refuses audible
+        // restart. The overlay remains available for a later explicit audio tap.
+        mutedRef.current = true;
+        setMuted(true);
+        video.muted = true;
+        try {
+          await video.play();
+          clearStallRecovery();
+          setNeedsPlaybackGesture(false);
+        } catch {
+          setNeedsPlaybackGesture(true);
+          forceLiveEdgeOnNextAuthorizationRef.current = true;
+          void requestPlayback().catch(() => setNeedsPlaybackGesture(true));
+        }
+      }
+    };
+
+    void resume();
   };
 
   if (loading) {
