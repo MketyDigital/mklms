@@ -105,14 +105,15 @@ test('hidden DIRECT authorization refresh cannot raise the active audio prompt o
   assert.doesNotMatch(preloadCatch, /setMuted\(true\)/);
 });
 
-test('audio overlay is defensively tied to actual active media health', () => {
+test('audio overlay is defensively tied to explicit active playback health state', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
 
   assert.match(source, /shouldShowLiveAudioPrompt/);
-  assert.match(source, /hasActiveMedia: Boolean\(activeMedia\)/);
-  assert.match(source, /activeMediaPaused: activeMedia\?\.paused \?\? true/);
-  assert.match(source, /activeMediaReadyState: activeMedia\?\.readyState \?\? 0/);
+  assert.match(source, /activePlaybackBlocked/);
+  assert.match(source, /setActivePlaybackBlocked\(false\)/);
+  assert.match(source, /setActivePlaybackBlocked\(true\)/);
   assert.match(source, /\{showAudioPrompt \? \(/);
+  assert.doesNotMatch(source, /const activeMedia = currentAudioVideo\(\)/);
 });
 
 test('persistent waiting or stalled media recovers only after a guarded timeout and cancels on playing', () => {
