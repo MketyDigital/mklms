@@ -199,6 +199,20 @@ test("media worker fails closed for missing objects and unsupported methods", as
   assert.equal(post.headers.get("allow"), "GET, HEAD");
 });
 
+test("media worker accepts a client-only recovery cache-buster without changing signed authorization", async () => {
+  const original = createRequest({ range: "bytes=5-9" });
+  const url = new URL(original.url);
+  url.searchParams.set("mk_recovery", "7");
+  const response = await mediaWorker.fetch(
+    new Request(url, { method: "GET", headers: { Range: "bytes=5-9" } }),
+    createEnv(),
+  );
+
+  assert.equal(response.status, 206);
+  assert.equal(response.headers.get("content-range"), "bytes 5-9/36");
+  assert.equal(await response.text(), "56789");
+});
+
 test("media worker verifies authorization before every R2 read", async () => {
   const bucket = createBucket();
   const response = await mediaWorker.fetch(
