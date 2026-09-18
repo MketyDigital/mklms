@@ -12,6 +12,7 @@ import {
   parseOwnLiveComments,
   type OwnLiveComment,
 } from "../domain/live-client-cache";
+import { shouldShowLiveAudioPrompt } from "../domain/live-audio-prompt";
 import {
   resolveBroadcastPosition,
   shouldCorrectBroadcastPosition,
@@ -1128,6 +1129,17 @@ export function LiveClassRoomMobileFirst({
 
   const isTestMode = playback?.testMode === true;
   const authorization = playback?.authorization ?? null;
+  const activeMedia = currentAudioVideo();
+  const showAudioPrompt = authorization && authorization.playbackType !== "EMBED"
+    ? shouldShowLiveAudioPrompt({
+        muted,
+        needsPlaybackGesture,
+        hasActiveMedia: Boolean(activeMedia),
+        activeMediaPaused: activeMedia?.paused ?? true,
+        activeMediaReadyState: activeMedia?.readyState ?? 0,
+        futureDataReadyState: HTMLMediaElement.HAVE_FUTURE_DATA,
+      })
+    : false;
 
   return (
     <main className="min-h-dvh bg-neutral-950 text-white">
@@ -1246,14 +1258,14 @@ export function LiveClassRoomMobileFirst({
                 <Radio className="size-3" /> LIVE
               </div>
 
-              {(muted || needsPlaybackGesture) && authorization && authorization.playbackType !== "EMBED" ? (
+              {showAudioPrompt ? (
                 <button
                   type="button"
                   className="absolute inset-0 flex items-center justify-center bg-black/15"
                   onClick={resumePlayback}
                 >
                   <span className="flex items-center gap-2 rounded-full bg-black/75 px-5 py-3 text-sm font-medium backdrop-blur">
-                    <Volume2 className="size-4" /> {needsPlaybackGesture ? "Tap to resume" : "Tap to hear audio"}
+                    <Volume2 className="size-4" /> {muted ? "Tap to hear audio" : "Tap to resume"}
                   </span>
                 </button>
               ) : null}
