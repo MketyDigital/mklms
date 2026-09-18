@@ -83,6 +83,26 @@ test('mobile autoplay fallback keeps the active live picture running if audible 
   assert.doesNotMatch(source, /keepPlaybackRunning\(targetVideo\)/);
 });
 
+test('active playback helper cannot mutate audio prompt state for a non-active media element', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+  const helperStart = source.indexOf('const keepPlaybackRunning = useCallback');
+  const helperEnd = source.indexOf('\n  useEffect(() => () => {', helperStart);
+  const helper = source.slice(helperStart, helperEnd);
+
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, 'playback helper must be present');
+  assert.match(helper, /video === currentAudioVideo\(\)/);
+  assert.match(helper, /setActivePlaybackBlocked\(false\)/);
+  assert.match(helper, /setActivePlaybackBlocked\(true\)/);
+  assert.match(helper, /\[clearStallRecovery, currentAudioVideo\]/);
+});
+
+test('foreground and pause recovery failures only request a prompt while the same active media remains blocked', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+
+  assert.match(source, /video &&[\s\S]*video === currentAudioVideo\(\)[\s\S]*video\.paused \|\| video\.readyState < HTMLMediaElement\.HAVE_FUTURE_DATA/);
+  assert.match(source, /const handlePlaybackPaused[\s\S]*requestPlayback\(\)\.catch\(\(\) => \{[\s\S]*video === currentAudioVideo\(\)[\s\S]*setNeedsPlaybackGesture\(true\)/);
+});
+
 test('hidden DIRECT authorization refresh cannot raise the active audio prompt or emit duplicate audio', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
   const directStart = source.indexOf('if (authorization.playbackType === "DIRECT")');
