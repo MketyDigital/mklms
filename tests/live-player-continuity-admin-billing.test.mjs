@@ -35,6 +35,7 @@ test('persistent waiting or stalled media recovers only after a guarded timeout 
   assert.match(source, /onWaiting=\{\(event\) => scheduleStallRecovery\(event\.currentTarget\)\}/);
   assert.match(source, /onStalled=\{\(event\) => scheduleStallRecovery\(event\.currentTarget\)\}/);
   assert.match(source, /video !== currentAudioVideo\(\)/);
+  assert.match(source, /loadedMediaSessionRef\.current !== playbackRef\.current\?\.sessionId/);
   assert.match(source, /roomStateRef\.current\?\.state !== "LIVE"/);
   assert.match(source, /video\.readyState >= HTMLMediaElement\.HAVE_FUTURE_DATA/);
   assert.match(source, /clearStallRecovery\(\);[\s\S]*setNeedsPlaybackGesture\(false\)/);
