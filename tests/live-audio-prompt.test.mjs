@@ -3,16 +3,11 @@ import test from 'node:test';
 
 import { shouldShowLiveAudioPrompt } from '../src/features/live-classes/domain/live-audio-prompt.ts';
 
-const HAVE_FUTURE_DATA = 3;
-
 test('healthy audible active playback never shows an audio prompt from a stale gesture flag', () => {
   assert.equal(shouldShowLiveAudioPrompt({
     muted: false,
     needsPlaybackGesture: true,
-    hasActiveMedia: true,
-    activeMediaPaused: false,
-    activeMediaReadyState: HAVE_FUTURE_DATA,
-    futureDataReadyState: HAVE_FUTURE_DATA,
+    activePlaybackBlocked: false,
   }), false);
 });
 
@@ -20,40 +15,22 @@ test('muted playback always offers the audio button', () => {
   assert.equal(shouldShowLiveAudioPrompt({
     muted: true,
     needsPlaybackGesture: false,
-    hasActiveMedia: true,
-    activeMediaPaused: false,
-    activeMediaReadyState: HAVE_FUTURE_DATA,
-    futureDataReadyState: HAVE_FUTURE_DATA,
+    activePlaybackBlocked: false,
   }), true);
 });
 
-test('audible playback shows resume only when the active media is actually blocked', () => {
+test('audible playback shows resume only when the active player is actually blocked', () => {
   assert.equal(shouldShowLiveAudioPrompt({
     muted: false,
     needsPlaybackGesture: true,
-    hasActiveMedia: true,
-    activeMediaPaused: true,
-    activeMediaReadyState: HAVE_FUTURE_DATA,
-    futureDataReadyState: HAVE_FUTURE_DATA,
-  }), true);
-
-  assert.equal(shouldShowLiveAudioPrompt({
-    muted: false,
-    needsPlaybackGesture: true,
-    hasActiveMedia: true,
-    activeMediaPaused: false,
-    activeMediaReadyState: 2,
-    futureDataReadyState: HAVE_FUTURE_DATA,
+    activePlaybackBlocked: true,
   }), true);
 });
 
-test('missing active media can still surface a genuine resume gesture request', () => {
+test('a blocked-state signal alone does not show an overlay without a gesture requirement', () => {
   assert.equal(shouldShowLiveAudioPrompt({
     muted: false,
-    needsPlaybackGesture: true,
-    hasActiveMedia: false,
-    activeMediaPaused: true,
-    activeMediaReadyState: 0,
-    futureDataReadyState: HAVE_FUTURE_DATA,
-  }), true);
+    needsPlaybackGesture: false,
+    activePlaybackBlocked: true,
+  }), false);
 });
