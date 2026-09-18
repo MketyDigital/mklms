@@ -490,10 +490,12 @@ export function LiveClassRoomMobileFirst({
             clientNow: new Date(synchronizedNowMs()),
             durationSeconds: currentState.session.durationSeconds,
           });
-          needsRecovery = shouldCorrectBroadcastPosition({
-            currentSeconds: video.currentTime,
-            expectedSeconds,
-          });
+          needsRecovery =
+            video.currentTime < expectedSeconds &&
+            shouldCorrectBroadcastPosition({
+              currentSeconds: video.currentTime,
+              expectedSeconds,
+            });
         }
 
         if (!needsRecovery) {
