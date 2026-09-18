@@ -21,6 +21,7 @@ import {
   getBillingMonthKey,
   resolveManagedHostingPaymentWindow,
 } from "@/features/hosting/domain/managed-hosting";
+import { AdminHostingNoticeRefresh } from "@/features/hosting/components/admin-hosting-notice-refresh";
 import { PostgresManagedHostingRepository } from "@/features/hosting/repositories/postgres-managed-hosting.repository";
 import { getManagedHostingServiceAccess } from "@/features/hosting/server/managed-hosting-access";
 import { getEffectiveManagedHostingPolicy } from "@/features/hosting/server/managed-hosting-policy";
@@ -144,6 +145,7 @@ export default async function AdminHomePage() {
       isAdmin={true}
       unreadMessages={unreadMessages}
     >
+      <AdminHostingNoticeRefresh />
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">MkLMS Admin Dashboard</h1>

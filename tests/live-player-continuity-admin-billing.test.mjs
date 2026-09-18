@@ -27,12 +27,36 @@ test('live timing and token refresh use the server-synchronized clock instead of
   assert.doesNotMatch(source, /clientNow:\s*new Date\(\)/);
 });
 
+
+test('persistent waiting or stalled media recovers only after a guarded timeout and cancels on playing', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+
+  assert.match(source, /LIVE_STALL_RECOVERY_MS = 8_000/);
+  assert.match(source, /onWaiting=\{\(event\) => scheduleStallRecovery\(event\.currentTarget\)\}/);
+  assert.match(source, /onStalled=\{\(event\) => scheduleStallRecovery\(event\.currentTarget\)\}/);
+  assert.match(source, /video !== currentAudioVideo\(\)/);
+  assert.match(source, /loadedMediaSessionRef\.current !== playbackRef\.current\?\.sessionId/);
+  assert.match(source, /roomStateRef\.current\?\.state !== "LIVE"/);
+  assert.match(source, /video\.readyState >= HTMLMediaElement\.HAVE_FUTURE_DATA/);
+  assert.match(source, /clearStallRecovery\(\);[\s\S]*setNeedsPlaybackGesture\(false\)/);
+});
+
 test('visibility return and playback errors explicitly rejoin the authoritative live edge', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
 
   assert.match(source, /forceLiveEdgeOnNextAuthorizationRef\.current\s*=\s*true/);
   assert.match(source, /document\.visibilityState\s*===\s*"visible"/);
   assert.match(source, /handlePlaybackError/);
+});
+
+
+test('final live session ending message and redirect remain available after state.session becomes null', () => {
+  const route = read('src/app/api/live/[slug]/state/route.ts');
+
+  assert.match(route, /const endedSession = state\.state === "ENDED"/);
+  assert.match(route, /item\.status === "PUBLISHED"/);
+  assert.match(route, /endedSession\?\.endedMessage \?\? batch\.endedMessage/);
+  assert.match(route, /endedSession\?\.endedRedirectUrl \?\? batch\.endedRedirectUrl/);
 });
 
 test('hosting payment warning is confined to admin dashboard and only appears in due or unpaid states', () => {
@@ -46,6 +70,12 @@ test('hosting payment warning is confined to admin dashboard and only appears in
   assert.match(admin, /paymentStatus === "PAID"/);
   assert.match(admin, /paymentStatus === "WAIVED"/);
   assert.match(admin, /href="\/admin\/hosting"/);
+  assert.match(admin, /AdminHostingNoticeRefresh/);
 
-  assert.doesNotMatch(member, /ManagedHosting|Hosting payment|\/admin\/hosting/);
+  const refresh = read('src/features/hosting/components/admin-hosting-notice-refresh.tsx');
+  assert.match(refresh, /5 \* 60 \* 1000/);
+  assert.match(refresh, /visibilitychange/);
+  assert.match(refresh, /router\.refresh\(\)/);
+
+  assert.doesNotMatch(member, /ManagedHosting|Hosting payment|AdminHostingNoticeRefresh|\/admin\/hosting/);
 });
