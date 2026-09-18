@@ -442,32 +442,57 @@ export function LiveClassRoomMobileFirst({
       SAFETY_STATE_REFRESH_MS,
     );
     const refreshVisiblePlayback = () => {
-      void fetchState().catch(() => undefined);
       void fetchChat().catch(() => undefined);
       void fetchSharedChat().catch(() => undefined);
-      if (roomStateRef.current?.state === "LIVE") {
+      void (async () => {
+        await fetchState().catch(() => undefined);
+        const currentState = roomStateRef.current;
+        if (currentState?.state !== "LIVE") return;
+
         const video = currentAudioVideo();
-        if (video) {
-          // iOS Safari and Android Chromium are allowed to suspend background
-          // media and can reject automatic audible restart. A foreground recovery
-          // therefore rejoins LIVE muted first; the viewer can restore audio with
-          // one explicit tap without changing the playback position.
-          mutedRef.current = true;
-          setMuted(true);
-          video.muted = true;
+        let needsRecovery =
+          !video ||
+          video.paused ||
+          video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA;
+
+        if (
+          !needsRecovery &&
+          video &&
+          currentState.session &&
+          currentState.liveOffsetSeconds !== null &&
+          playbackRef.current?.sessionId === currentState.session.id
+        ) {
+          const expectedSeconds = resolveBroadcastPosition({
+            liveOffsetSeconds: currentState.liveOffsetSeconds,
+            serverNow: new Date(currentState.serverNow),
+            clientNow: new Date(synchronizedNowMs()),
+            durationSeconds: currentState.session.durationSeconds,
+          });
+          needsRecovery = shouldCorrectBroadcastPosition({
+            currentSeconds: video.currentTime,
+            expectedSeconds,
+          });
         }
+
+        if (!needsRecovery) {
+          setActivePlaybackBlocked(false);
+          setNeedsPlaybackGesture(false);
+          return;
+        }
+
+        setActivePlaybackBlocked(true);
         forceLiveEdgeOnNextAuthorizationRef.current = true;
         void requestPlayback().catch(() => {
+          const activeVideo = currentAudioVideo();
           if (
-            video &&
-            video === currentAudioVideo() &&
-            (video.paused || video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA)
+            !activeVideo ||
+            activeVideo.paused ||
+            activeVideo.readyState < HTMLMediaElement.HAVE_FUTURE_DATA
           ) {
-            setActivePlaybackBlocked(true);
             setNeedsPlaybackGesture(true);
           }
         });
-      }
+      })();
     };
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") refreshVisiblePlayback();
@@ -777,7 +802,8 @@ export function LiveClassRoomMobileFirst({
       loadedMediaSessionRef.current === playback.sessionId &&
       loadedMediaTypeRef.current === authorization.playbackType;
     const sameAuthorization = loadedAuthorizationUrlRef.current === authorization.url;
-    if (sameLoadedMedia && sameAuthorization) return;
+    const forceLiveEdge = forceLiveEdgeOnNextAuthorizationRef.current;
+    if (sameLoadedMedia && sameAuthorization && !forceLiveEdge) return;
 
     if (authorization.playbackType === "DIRECT") {
       const currentSlot = activeDirectSlotRef.current;
@@ -787,7 +813,6 @@ export function LiveClassRoomMobileFirst({
       if (!targetVideo) return;
 
       const generation = ++directSwapGenerationRef.current;
-      const forceLiveEdge = forceLiveEdgeOnNextAuthorizationRef.current;
       targetVideo.muted = true;
       targetVideo.preload = "auto";
 
@@ -810,9 +835,19 @@ export function LiveClassRoomMobileFirst({
           // active player's mute/gesture UI while the current broadcast is still
           // healthy and audible. Keep the current slot untouched and retry a
           // fresh authorization shortly instead of surfacing a false audio prompt.
+          if (
+            currentVideo &&
+            currentVideo === currentAudioVideo() &&
+            (currentVideo.paused ||
+              currentVideo.readyState < HTMLMediaElement.HAVE_FUTURE_DATA)
+          ) {
+            setActivePlaybackBlocked(true);
+            setNeedsPlaybackGesture(true);
+          }
           if (authorizationRetryTimerRef.current === null) {
             authorizationRetryTimerRef.current = window.setTimeout(() => {
               authorizationRetryTimerRef.current = null;
+              forceLiveEdgeOnNextAuthorizationRef.current = true;
               void requestPlayback().catch(() => undefined);
             }, LIVE_AUTHORIZATION_RETRY_MS);
           }
@@ -867,7 +902,14 @@ export function LiveClassRoomMobileFirst({
       };
 
       targetVideo.addEventListener("loadedmetadata", () => void promote(), { once: true });
-      targetVideo.src = authorization.url;
+      const sourceUrl = forceLiveEdge
+        ? (() => {
+            const recoveryUrl = new URL(authorization.url);
+            recoveryUrl.searchParams.set("mk_recovery", String(generation));
+            return recoveryUrl.toString();
+          })()
+        : authorization.url;
+      targetVideo.src = sourceUrl;
       targetVideo.load();
       return;
     }
@@ -1075,9 +1117,16 @@ export function LiveClassRoomMobileFirst({
     if (video !== currentAudioVideo()) return;
     clearStallRecovery();
     setActivePlaybackBlocked(true);
+    setNeedsPlaybackGesture(false);
     forceLiveEdgeOnNextAuthorizationRef.current = true;
-    setNeedsPlaybackGesture(true);
-    void requestPlayback().catch(() => undefined);
+    void requestPlayback().catch(() => {
+      if (
+        video === currentAudioVideo() &&
+        (video.paused || video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA)
+      ) {
+        setNeedsPlaybackGesture(true);
+      }
+    });
   };
 
   const resumePlayback = () => {
