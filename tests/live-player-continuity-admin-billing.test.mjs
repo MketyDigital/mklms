@@ -186,6 +186,21 @@ test('audio overlay is defensively tied to explicit active playback health state
   assert.doesNotMatch(source, /const activeMedia = currentAudioVideo\(\)/);
 });
 
+test('silent visible mobile freezes are detected even when the browser emits no waiting or stalled event', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+
+  assert.match(source, /LIVE_SILENT_FREEZE_RECOVERY_MS = 10_000/);
+  assert.match(source, /LIVE_PROGRESS_SAMPLE_MS = 2_500/);
+  assert.match(source, /silentFreezeSampleRef/);
+  assert.match(source, /document\.visibilityState !== "visible"/);
+  assert.match(source, /video\.paused/);
+  assert.match(source, /video\.ended/);
+  assert.match(source, /Math\.abs\(video\.currentTime - previous\.currentTime\) >= 0\.25/);
+  assert.match(source, /now - previous\.sampledAtMs < LIVE_SILENT_FREEZE_RECOVERY_MS/);
+  assert.match(source, /forceLiveEdgeOnNextAuthorizationRef\.current = true/);
+  assert.match(source, /requestPlayback\(\)\.catch/);
+});
+
 test('persistent waiting or stalled media recovers only after a guarded timeout and cancels on playing', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
 
