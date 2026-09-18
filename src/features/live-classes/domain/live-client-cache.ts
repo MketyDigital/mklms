@@ -1,5 +1,5 @@
 export const LIVE_STATE_CACHE_CONTROL =
-  "public, max-age=0, s-maxage=5, stale-while-revalidate=30";
+  "public, max-age=0, s-maxage=2, stale-while-revalidate=2";
 
 export interface OwnLiveComment {
   id: string;

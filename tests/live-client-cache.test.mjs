@@ -10,7 +10,7 @@ import {
 test('shared live state is edge-cacheable with short freshness and stale revalidation', () => {
   assert.equal(
     LIVE_STATE_CACHE_CONTROL,
-    'public, max-age=0, s-maxage=5, stale-while-revalidate=30',
+    'public, max-age=0, s-maxage=2, stale-while-revalidate=2',
   );
 });
 

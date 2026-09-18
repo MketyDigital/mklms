@@ -147,6 +147,9 @@ export function LiveClassRoomMobileFirst({
   const loadedAuthorizationUrlRef = useRef<string | null>(null);
   const activeDirectSlotRef = useRef<DirectSlot>(0);
   const directSwapGenerationRef = useRef(0);
+  const forceLiveEdgeOnNextAuthorizationRef = useRef(false);
+  const serverClockOffsetMsRef = useRef(0);
+  const mutedRef = useRef(true);
   const previousStorageKeyRef = useRef<string | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const seenStagedMessageIdsRef = useRef<Set<string>>(new Set());
@@ -173,6 +176,8 @@ export function LiveClassRoomMobileFirst({
   const [isFollowingLiveChat, setIsFollowingLiveChat] = useState(true);
   const [hasUnreadLiveChat, setHasUnreadLiveChat] = useState(false);
 
+  mutedRef.current = muted;
+
   const activeSessionId = roomState?.state === "LIVE" ? roomState.session?.id ?? null : null;
   const storageKey = useMemo(
     () => activeSessionId ? ownLiveCommentStorageKey(slug, activeSessionId) : null,
@@ -195,6 +200,11 @@ export function LiveClassRoomMobileFirst({
     }
     return hlsVideoRef.current;
   }, [directVideoForSlot]);
+
+  const synchronizedNowMs = useCallback(
+    () => Date.now() + serverClockOffsetMsRef.current,
+    [],
+  );
 
   useEffect(() => {
     const previousKey = previousStorageKeyRef.current;
@@ -230,10 +240,12 @@ export function LiveClassRoomMobileFirst({
   }, []);
 
   const fetchState = useCallback(async () => {
+    const requestStartedAtMs = Date.now();
     const response = await fetch(`/api/live/${encodeURIComponent(slug)}/state`, {
       cache: "default",
       credentials: "same-origin",
     });
+    const receivedAtMs = Date.now();
     const payload = (await response.json()) as LiveRoomState | { ok: false; message?: string };
     if (!response.ok || !payload.ok) {
       throw new Error(
@@ -242,9 +254,19 @@ export function LiveClassRoomMobileFirst({
           : "This live class is unavailable.",
       );
     }
+    const payloadServerNowMs = new Date(payload.serverNow).getTime();
+    const cacheAgeSeconds = Number(response.headers.get("Age") ?? "0");
+    const cacheAgeMs =
+      Number.isFinite(cacheAgeSeconds) && cacheAgeSeconds > 0
+        ? cacheAgeSeconds * 1000
+        : 0;
+    const requestMidpointMs = requestStartedAtMs + (receivedAtMs - requestStartedAtMs) / 2;
+    serverClockOffsetMsRef.current =
+      payloadServerNowMs + cacheAgeMs - requestMidpointMs;
+
     roomStateRef.current = payload;
     setRoomState(payload);
-    setNowMs(new Date(payload.serverNow).getTime());
+    setNowMs(receivedAtMs + serverClockOffsetMsRef.current);
     setError(null);
     return payload;
   }, [slug]);
@@ -350,7 +372,7 @@ export function LiveClassRoomMobileFirst({
           if (active) setLoading(false);
         });
     }, 0);
-    const clock = window.setInterval(() => setNowMs(Date.now()), 1_000);
+    const clock = window.setInterval(() => setNowMs(synchronizedNowMs()), 1_000);
     const safetyRefresh = window.setInterval(
       () => void fetchState().catch(() => undefined),
       SAFETY_STATE_REFRESH_MS,
@@ -360,6 +382,7 @@ export function LiveClassRoomMobileFirst({
       void fetchChat().catch(() => undefined);
       void fetchSharedChat().catch(() => undefined);
       if (roomStateRef.current?.state === "LIVE") {
+        forceLiveEdgeOnNextAuthorizationRef.current = true;
         void requestPlayback().catch(() => setNeedsPlaybackGesture(true));
       }
     };
@@ -377,7 +400,7 @@ export function LiveClassRoomMobileFirst({
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("pageshow", onPageShow);
     };
-  }, [fetchChat, fetchSharedChat, fetchState, requestPlayback]);
+  }, [fetchChat, fetchSharedChat, fetchState, requestPlayback, synchronizedNowMs]);
 
   useEffect(() => {
     if (!roomState) return;
@@ -393,13 +416,13 @@ export function LiveClassRoomMobileFirst({
         roomState.session.durationSeconds * 1000;
     }
     if (transitionAtMs === null || !Number.isFinite(transitionAtMs)) return;
-    const delay = Math.max(500, transitionAtMs - Date.now() + 1_000);
+    const delay = Math.max(500, transitionAtMs - synchronizedNowMs() + 1_000);
     const timer = window.setTimeout(
       () => void fetchState().catch(() => undefined),
       delay,
     );
     return () => window.clearTimeout(timer);
-  }, [fetchState, roomState]);
+  }, [fetchState, roomState, synchronizedNowMs]);
 
   const roomSessionId = activeSessionId;
 
@@ -457,14 +480,14 @@ export function LiveClassRoomMobileFirst({
     if (!expiry || roomState?.state !== "LIVE") return;
     const refreshIn = Math.max(
       5_000,
-      new Date(expiry).getTime() - Date.now() - 30_000,
+      new Date(expiry).getTime() - synchronizedNowMs() - 30_000,
     );
     const timer = window.setTimeout(
       () => void requestPlayback().catch(() => undefined),
       refreshIn,
     );
     return () => window.clearTimeout(timer);
-  }, [playback?.authorization?.expiresAt, requestPlayback, roomState?.state]);
+  }, [playback?.authorization?.expiresAt, requestPlayback, roomState?.state, synchronizedNowMs]);
 
   const currentLiveOffsetSeconds = useMemo(() => {
     if (
@@ -616,10 +639,10 @@ export function LiveClassRoomMobileFirst({
     return resolveBroadcastPosition({
       liveOffsetSeconds: currentState.liveOffsetSeconds,
       serverNow: new Date(currentState.serverNow),
-      clientNow: new Date(),
+      clientNow: new Date(synchronizedNowMs()),
       durationSeconds: currentState.session.durationSeconds,
     });
-  }, []);
+  }, [synchronizedNowMs]);
 
   const correctPosition = useCallback((video: HTMLVideoElement) => {
     const target = expectedPosition();
@@ -651,12 +674,22 @@ export function LiveClassRoomMobileFirst({
       if (!targetVideo) return;
 
       const generation = ++directSwapGenerationRef.current;
+      const forceLiveEdge = forceLiveEdgeOnNextAuthorizationRef.current;
       targetVideo.muted = true;
       targetVideo.preload = "auto";
 
       const promote = async () => {
         if (generation !== directSwapGenerationRef.current) return;
-        correctPosition(targetVideo);
+        if (
+          sameLoadedMedia &&
+          !forceLiveEdge &&
+          currentVideo &&
+          Number.isFinite(currentVideo.currentTime)
+        ) {
+          targetVideo.currentTime = currentVideo.currentTime;
+        } else {
+          correctPosition(targetVideo);
+        }
         try {
           await targetVideo.play();
         } catch {
@@ -667,12 +700,22 @@ export function LiveClassRoomMobileFirst({
         await waitForRenderableFrame(targetVideo);
         if (generation !== directSwapGenerationRef.current) return;
 
+        if (
+          sameLoadedMedia &&
+          currentVideo &&
+          currentVideo.currentTime - targetVideo.currentTime > 0.75
+        ) {
+          targetVideo.currentTime = currentVideo.currentTime;
+          await waitForRenderableFrame(targetVideo);
+          if (generation !== directSwapGenerationRef.current) return;
+        }
+
         setNeedsPlaybackGesture(false);
         if (!sameLoadedMedia || targetSlot === currentSlot) {
-          targetVideo.muted = muted;
+          targetVideo.muted = mutedRef.current;
           setDirectSlot(targetSlot);
         } else {
-          targetVideo.muted = muted;
+          targetVideo.muted = mutedRef.current;
           if (currentVideo) currentVideo.muted = true;
           setDirectSlot(targetSlot);
           window.setTimeout(() => {
@@ -686,6 +729,7 @@ export function LiveClassRoomMobileFirst({
         loadedMediaSessionRef.current = playback.sessionId;
         loadedMediaTypeRef.current = authorization.playbackType;
         loadedAuthorizationUrlRef.current = authorization.url;
+        forceLiveEdgeOnNextAuthorizationRef.current = false;
       };
 
       targetVideo.addEventListener("loadedmetadata", () => void promote(), { once: true });
@@ -698,15 +742,25 @@ export function LiveClassRoomMobileFirst({
     if (!video || authorization.playbackType !== "HLS") return;
     let destroyed = false;
     let destroyHls: (() => void) | undefined;
+    const forceLiveEdge = forceLiveEdgeOnNextAuthorizationRef.current;
+    const preservedPosition =
+      sameLoadedMedia && !forceLiveEdge && Number.isFinite(video.currentTime)
+        ? video.currentTime
+        : null;
 
     const positionAtLiveEdge = () => {
-      correctPosition(video);
+      if (preservedPosition === null) {
+        correctPosition(video);
+      } else {
+        video.currentTime = preservedPosition;
+      }
       void video.play()
         .then(() => setNeedsPlaybackGesture(false))
         .catch(() => setNeedsPlaybackGesture(true));
       loadedMediaSessionRef.current = playback.sessionId;
       loadedMediaTypeRef.current = authorization.playbackType;
       loadedAuthorizationUrlRef.current = authorization.url;
+      forceLiveEdgeOnNextAuthorizationRef.current = false;
     };
 
     if (video.canPlayType("application/vnd.apple.mpegurl")) {
@@ -740,7 +794,6 @@ export function LiveClassRoomMobileFirst({
   }, [
     correctPosition,
     directVideoForSlot,
-    muted,
     playback,
     roomState?.state,
     setDirectSlot,
@@ -813,8 +866,10 @@ export function LiveClassRoomMobileFirst({
   }
 
   const handleSeeking = (video: HTMLVideoElement) => {
+    if (video !== currentAudioVideo()) return;
     const target = expectedPosition();
     if (
+      video.currentTime < target &&
       shouldCorrectBroadcastPosition({
         currentSeconds: video.currentTime,
         expectedSeconds: target,
@@ -836,6 +891,7 @@ export function LiveClassRoomMobileFirst({
 
   const handlePlaybackError = (video: HTMLVideoElement) => {
     if (video !== currentAudioVideo()) return;
+    forceLiveEdgeOnNextAuthorizationRef.current = true;
     setNeedsPlaybackGesture(true);
     void requestPlayback().catch(() => undefined);
   };
@@ -849,7 +905,7 @@ export function LiveClassRoomMobileFirst({
       return;
     }
     video.muted = false;
-    correctPosition(video);
+    if (needsPlaybackGesture) correctPosition(video);
     void video.play().catch(() => {
       setNeedsPlaybackGesture(true);
       void requestPlayback().catch(() => setNeedsPlaybackGesture(true));
@@ -980,7 +1036,11 @@ export function LiveClassRoomMobileFirst({
                         disablePictureInPicture
                         onSeeking={(event) => handleSeeking(event.currentTarget)}
                         onPause={(event) => handlePlaybackPaused(event.currentTarget)}
-                        onPlaying={() => setNeedsPlaybackGesture(false)}
+                        onPlaying={(event) => {
+                          if (event.currentTarget === currentAudioVideo()) {
+                            setNeedsPlaybackGesture(false);
+                          }
+                        }}
                         onError={(event) => handlePlaybackError(event.currentTarget)}
                         onContextMenu={(event) => event.preventDefault()}
                       />
@@ -999,7 +1059,11 @@ export function LiveClassRoomMobileFirst({
                   disablePictureInPicture
                   onSeeking={(event) => handleSeeking(event.currentTarget)}
                   onPause={(event) => handlePlaybackPaused(event.currentTarget)}
-                  onPlaying={() => setNeedsPlaybackGesture(false)}
+                  onPlaying={(event) => {
+                    if (event.currentTarget === currentAudioVideo()) {
+                      setNeedsPlaybackGesture(false);
+                    }
+                  }}
                   onError={(event) => handlePlaybackError(event.currentTarget)}
                   onContextMenu={(event) => event.preventDefault()}
                 />
