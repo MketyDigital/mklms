@@ -112,6 +112,45 @@ test('foreground and pause recovery failures only request a prompt while the sam
   assert.match(source, /const handlePlaybackPaused[\s\S]*requestPlayback\(\)\.catch\(\(\) => \{[\s\S]*video === currentAudioVideo\(\)[\s\S]*setNeedsPlaybackGesture\(true\)/);
 });
 
+test('forced recovery is not skipped when a session-bound DIRECT authorization URL is unchanged', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+
+  assert.match(source, /const forceLiveEdge = forceLiveEdgeOnNextAuthorizationRef\.current/);
+  assert.match(source, /if \(sameLoadedMedia && sameAuthorization && !forceLiveEdge\) return/);
+  assert.match(source, /recoveryUrl\.searchParams\.set\("mk_recovery", String\(generation\)\)/);
+  assert.match(source, /targetVideo\.src = sourceUrl/);
+});
+
+test('returning to a healthy visible live player does not mute or rebuild it unnecessarily', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+  const refreshStart = source.indexOf('const refreshVisiblePlayback = () =>');
+  const refreshEnd = source.indexOf('const onVisibilityChange = () =>', refreshStart);
+  const refresh = source.slice(refreshStart, refreshEnd);
+
+  assert.ok(refreshStart >= 0 && refreshEnd > refreshStart, 'foreground recovery block must exist');
+  assert.match(refresh, /let needsRecovery =/);
+  assert.match(refresh, /video\.paused/);
+  assert.match(refresh, /video\.readyState < HTMLMediaElement\.HAVE_FUTURE_DATA/);
+  assert.match(refresh, /video\.currentTime < expectedSeconds/);
+  assert.match(refresh, /shouldCorrectBroadcastPosition/);
+  assert.match(refresh, /if \(!needsRecovery\)[\s\S]*forceLiveEdgeOnNextAuthorizationRef\.current = false[\s\S]*setActivePlaybackBlocked\(false\)[\s\S]*return/);
+  assert.doesNotMatch(refresh, /setMuted\(true\)/);
+  assert.doesNotMatch(refresh, /video\.muted = true/);
+});
+
+test('real playback errors attempt silent automatic recovery before showing a gesture prompt', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+  const errorStart = source.indexOf('const handlePlaybackError =');
+  const errorEnd = source.indexOf('\n  };', errorStart);
+  const handler = source.slice(errorStart, errorEnd);
+
+  assert.match(handler, /setNeedsPlaybackGesture\(false\)/);
+  assert.match(handler, /forceLiveEdgeOnNextAuthorizationRef\.current = true/);
+  assert.match(handler, /requestPlayback\(\)\.catch/);
+  assert.match(handler, /video === currentAudioVideo\(\)/);
+  assert.match(handler, /setNeedsPlaybackGesture\(true\)/);
+});
+
 test('hidden DIRECT authorization refresh cannot raise the active audio prompt or emit duplicate audio', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
   const directStart = source.indexOf('if (authorization.playbackType === "DIRECT")');
@@ -130,7 +169,10 @@ test('hidden DIRECT authorization refresh cannot raise the active audio prompt o
     direct.indexOf('try {\n          await targetVideo.play()'),
     direct.indexOf('if (generation !== directSwapGenerationRef.current) return;', direct.indexOf('try {\n          await targetVideo.play()')),
   );
-  assert.doesNotMatch(preloadCatch, /setNeedsPlaybackGesture\(true\)/);
+  assert.match(
+    preloadCatch,
+    /currentVideo === currentAudioVideo\(\)[\s\S]*currentVideo\.paused \|\|[\s\S]*currentVideo\.readyState < HTMLMediaElement\.HAVE_FUTURE_DATA[\s\S]*setNeedsPlaybackGesture\(true\)/,
+  );
   assert.doesNotMatch(preloadCatch, /setMuted\(true\)/);
 });
 
@@ -143,6 +185,33 @@ test('audio overlay is defensively tied to explicit active playback health state
   assert.match(source, /setActivePlaybackBlocked\(true\)/);
   assert.match(source, /\{showAudioPrompt \? \(/);
   assert.doesNotMatch(source, /const activeMedia = currentAudioVideo\(\)/);
+});
+
+test('hidden DIRECT recovery frame waits are bounded so a decoder cannot hang recovery forever', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+
+  assert.match(source, /LIVE_FRAME_READY_TIMEOUT_MS = 5_000/);
+  assert.match(source, /function waitForRenderableFrame\(video: HTMLVideoElement\): Promise<boolean>/);
+  assert.match(source, /window\.setTimeout\([\s\S]*finish\(false\)[\s\S]*LIVE_FRAME_READY_TIMEOUT_MS/);
+  assert.match(source, /const frameReady = await waitForRenderableFrame\(targetVideo\)/);
+  assert.match(source, /if \(!frameReady\)[\s\S]*forceLiveEdgeOnNextAuthorizationRef\.current = true[\s\S]*requestPlayback\(\)/);
+  assert.match(source, /const realignedFrameReady = await waitForRenderableFrame\(targetVideo\)/);
+  assert.match(source, /if \(!realignedFrameReady\)[\s\S]*requestPlayback\(\)/);
+});
+
+test('silent visible mobile freezes are detected even when the browser emits no waiting or stalled event', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+
+  assert.match(source, /LIVE_SILENT_FREEZE_RECOVERY_MS = 10_000/);
+  assert.match(source, /LIVE_PROGRESS_SAMPLE_MS = 2_500/);
+  assert.match(source, /silentFreezeSampleRef/);
+  assert.match(source, /document\.visibilityState !== "visible"/);
+  assert.match(source, /video\.paused/);
+  assert.match(source, /video\.ended/);
+  assert.match(source, /Math\.abs\(video\.currentTime - previous\.currentTime\) >= 0\.25/);
+  assert.match(source, /now - previous\.sampledAtMs < LIVE_SILENT_FREEZE_RECOVERY_MS/);
+  assert.match(source, /forceLiveEdgeOnNextAuthorizationRef\.current = true/);
+  assert.match(source, /requestPlayback\(\)\.catch/);
 });
 
 test('persistent waiting or stalled media recovers only after a guarded timeout and cancels on playing', () => {
