@@ -104,10 +104,10 @@ export class LivePlaybackService {
       1,
       Math.floor((sessionEndsAtMs - now.getTime()) / 1000),
     );
-    const effectiveTtlSeconds = Math.min(
-      this.ttlSeconds,
-      remainingSessionSeconds,
-    );
+    const effectiveTtlSeconds =
+      asset.sourceType === "DIRECT"
+        ? remainingSessionSeconds
+        : Math.min(this.ttlSeconds, remainingSessionSeconds);
 
     const authorization = await this.mediaProvider.createPlaybackAuthorization(asset, {
       viewerId: input.viewerId,
