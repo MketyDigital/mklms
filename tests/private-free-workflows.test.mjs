@@ -17,7 +17,7 @@ test('manual database migration workflow is explicitly Starpips-scoped on Free p
   assert.match(workflow, /secrets\.STARPIPS_DATABASE_SSL/);
 });
 
-test('Mkety generic deploy workflows receive secrets from installation wrappers', () => {
+test('Mkety generic deploy workflows use wrapper-passed secrets and no GitHub Environment', () => {
   for (const path of [
     '.github/workflows/deploy-installation-preview.yml',
     '.github/workflows/deploy-installation-production.yml',
@@ -30,6 +30,7 @@ test('Mkety generic deploy workflows receive secrets from installation wrappers'
     assert.match(workflow, /MKLMS_ADMIN_ACCESS_KEY:/);
     assert.match(workflow, /MKLMS_ADMIN_SESSION_SECRET:/);
     assert.match(workflow, /MKLMS_MEDIA_SIGNING_SECRET:/);
+    assert.doesNotMatch(workflow, /^\s*environment:\s/m, `${path} must not depend on GitHub Environments on Free/private`);
   }
 });
 
