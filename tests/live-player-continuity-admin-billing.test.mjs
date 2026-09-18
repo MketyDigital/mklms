@@ -54,6 +54,15 @@ test('mobile foreground and network recovery rejoin live muted when audible auto
   assert.match(source, /forceLiveEdgeOnNextAuthorizationRef\.current = true;[\s\S]*requestPlayback\(\)/);
 });
 
+test('unexpected visible mobile pauses recover automatically in muted autoplay-safe mode', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+
+  assert.match(source, /const handlePlaybackPaused/);
+  assert.match(source, /document\.visibilityState === "visible"/);
+  assert.match(source, /keepPlaybackRunning\(video, \{ preferAudio: false \}\)/);
+  assert.match(source, /if \(playing\) return;[\s\S]*forceLiveEdgeOnNextAuthorizationRef\.current = true/);
+});
+
 test('mobile autoplay fallback keeps the live picture running if audible restart is rejected', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
 
