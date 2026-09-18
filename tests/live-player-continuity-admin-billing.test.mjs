@@ -14,7 +14,16 @@ test('live player renews authorization without jumping an active viewer backward
   assert.match(source, /currentVideo\.currentTime - targetVideo\.currentTime > 0\.75/);
   assert.match(source, /preservedPosition/);
   assert.match(source, /video\.currentTime\s*<\s*target/);
-  assert.match(source, /if \(needsPlaybackGesture\) correctPosition\(video\)/);
+  assert.match(source, /const recoveringPausedPlayback = needsPlaybackGesture \|\| video\.paused/);
+  assert.match(source, /if \(recoveringPausedPlayback\)[\s\S]*correctPosition\(video\)/);
+});
+
+test('foreground rollover never seeks a new session using stale previous-session timing', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+
+  assert.match(source, /const currentPlayback = playbackRef\.current/);
+  assert.match(source, /currentState\.session\.id !== currentPlayback\?\.sessionId/);
+  assert.match(source, /return currentPlayback\?\.startAtSeconds \?\? 0/);
 });
 
 test('live timing and token refresh use the server-synchronized clock instead of the viewer device clock', () => {
@@ -27,6 +36,50 @@ test('live timing and token refresh use the server-synchronized clock instead of
   assert.doesNotMatch(source, /clientNow:\s*new Date\(\)/);
 });
 
+
+
+test('mobile audio tap unmutes in the user gesture without seeking a player that is already running', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+  const resumeStart = source.indexOf('const resumePlayback = () =>');
+  const resumeEnd = source.indexOf('\n  };', resumeStart);
+  const resume = source.slice(resumeStart, resumeEnd);
+
+  assert.ok(resumeStart >= 0, 'resume handler must exist');
+  assert.match(resume, /mutedRef\.current = false/);
+  assert.match(resume, /video\.muted = false/);
+  assert.match(resume, /await video\.play\(\)/);
+  assert.match(resume, /recoveringPausedPlayback/);
+  assert.doesNotMatch(resume, /correctPosition\(video\);[\s\S]*const recoveringPausedPlayback/);
+});
+
+test('mobile foreground and network recovery rejoin live muted when audible autoplay may be blocked', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+
+  assert.match(source, /window\.addEventListener\("pageshow", onPageShow\)/);
+  assert.match(source, /window\.addEventListener\("online", onOnline\)/);
+  assert.match(source, /document\.visibilityState === "visible"/);
+  assert.match(source, /mutedRef\.current = true;[\s\S]*setMuted\(true\);[\s\S]*video\.muted = true/);
+  assert.match(source, /forceLiveEdgeOnNextAuthorizationRef\.current = true;[\s\S]*requestPlayback\(\)/);
+});
+
+test('unexpected visible mobile pauses recover automatically in muted autoplay-safe mode', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+
+  assert.match(source, /const handlePlaybackPaused/);
+  assert.match(source, /document\.visibilityState === "visible"/);
+  assert.match(source, /keepPlaybackRunning\(video, \{ preferAudio: false \}\)/);
+  assert.match(source, /if \(playing\) return;[\s\S]*forceLiveEdgeOnNextAuthorizationRef\.current = true/);
+});
+
+test('mobile autoplay fallback keeps the live picture running if audible restart is rejected', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+
+  assert.match(source, /const keepPlaybackRunning = useCallback/);
+  assert.match(source, /video\.muted = false;[\s\S]*await video\.play\(\)/);
+  assert.match(source, /mutedRef\.current = true;[\s\S]*video\.muted = true;[\s\S]*await video\.play\(\)/);
+  assert.match(source, /const targetPlaying = await keepPlaybackRunning\(targetVideo\)/);
+  assert.match(source, /void keepPlaybackRunning\(video\)\.then/);
+});
 
 test('persistent waiting or stalled media recovers only after a guarded timeout and cancels on playing', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
