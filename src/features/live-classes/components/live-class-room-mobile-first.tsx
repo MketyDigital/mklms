@@ -148,6 +148,7 @@ export function LiveClassRoomMobileFirst({
   const activeDirectSlotRef = useRef<DirectSlot>(0);
   const directSwapGenerationRef = useRef(0);
   const forceLiveEdgeOnNextAuthorizationRef = useRef(false);
+  const serverClockOffsetMsRef = useRef(0);
   const mutedRef = useRef(true);
   const previousStorageKeyRef = useRef<string | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
@@ -200,6 +201,11 @@ export function LiveClassRoomMobileFirst({
     return hlsVideoRef.current;
   }, [directVideoForSlot]);
 
+  const synchronizedNowMs = useCallback(
+    () => Date.now() + serverClockOffsetMsRef.current,
+    [],
+  );
+
   useEffect(() => {
     const previousKey = previousStorageKeyRef.current;
     if (previousKey && previousKey !== storageKey) {
@@ -234,10 +240,12 @@ export function LiveClassRoomMobileFirst({
   }, []);
 
   const fetchState = useCallback(async () => {
+    const requestStartedAtMs = Date.now();
     const response = await fetch(`/api/live/${encodeURIComponent(slug)}/state`, {
       cache: "default",
       credentials: "same-origin",
     });
+    const receivedAtMs = Date.now();
     const payload = (await response.json()) as LiveRoomState | { ok: false; message?: string };
     if (!response.ok || !payload.ok) {
       throw new Error(
@@ -246,9 +254,19 @@ export function LiveClassRoomMobileFirst({
           : "This live class is unavailable.",
       );
     }
+    const payloadServerNowMs = new Date(payload.serverNow).getTime();
+    const cacheAgeSeconds = Number(response.headers.get("Age") ?? "0");
+    const cacheAgeMs =
+      Number.isFinite(cacheAgeSeconds) && cacheAgeSeconds > 0
+        ? cacheAgeSeconds * 1000
+        : 0;
+    const requestMidpointMs = requestStartedAtMs + (receivedAtMs - requestStartedAtMs) / 2;
+    serverClockOffsetMsRef.current =
+      payloadServerNowMs + cacheAgeMs - requestMidpointMs;
+
     roomStateRef.current = payload;
     setRoomState(payload);
-    setNowMs(new Date(payload.serverNow).getTime());
+    setNowMs(receivedAtMs + serverClockOffsetMsRef.current);
     setError(null);
     return payload;
   }, [slug]);
@@ -354,7 +372,7 @@ export function LiveClassRoomMobileFirst({
           if (active) setLoading(false);
         });
     }, 0);
-    const clock = window.setInterval(() => setNowMs(Date.now()), 1_000);
+    const clock = window.setInterval(() => setNowMs(synchronizedNowMs()), 1_000);
     const safetyRefresh = window.setInterval(
       () => void fetchState().catch(() => undefined),
       SAFETY_STATE_REFRESH_MS,
@@ -382,7 +400,7 @@ export function LiveClassRoomMobileFirst({
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("pageshow", onPageShow);
     };
-  }, [fetchChat, fetchSharedChat, fetchState, requestPlayback]);
+  }, [fetchChat, fetchSharedChat, fetchState, requestPlayback, synchronizedNowMs]);
 
   useEffect(() => {
     if (!roomState) return;
@@ -398,13 +416,13 @@ export function LiveClassRoomMobileFirst({
         roomState.session.durationSeconds * 1000;
     }
     if (transitionAtMs === null || !Number.isFinite(transitionAtMs)) return;
-    const delay = Math.max(500, transitionAtMs - Date.now() + 1_000);
+    const delay = Math.max(500, transitionAtMs - synchronizedNowMs() + 1_000);
     const timer = window.setTimeout(
       () => void fetchState().catch(() => undefined),
       delay,
     );
     return () => window.clearTimeout(timer);
-  }, [fetchState, roomState]);
+  }, [fetchState, roomState, synchronizedNowMs]);
 
   const roomSessionId = activeSessionId;
 
@@ -462,14 +480,14 @@ export function LiveClassRoomMobileFirst({
     if (!expiry || roomState?.state !== "LIVE") return;
     const refreshIn = Math.max(
       5_000,
-      new Date(expiry).getTime() - Date.now() - 30_000,
+      new Date(expiry).getTime() - synchronizedNowMs() - 30_000,
     );
     const timer = window.setTimeout(
       () => void requestPlayback().catch(() => undefined),
       refreshIn,
     );
     return () => window.clearTimeout(timer);
-  }, [playback?.authorization?.expiresAt, requestPlayback, roomState?.state]);
+  }, [playback?.authorization?.expiresAt, requestPlayback, roomState?.state, synchronizedNowMs]);
 
   const currentLiveOffsetSeconds = useMemo(() => {
     if (
@@ -621,10 +639,10 @@ export function LiveClassRoomMobileFirst({
     return resolveBroadcastPosition({
       liveOffsetSeconds: currentState.liveOffsetSeconds,
       serverNow: new Date(currentState.serverNow),
-      clientNow: new Date(),
+      clientNow: new Date(synchronizedNowMs()),
       durationSeconds: currentState.session.durationSeconds,
     });
-  }, []);
+  }, [synchronizedNowMs]);
 
   const correctPosition = useCallback((video: HTMLVideoElement) => {
     const target = expectedPosition();
