@@ -79,7 +79,6 @@ const LIVE_CHAT_MAX_RENDERED = 80;
 const LIVE_CHAT_BOTTOM_THRESHOLD_PX = 48;
 const LIVE_STALL_RECOVERY_MS = 8_000;
 const LIVE_AUTHORIZATION_RETRY_MS = 2_000;
-const MEDIA_HAVE_FUTURE_DATA = 3;
 
 type DirectSlot = 0 | 1;
 
@@ -169,6 +168,7 @@ export function LiveClassRoomMobileFirst({
   const [nowMs, setNowMs] = useState(0);
   const [muted, setMuted] = useState(true);
   const [needsPlaybackGesture, setNeedsPlaybackGesture] = useState(false);
+  const [activePlaybackBlocked, setActivePlaybackBlocked] = useState(false);
   const [activeDirectSlot, setActiveDirectSlot] = useState<DirectSlot>(0);
   const [displayName, setDisplayName] = useState("");
   const [comment, setComment] = useState("");
@@ -230,6 +230,7 @@ export function LiveClassRoomMobileFirst({
       try {
         await video.play();
         clearStallRecovery();
+        setActivePlaybackBlocked(false);
         setNeedsPlaybackGesture(false);
         return true;
       } catch {
@@ -245,9 +246,11 @@ export function LiveClassRoomMobileFirst({
     try {
       await video.play();
       clearStallRecovery();
+      setActivePlaybackBlocked(false);
       setNeedsPlaybackGesture(false);
       return true;
     } catch {
+      setActivePlaybackBlocked(true);
       setNeedsPlaybackGesture(true);
       return false;
     }
@@ -802,11 +805,13 @@ export function LiveClassRoomMobileFirst({
         if (!sameLoadedMedia || targetSlot === currentSlot) {
           setDirectSlot(targetSlot);
           targetVideo.muted = shouldStayMuted;
+          setActivePlaybackBlocked(false);
           if (!shouldStayMuted) setNeedsPlaybackGesture(false);
         } else {
           if (currentVideo) currentVideo.muted = true;
           setDirectSlot(targetSlot);
           targetVideo.muted = shouldStayMuted;
+          setActivePlaybackBlocked(false);
           if (!shouldStayMuted) setNeedsPlaybackGesture(false);
           window.setTimeout(() => {
             if (generation !== directSwapGenerationRef.current || !currentVideo) return;
@@ -874,6 +879,7 @@ export function LiveClassRoomMobileFirst({
         hls.on(Hls.Events.MANIFEST_PARSED, positionAtLiveEdge);
         hls.on(Hls.Events.ERROR, (_event, data) => {
           if (data.fatal) {
+            setActivePlaybackBlocked(true);
             setNeedsPlaybackGesture(true);
             setError("The live stream could not be loaded.");
           }
@@ -989,6 +995,7 @@ export function LiveClassRoomMobileFirst({
       ) {
         return;
       }
+      setActivePlaybackBlocked(true);
       forceLiveEdgeOnNextAuthorizationRef.current = true;
       void requestPlayback().catch(() => {
         const activeVideo = currentAudioVideo();
@@ -1009,6 +1016,7 @@ export function LiveClassRoomMobileFirst({
       !video.ended
     ) {
       clearStallRecovery();
+      setActivePlaybackBlocked(true);
       // The public player has no pause control, so a visible pause is a browser/
       // decoder interruption rather than user intent. Recover the moving picture
       // immediately in muted autoplay-safe mode before asking for any gesture.
@@ -1023,6 +1031,7 @@ export function LiveClassRoomMobileFirst({
   const handlePlaybackError = (video: HTMLVideoElement) => {
     if (video !== currentAudioVideo()) return;
     clearStallRecovery();
+    setActivePlaybackBlocked(true);
     forceLiveEdgeOnNextAuthorizationRef.current = true;
     setNeedsPlaybackGesture(true);
     void requestPlayback().catch(() => undefined);
@@ -1052,6 +1061,7 @@ export function LiveClassRoomMobileFirst({
       try {
         await video.play();
         clearStallRecovery();
+        setActivePlaybackBlocked(false);
         setNeedsPlaybackGesture(false);
       } catch {
         // Keep the picture live even when a mobile browser refuses audible
@@ -1062,8 +1072,10 @@ export function LiveClassRoomMobileFirst({
         try {
           await video.play();
           clearStallRecovery();
+          setActivePlaybackBlocked(false);
           setNeedsPlaybackGesture(false);
         } catch {
+          setActivePlaybackBlocked(true);
           setNeedsPlaybackGesture(true);
           forceLiveEdgeOnNextAuthorizationRef.current = true;
           void requestPlayback().catch(() => setNeedsPlaybackGesture(true));
@@ -1131,15 +1143,11 @@ export function LiveClassRoomMobileFirst({
 
   const isTestMode = playback?.testMode === true;
   const authorization = playback?.authorization ?? null;
-  const activeMedia = currentAudioVideo();
   const showAudioPrompt = authorization && authorization.playbackType !== "EMBED"
     ? shouldShowLiveAudioPrompt({
         muted,
         needsPlaybackGesture,
-        hasActiveMedia: Boolean(activeMedia),
-        activeMediaPaused: activeMedia?.paused ?? true,
-        activeMediaReadyState: activeMedia?.readyState ?? 0,
-        futureDataReadyState: MEDIA_HAVE_FUTURE_DATA,
+        activePlaybackBlocked,
       })
     : false;
 
@@ -1214,6 +1222,7 @@ export function LiveClassRoomMobileFirst({
                         onPlaying={(event) => {
                           if (event.currentTarget === currentAudioVideo()) {
                             clearStallRecovery();
+                            setActivePlaybackBlocked(false);
                             setNeedsPlaybackGesture(false);
                           }
                         }}
@@ -1240,6 +1249,7 @@ export function LiveClassRoomMobileFirst({
                   onPlaying={(event) => {
                     if (event.currentTarget === currentAudioVideo()) {
                       clearStallRecovery();
+                      setActivePlaybackBlocked(false);
                       setNeedsPlaybackGesture(false);
                     }
                   }}
