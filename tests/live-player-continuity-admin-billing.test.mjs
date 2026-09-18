@@ -48,6 +48,16 @@ test('visibility return and playback errors explicitly rejoin the authoritative 
   assert.match(source, /handlePlaybackError/);
 });
 
+
+test('final live session ending message and redirect remain available after state.session becomes null', () => {
+  const route = read('src/app/api/live/[slug]/state/route.ts');
+
+  assert.match(route, /const endedSession = state\.state === "ENDED"/);
+  assert.match(route, /item\.status === "PUBLISHED"/);
+  assert.match(route, /endedSession\?\.endedMessage \?\? batch\.endedMessage/);
+  assert.match(route, /endedSession\?\.endedRedirectUrl \?\? batch\.endedRedirectUrl/);
+});
+
 test('hosting payment warning is confined to admin dashboard and only appears in due or unpaid states', () => {
   const admin = read('src/app/(admin)/admin/page.tsx');
   const member = read('src/app/(member)/dashboard/page.tsx');
