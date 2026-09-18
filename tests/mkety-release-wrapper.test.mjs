@@ -34,3 +34,12 @@ test('Mkety production alone wires the managed-hosting operator key into the app
   assert.match(production, /MKLMS_MANAGED_HOSTING_OPERATOR_KEY:\$operatorKey/);
   assert.doesNotMatch(preview, /MKLMS_MANAGED_HOSTING_OPERATOR_KEY/);
 });
+
+test('Mkety production maps its private hosting operator secret into the generic production deploy', () => {
+  const wrapper = readFileSync('.github/workflows/mkety-academy-release.yml', 'utf8');
+  const deploy = readFileSync('.github/workflows/deploy-installation-production.yml', 'utf8');
+  assert.match(wrapper, /MKLMS_MANAGED_HOSTING_OPERATOR_KEY:\s*\$\{\{ secrets\.MKETY_MANAGED_HOSTING_OPERATOR_KEY \}\}/);
+  assert.match(deploy, /MKLMS_MANAGED_HOSTING_OPERATOR_KEY:/);
+  assert.match(deploy, /MANAGED_HOSTING_OPERATOR_KEY:\s*\$\{\{ secrets\.MKLMS_MANAGED_HOSTING_OPERATOR_KEY \}\}/);
+  assert.match(deploy, /MKLMS_MANAGED_HOSTING_OPERATOR_KEY:\$operatorKey/);
+});
