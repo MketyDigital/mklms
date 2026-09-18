@@ -178,7 +178,9 @@ export function LiveClassRoomMobileFirst({
   const [isFollowingLiveChat, setIsFollowingLiveChat] = useState(true);
   const [hasUnreadLiveChat, setHasUnreadLiveChat] = useState(false);
 
-  mutedRef.current = muted;
+  useEffect(() => {
+    mutedRef.current = muted;
+  }, [muted]);
 
   const activeSessionId = roomState?.state === "LIVE" ? roomState.session?.id ?? null : null;
   const storageKey = useMemo(
