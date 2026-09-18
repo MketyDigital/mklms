@@ -700,6 +700,16 @@ export function LiveClassRoomMobileFirst({
         await waitForRenderableFrame(targetVideo);
         if (generation !== directSwapGenerationRef.current) return;
 
+        if (
+          sameLoadedMedia &&
+          currentVideo &&
+          currentVideo.currentTime - targetVideo.currentTime > 0.75
+        ) {
+          targetVideo.currentTime = currentVideo.currentTime;
+          await waitForRenderableFrame(targetVideo);
+          if (generation !== directSwapGenerationRef.current) return;
+        }
+
         setNeedsPlaybackGesture(false);
         if (!sameLoadedMedia || targetSlot === currentSlot) {
           targetVideo.muted = mutedRef.current;
