@@ -69,6 +69,12 @@ test('hosting payment warning is confined to admin dashboard and only appears in
   assert.match(admin, /paymentStatus === "PAID"/);
   assert.match(admin, /paymentStatus === "WAIVED"/);
   assert.match(admin, /href="\/admin\/hosting"/);
+  assert.match(admin, /AdminHostingNoticeRefresh/);
 
-  assert.doesNotMatch(member, /ManagedHosting|Hosting payment|\/admin\/hosting/);
+  const refresh = read('src/features/hosting/components/admin-hosting-notice-refresh.tsx');
+  assert.match(refresh, /5 \* 60 \* 1000/);
+  assert.match(refresh, /visibilitychange/);
+  assert.match(refresh, /router\.refresh\(\)/);
+
+  assert.doesNotMatch(member, /ManagedHosting|Hosting payment|AdminHostingNoticeRefresh|\/admin\/hosting/);
 });
