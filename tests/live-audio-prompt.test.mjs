@@ -19,15 +19,13 @@ test('muted playback always offers the audio button', () => {
   }), true);
 });
 
-test('audible playback shows resume only when the active player is actually blocked', () => {
+test('audible playback shows resume only when the active player is genuinely blocked', () => {
   assert.equal(shouldShowLiveAudioPrompt({
     muted: false,
     needsPlaybackGesture: true,
     activePlaybackBlocked: true,
   }), true);
-});
 
-test('a blocked-state signal alone does not show an overlay without a gesture requirement', () => {
   assert.equal(shouldShowLiveAudioPrompt({
     muted: false,
     needsPlaybackGesture: false,
