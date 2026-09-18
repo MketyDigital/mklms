@@ -475,6 +475,7 @@ export function LiveClassRoomMobileFirst({
         }
 
         if (!needsRecovery) {
+          forceLiveEdgeOnNextAuthorizationRef.current = false;
           setActivePlaybackBlocked(false);
           setNeedsPlaybackGesture(false);
           return;
@@ -918,7 +919,6 @@ export function LiveClassRoomMobileFirst({
     if (!video || authorization.playbackType !== "HLS") return;
     let destroyed = false;
     let destroyHls: (() => void) | undefined;
-    const forceLiveEdge = forceLiveEdgeOnNextAuthorizationRef.current;
     const preservedPosition =
       sameLoadedMedia && !forceLiveEdge && Number.isFinite(video.currentTime)
         ? video.currentTime
