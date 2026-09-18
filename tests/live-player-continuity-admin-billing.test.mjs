@@ -57,6 +57,7 @@ test('mobile audio tap unmutes in the user gesture without seeking a player that
   assert.match(resume, /mutedRef\.current = false/);
   assert.match(resume, /video\.muted = false/);
   assert.match(resume, /await video\.play\(\)/);
+  assert.match(resume, /forceLiveEdgeOnNextAuthorizationRef\.current = false/);
   assert.match(resume, /recoveringPausedPlayback/);
   assert.match(resume, /video\.paused \|\| video\.readyState < HTMLMediaElement\.HAVE_FUTURE_DATA/);
   assert.doesNotMatch(resume, /needsPlaybackGesture \|\| video\.paused/);
