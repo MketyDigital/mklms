@@ -27,6 +27,19 @@ test('live timing and token refresh use the server-synchronized clock instead of
   assert.doesNotMatch(source, /clientNow:\s*new Date\(\)/);
 });
 
+
+test('persistent waiting or stalled media recovers only after a guarded timeout and cancels on playing', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+
+  assert.match(source, /LIVE_STALL_RECOVERY_MS = 8_000/);
+  assert.match(source, /onWaiting=\{\(event\) => scheduleStallRecovery\(event\.currentTarget\)\}/);
+  assert.match(source, /onStalled=\{\(event\) => scheduleStallRecovery\(event\.currentTarget\)\}/);
+  assert.match(source, /video !== currentAudioVideo\(\)/);
+  assert.match(source, /roomStateRef\.current\?\.state !== "LIVE"/);
+  assert.match(source, /video\.readyState >= HTMLMediaElement\.HAVE_FUTURE_DATA/);
+  assert.match(source, /clearStallRecovery\(\);[\s\S]*setNeedsPlaybackGesture\(false\)/);
+});
+
 test('visibility return and playback errors explicitly rejoin the authoritative live edge', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
 
