@@ -78,6 +78,8 @@ const LIVE_CHAT_INITIAL_CONTEXT = 10;
 const LIVE_CHAT_MAX_RENDERED = 80;
 const LIVE_CHAT_BOTTOM_THRESHOLD_PX = 48;
 const LIVE_STALL_RECOVERY_MS = 8_000;
+const LIVE_SILENT_FREEZE_RECOVERY_MS = 10_000;
+const LIVE_PROGRESS_SAMPLE_MS = 2_500;
 const LIVE_AUTHORIZATION_RETRY_MS = 2_000;
 
 type DirectSlot = 0 | 1;
@@ -155,6 +157,11 @@ export function LiveClassRoomMobileFirst({
   const mutedRef = useRef(true);
   const stallRecoveryTimerRef = useRef<number | null>(null);
   const authorizationRetryTimerRef = useRef<number | null>(null);
+  const silentFreezeSampleRef = useRef<{
+    video: HTMLVideoElement;
+    currentTime: number;
+    sampledAtMs: number;
+  } | null>(null);
   const previousStorageKeyRef = useRef<string | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const seenStagedMessageIdsRef = useRef<Set<string>>(new Set());
@@ -1085,6 +1092,76 @@ export function LiveClassRoomMobileFirst({
       });
     }, LIVE_STALL_RECOVERY_MS);
   }, [clearStallRecovery, currentAudioVideo, requestPlayback]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const video = currentAudioVideo();
+      if (
+        document.visibilityState !== "visible" ||
+        roomStateRef.current?.state !== "LIVE" ||
+        !video ||
+        video.paused ||
+        video.ended
+      ) {
+        silentFreezeSampleRef.current = null;
+        return;
+      }
+
+      if (
+        Number.isFinite(video.duration) &&
+        video.duration > 0 &&
+        video.currentTime >= video.duration - 0.5
+      ) {
+        silentFreezeSampleRef.current = null;
+        return;
+      }
+
+      const now = window.performance.now();
+      const previous = silentFreezeSampleRef.current;
+      if (
+        !previous ||
+        previous.video !== video ||
+        Math.abs(video.currentTime - previous.currentTime) >= 0.25
+      ) {
+        silentFreezeSampleRef.current = {
+          video,
+          currentTime: video.currentTime,
+          sampledAtMs: now,
+        };
+        return;
+      }
+
+      if (now - previous.sampledAtMs < LIVE_SILENT_FREEZE_RECOVERY_MS) return;
+
+      // Some mobile browsers can leave a media element looking "playing" while
+      // its decoder/network pipeline has stopped advancing and no waiting/stalled
+      // event is delivered. Rebuild only after sustained zero progress while the
+      // page is visible, then reset the sample so recovery cannot loop tightly.
+      silentFreezeSampleRef.current = {
+        video,
+        currentTime: video.currentTime,
+        sampledAtMs: now,
+      };
+      setActivePlaybackBlocked(true);
+      forceLiveEdgeOnNextAuthorizationRef.current = true;
+      void requestPlayback().catch(() => {
+        const activeVideo = currentAudioVideo();
+        if (
+          activeVideo === video &&
+          (video.paused ||
+            video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA ||
+            Math.abs(video.currentTime - previous.currentTime) < 0.25)
+        ) {
+          setNeedsPlaybackGesture(true);
+        }
+      });
+    }, LIVE_PROGRESS_SAMPLE_MS);
+
+    return () => {
+      window.clearInterval(timer);
+      silentFreezeSampleRef.current = null;
+    };
+  }, [currentAudioVideo, requestPlayback]);
 
   const handlePlaybackPaused = (video: HTMLVideoElement) => {
     if (
