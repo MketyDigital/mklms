@@ -148,6 +148,7 @@ export function LiveClassRoomMobileFirst({
   const activeDirectSlotRef = useRef<DirectSlot>(0);
   const directSwapGenerationRef = useRef(0);
   const forceLiveEdgeOnNextAuthorizationRef = useRef(false);
+  const mutedRef = useRef(true);
   const previousStorageKeyRef = useRef<string | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const seenStagedMessageIdsRef = useRef<Set<string>>(new Set());
@@ -173,6 +174,8 @@ export function LiveClassRoomMobileFirst({
   const [streamSeeded, setStreamSeeded] = useState(false);
   const [isFollowingLiveChat, setIsFollowingLiveChat] = useState(true);
   const [hasUnreadLiveChat, setHasUnreadLiveChat] = useState(false);
+
+  mutedRef.current = muted;
 
   const activeSessionId = roomState?.state === "LIVE" ? roomState.session?.id ?? null : null;
   const storageKey = useMemo(
@@ -681,10 +684,10 @@ export function LiveClassRoomMobileFirst({
 
         setNeedsPlaybackGesture(false);
         if (!sameLoadedMedia || targetSlot === currentSlot) {
-          targetVideo.muted = muted;
+          targetVideo.muted = mutedRef.current;
           setDirectSlot(targetSlot);
         } else {
-          targetVideo.muted = muted;
+          targetVideo.muted = mutedRef.current;
           if (currentVideo) currentVideo.muted = true;
           setDirectSlot(targetSlot);
           window.setTimeout(() => {
@@ -763,7 +766,6 @@ export function LiveClassRoomMobileFirst({
   }, [
     correctPosition,
     directVideoForSlot,
-    muted,
     playback,
     roomState?.state,
     setDirectSlot,
