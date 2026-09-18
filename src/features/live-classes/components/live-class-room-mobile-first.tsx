@@ -549,8 +549,22 @@ export function LiveClassRoomMobileFirst({
   }, [requestPlayback, roomSessionId, roomState?.state]);
 
   useEffect(() => {
-    const expiry = playback?.authorization?.expiresAt;
+    const authorization = playback?.authorization;
+    const expiry = authorization?.expiresAt;
     if (!expiry || roomState?.state !== "LIVE") return;
+
+    if (authorization.playbackType === "DIRECT" && roomState.session) {
+      const sessionEndsAtMs =
+        new Date(roomState.session.startsAt).getTime() +
+        roomState.session.durationSeconds * 1000;
+      if (new Date(expiry).getTime() >= sessionEndsAtMs - 1_000) {
+        // DIRECT media authorization is intentionally session-bound. There is
+        // no reason to rotate a healthy active media element before class end,
+        // which also avoids mobile Safari/Chromium autoplay re-evaluation.
+        return;
+      }
+    }
+
     const refreshIn = Math.max(
       5_000,
       new Date(expiry).getTime() - synchronizedNowMs() - 30_000,
@@ -560,7 +574,13 @@ export function LiveClassRoomMobileFirst({
       refreshIn,
     );
     return () => window.clearTimeout(timer);
-  }, [playback?.authorization?.expiresAt, requestPlayback, roomState?.state, synchronizedNowMs]);
+  }, [
+    playback?.authorization,
+    requestPlayback,
+    roomState?.session,
+    roomState?.state,
+    synchronizedNowMs,
+  ]);
 
   const currentLiveOffsetSeconds = useMemo(() => {
     if (

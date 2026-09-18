@@ -26,6 +26,15 @@ test('foreground rollover never seeks a new session using stale previous-session
   assert.match(source, /return currentPlayback\?\.startAtSeconds \?\? 0/);
 });
 
+test('healthy DIRECT live playback does not rotate its source again before the scheduled session end', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+
+  assert.match(source, /authorization\.playbackType === "DIRECT" && roomState\.session/);
+  assert.match(source, /const sessionEndsAtMs/);
+  assert.match(source, /new Date\(expiry\)\.getTime\(\) >= sessionEndsAtMs - 1_000/);
+  assert.match(source, /There is[\s\S]*no reason to rotate a healthy active media element before class end/);
+});
+
 test('live timing and token refresh use the server-synchronized clock instead of the viewer device clock', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
 
