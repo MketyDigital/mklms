@@ -230,8 +230,10 @@ export function LiveClassRoomMobileFirst({
       try {
         await video.play();
         clearStallRecovery();
-        setActivePlaybackBlocked(false);
-        setNeedsPlaybackGesture(false);
+        if (video === currentAudioVideo()) {
+          setActivePlaybackBlocked(false);
+          setNeedsPlaybackGesture(false);
+        }
         return true;
       } catch {
         // Mobile Safari/Chrome may reject audible autoplay after a background,
@@ -246,15 +248,19 @@ export function LiveClassRoomMobileFirst({
     try {
       await video.play();
       clearStallRecovery();
-      setActivePlaybackBlocked(false);
-      setNeedsPlaybackGesture(false);
+      if (video === currentAudioVideo()) {
+        setActivePlaybackBlocked(false);
+        setNeedsPlaybackGesture(false);
+      }
       return true;
     } catch {
-      setActivePlaybackBlocked(true);
-      setNeedsPlaybackGesture(true);
+      if (video === currentAudioVideo()) {
+        setActivePlaybackBlocked(true);
+        setNeedsPlaybackGesture(true);
+      }
       return false;
     }
-  }, [clearStallRecovery]);
+  }, [clearStallRecovery, currentAudioVideo]);
 
   useEffect(() => () => {
     clearStallRecovery();
@@ -451,7 +457,16 @@ export function LiveClassRoomMobileFirst({
           video.muted = true;
         }
         forceLiveEdgeOnNextAuthorizationRef.current = true;
-        void requestPlayback().catch(() => setNeedsPlaybackGesture(true));
+        void requestPlayback().catch(() => {
+          if (
+            video &&
+            video === currentAudioVideo() &&
+            (video.paused || video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA)
+          ) {
+            setActivePlaybackBlocked(true);
+            setNeedsPlaybackGesture(true);
+          }
+        });
       }
     };
     const onVisibilityChange = () => {
@@ -1043,7 +1058,15 @@ export function LiveClassRoomMobileFirst({
       void keepPlaybackRunning(video, { preferAudio: false }).then((playing) => {
         if (playing) return;
         forceLiveEdgeOnNextAuthorizationRef.current = true;
-        void requestPlayback().catch(() => setNeedsPlaybackGesture(true));
+        void requestPlayback().catch(() => {
+          if (
+            video === currentAudioVideo() &&
+            (video.paused || video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA)
+          ) {
+            setActivePlaybackBlocked(true);
+            setNeedsPlaybackGesture(true);
+          }
+        });
       });
     }
   };
