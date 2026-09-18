@@ -758,7 +758,10 @@ export function LiveClassRoomMobileFirst({
         try {
           await targetVideo.play();
         } catch {
-          setNeedsPlaybackGesture(true);
+          // This is a hidden/preloading replacement. It must never change the
+          // active player's mute/gesture UI while the current broadcast is still
+          // healthy and audible. Keep the current slot untouched; the normal
+          // authorization refresh cycle will retry with a fresh signed URL.
           return;
         }
         if (generation !== directSwapGenerationRef.current) return;
@@ -775,14 +778,20 @@ export function LiveClassRoomMobileFirst({
           if (generation !== directSwapGenerationRef.current) return;
         }
 
-        const targetPlaying = await keepPlaybackRunning(targetVideo);
-        if (!targetPlaying || generation !== directSwapGenerationRef.current) return;
+        // The replacement stays muted for the entire hidden preload so it can
+        // never produce duplicate/echo audio. Only after it becomes the active
+        // slot do we transfer the viewer's current audio intent.
+        const shouldStayMuted = mutedRef.current;
 
         if (!sameLoadedMedia || targetSlot === currentSlot) {
           setDirectSlot(targetSlot);
+          targetVideo.muted = shouldStayMuted;
+          if (!shouldStayMuted) setNeedsPlaybackGesture(false);
         } else {
           if (currentVideo) currentVideo.muted = true;
           setDirectSlot(targetSlot);
+          targetVideo.muted = shouldStayMuted;
+          if (!shouldStayMuted) setNeedsPlaybackGesture(false);
           window.setTimeout(() => {
             if (generation !== directSwapGenerationRef.current || !currentVideo) return;
             currentVideo.pause();
