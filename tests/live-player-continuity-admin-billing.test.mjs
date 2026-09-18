@@ -18,6 +18,14 @@ test('live player renews authorization without jumping an active viewer backward
   assert.match(source, /if \(recoveringPausedPlayback\)[\s\S]*correctPosition\(video\)/);
 });
 
+test('foreground rollover never seeks a new session using stale previous-session timing', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+
+  assert.match(source, /const currentPlayback = playbackRef\.current/);
+  assert.match(source, /currentState\.session\.id !== currentPlayback\?\.sessionId/);
+  assert.match(source, /return currentPlayback\?\.startAtSeconds \?\? 0/);
+});
+
 test('live timing and token refresh use the server-synchronized clock instead of the viewer device clock', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
 
