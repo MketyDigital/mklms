@@ -88,6 +88,7 @@ async function handleInvoice(request: Request, env: Env, runtimeFetch: typeof fe
   const amountUsd = Number(body.amountUsd);
   const timestamp = Number(body.timestamp);
   const nonce = typeof body.nonce === "string" ? body.nonce : "";
+  const reference = typeof body.reference === "string" ? body.reference : undefined;
   const signature = typeof body.signature === "string" ? body.signature : "";
   const customer = customers[installationId];
 
@@ -96,19 +97,20 @@ async function handleInvoice(request: Request, env: Env, runtimeFetch: typeof fe
     !validMonthKey(monthKey) ||
     !Number.isFinite(amountUsd) || amountUsd <= 0 || amountUsd > 100000 ||
     !Number.isInteger(timestamp) || Math.abs(Math.floor(Date.now() / 1000) - timestamp) > 300 ||
-    !/^[A-Za-z0-9_-]{8,64}$/.test(nonce)
+    !/^[A-Za-z0-9_-]{8,64}$/.test(nonce) ||
+    (reference !== undefined && !/^[A-Za-z0-9_-]{8,96}$/.test(reference))
   ) {
     return json({ ok: false, message: "Invalid billing request." }, 400);
   }
 
-  const canonical = canonicalCheckoutPayload({ installationId, monthKey, amountUsd, timestamp, nonce });
+  const canonical = canonicalCheckoutPayload({ installationId, monthKey, amountUsd, timestamp, nonce, reference });
   if (!(await verifyHmacHex("sha256", customer.sharedSecret, canonical, signature))) {
     return json({ ok: false, message: "Unauthorized billing request." }, 401);
   }
 
   let orderId: string;
   try {
-    orderId = createOrderId(installationId, monthKey, nonce);
+    orderId = createOrderId(installationId, monthKey, nonce, reference);
   } catch {
     return json({ ok: false, message: "Invalid billing request." }, 400);
   }
@@ -181,6 +183,7 @@ async function handleIpn(request: Request, env: Env, runtimeFetch: typeof fetch)
     actuallyPaid: Number(payload.actually_paid ?? payload.pay_amount ?? 0),
     payCurrency: String(payload.pay_currency ?? ""),
     timestamp: Math.floor(Date.now() / 1000),
+    billingReference: order.reference,
   };
   if (!settlement.paymentId || !Number.isFinite(settlement.priceAmount) || settlement.priceAmount <= 0) {
     return json({ ok: false, message: "Invalid finished payment." }, 400);
