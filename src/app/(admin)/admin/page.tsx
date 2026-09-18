@@ -94,7 +94,8 @@ async function getAdminHostingNotice(): Promise<AdminHostingNotice | null> {
       title: "Hosting payment is now due",
       message: "This month’s hosting payment window is open. Open Hosting & Billing to review the balance and complete payment.",
     };
-  } catch {
+  } catch (error) {
+    console.error("[managed-hosting] admin home notice unavailable", error);
     return null;
   }
 }
