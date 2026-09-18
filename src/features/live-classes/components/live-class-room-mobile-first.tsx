@@ -79,6 +79,7 @@ const LIVE_CHAT_MAX_RENDERED = 80;
 const LIVE_CHAT_BOTTOM_THRESHOLD_PX = 48;
 const LIVE_STALL_RECOVERY_MS = 8_000;
 const LIVE_AUTHORIZATION_RETRY_MS = 2_000;
+const MEDIA_HAVE_FUTURE_DATA = 3;
 
 type DirectSlot = 0 | 1;
 
@@ -1138,7 +1139,7 @@ export function LiveClassRoomMobileFirst({
         hasActiveMedia: Boolean(activeMedia),
         activeMediaPaused: activeMedia?.paused ?? true,
         activeMediaReadyState: activeMedia?.readyState ?? 0,
-        futureDataReadyState: HTMLMediaElement.HAVE_FUTURE_DATA,
+        futureDataReadyState: MEDIA_HAVE_FUTURE_DATA,
       })
     : false;
 
