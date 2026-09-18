@@ -214,7 +214,7 @@ export function LiveClassRoomMobileFirst({
     stallRecoveryTimerRef.current = null;
   }, []);
 
-  useEffect(() => clearStallRecovery, [clearStallRecovery]);
+  useEffect(() => () => clearStallRecovery(), [clearStallRecovery]);
 
   useEffect(() => {
     const previousKey = previousStorageKeyRef.current;
