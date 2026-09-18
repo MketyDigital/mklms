@@ -14,7 +14,7 @@ test('live player renews authorization without jumping an active viewer backward
   assert.match(source, /currentVideo\.currentTime - targetVideo\.currentTime > 0\.75/);
   assert.match(source, /preservedPosition/);
   assert.match(source, /video\.currentTime\s*<\s*target/);
-  assert.match(source, /const recoveringPausedPlayback = needsPlaybackGesture \|\| video\.paused/);
+  assert.match(source, /const recoveringPausedPlayback =[\s\S]*video\.paused \|\| video\.readyState < HTMLMediaElement\.HAVE_FUTURE_DATA/);
   assert.match(source, /if \(recoveringPausedPlayback\)[\s\S]*correctPosition\(video\)/);
 });
 
@@ -49,6 +49,8 @@ test('mobile audio tap unmutes in the user gesture without seeking a player that
   assert.match(resume, /video\.muted = false/);
   assert.match(resume, /await video\.play\(\)/);
   assert.match(resume, /recoveringPausedPlayback/);
+  assert.match(resume, /video\.paused \|\| video\.readyState < HTMLMediaElement\.HAVE_FUTURE_DATA/);
+  assert.doesNotMatch(resume, /needsPlaybackGesture \|\| video\.paused/);
   assert.doesNotMatch(resume, /correctPosition\(video\);[\s\S]*const recoveringPausedPlayback/);
 });
 
@@ -71,14 +73,47 @@ test('unexpected visible mobile pauses recover automatically in muted autoplay-s
   assert.match(source, /if \(playing\) return;[\s\S]*forceLiveEdgeOnNextAuthorizationRef\.current = true/);
 });
 
-test('mobile autoplay fallback keeps the live picture running if audible restart is rejected', () => {
+test('mobile autoplay fallback keeps the active live picture running if audible restart is rejected', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
 
   assert.match(source, /const keepPlaybackRunning = useCallback/);
   assert.match(source, /video\.muted = false;[\s\S]*await video\.play\(\)/);
   assert.match(source, /mutedRef\.current = true;[\s\S]*video\.muted = true;[\s\S]*await video\.play\(\)/);
-  assert.match(source, /const targetPlaying = await keepPlaybackRunning\(targetVideo\)/);
   assert.match(source, /void keepPlaybackRunning\(video\)\.then/);
+  assert.doesNotMatch(source, /keepPlaybackRunning\(targetVideo\)/);
+});
+
+test('hidden DIRECT authorization refresh cannot raise the active audio prompt or emit duplicate audio', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+  const directStart = source.indexOf('if (authorization.playbackType === "DIRECT")');
+  const hlsStart = source.indexOf('const video = hlsVideoRef.current', directStart);
+  const direct = source.slice(directStart, hlsStart);
+
+  assert.ok(directStart >= 0 && hlsStart > directStart, 'DIRECT handoff block must be present');
+  assert.match(direct, /targetVideo\.muted = true/);
+  assert.match(direct, /await targetVideo\.play\(\)/);
+  assert.match(direct, /LIVE_AUTHORIZATION_RETRY_MS/);
+  assert.match(direct, /const shouldStayMuted = mutedRef\.current/);
+  assert.match(direct, /setDirectSlot\(targetSlot\);[\s\S]*targetVideo\.muted = shouldStayMuted/);
+  assert.doesNotMatch(direct, /keepPlaybackRunning\(targetVideo\)/);
+
+  const preloadCatch = direct.slice(
+    direct.indexOf('try {\n          await targetVideo.play()'),
+    direct.indexOf('if (generation !== directSwapGenerationRef.current) return;', direct.indexOf('try {\n          await targetVideo.play()')),
+  );
+  assert.doesNotMatch(preloadCatch, /setNeedsPlaybackGesture\(true\)/);
+  assert.doesNotMatch(preloadCatch, /setMuted\(true\)/);
+});
+
+test('audio overlay is defensively tied to explicit active playback health state', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+
+  assert.match(source, /shouldShowLiveAudioPrompt/);
+  assert.match(source, /activePlaybackBlocked/);
+  assert.match(source, /setActivePlaybackBlocked\(false\)/);
+  assert.match(source, /setActivePlaybackBlocked\(true\)/);
+  assert.match(source, /\{showAudioPrompt \? \(/);
+  assert.doesNotMatch(source, /const activeMedia = currentAudioVideo\(\)/);
 });
 
 test('persistent waiting or stalled media recovers only after a guarded timeout and cancels on playing', () => {

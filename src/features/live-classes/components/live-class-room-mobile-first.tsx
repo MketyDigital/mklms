@@ -12,6 +12,7 @@ import {
   parseOwnLiveComments,
   type OwnLiveComment,
 } from "../domain/live-client-cache";
+import { shouldShowLiveAudioPrompt } from "../domain/live-audio-prompt";
 import {
   resolveBroadcastPosition,
   shouldCorrectBroadcastPosition,
@@ -77,6 +78,7 @@ const LIVE_CHAT_INITIAL_CONTEXT = 10;
 const LIVE_CHAT_MAX_RENDERED = 80;
 const LIVE_CHAT_BOTTOM_THRESHOLD_PX = 48;
 const LIVE_STALL_RECOVERY_MS = 8_000;
+const LIVE_AUTHORIZATION_RETRY_MS = 2_000;
 
 type DirectSlot = 0 | 1;
 
@@ -152,6 +154,7 @@ export function LiveClassRoomMobileFirst({
   const serverClockOffsetMsRef = useRef(0);
   const mutedRef = useRef(true);
   const stallRecoveryTimerRef = useRef<number | null>(null);
+  const authorizationRetryTimerRef = useRef<number | null>(null);
   const previousStorageKeyRef = useRef<string | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const seenStagedMessageIdsRef = useRef<Set<string>>(new Set());
@@ -165,6 +168,7 @@ export function LiveClassRoomMobileFirst({
   const [nowMs, setNowMs] = useState(0);
   const [muted, setMuted] = useState(true);
   const [needsPlaybackGesture, setNeedsPlaybackGesture] = useState(false);
+  const [activePlaybackBlocked, setActivePlaybackBlocked] = useState(false);
   const [activeDirectSlot, setActiveDirectSlot] = useState<DirectSlot>(0);
   const [displayName, setDisplayName] = useState("");
   const [comment, setComment] = useState("");
@@ -226,6 +230,7 @@ export function LiveClassRoomMobileFirst({
       try {
         await video.play();
         clearStallRecovery();
+        setActivePlaybackBlocked(false);
         setNeedsPlaybackGesture(false);
         return true;
       } catch {
@@ -241,15 +246,23 @@ export function LiveClassRoomMobileFirst({
     try {
       await video.play();
       clearStallRecovery();
+      setActivePlaybackBlocked(false);
       setNeedsPlaybackGesture(false);
       return true;
     } catch {
+      setActivePlaybackBlocked(true);
       setNeedsPlaybackGesture(true);
       return false;
     }
   }, [clearStallRecovery]);
 
-  useEffect(() => () => clearStallRecovery(), [clearStallRecovery]);
+  useEffect(() => () => {
+    clearStallRecovery();
+    if (authorizationRetryTimerRef.current !== null) {
+      window.clearTimeout(authorizationRetryTimerRef.current);
+      authorizationRetryTimerRef.current = null;
+    }
+  }, [clearStallRecovery]);
 
   useEffect(() => {
     const previousKey = previousStorageKeyRef.current;
@@ -758,7 +771,16 @@ export function LiveClassRoomMobileFirst({
         try {
           await targetVideo.play();
         } catch {
-          setNeedsPlaybackGesture(true);
+          // This is a hidden/preloading replacement. It must never change the
+          // active player's mute/gesture UI while the current broadcast is still
+          // healthy and audible. Keep the current slot untouched and retry a
+          // fresh authorization shortly instead of surfacing a false audio prompt.
+          if (authorizationRetryTimerRef.current === null) {
+            authorizationRetryTimerRef.current = window.setTimeout(() => {
+              authorizationRetryTimerRef.current = null;
+              void requestPlayback().catch(() => undefined);
+            }, LIVE_AUTHORIZATION_RETRY_MS);
+          }
           return;
         }
         if (generation !== directSwapGenerationRef.current) return;
@@ -775,14 +797,22 @@ export function LiveClassRoomMobileFirst({
           if (generation !== directSwapGenerationRef.current) return;
         }
 
-        const targetPlaying = await keepPlaybackRunning(targetVideo);
-        if (!targetPlaying || generation !== directSwapGenerationRef.current) return;
+        // The replacement stays muted for the entire hidden preload so it can
+        // never produce duplicate/echo audio. Only after it becomes the active
+        // slot do we transfer the viewer's current audio intent.
+        const shouldStayMuted = mutedRef.current;
 
         if (!sameLoadedMedia || targetSlot === currentSlot) {
           setDirectSlot(targetSlot);
+          targetVideo.muted = shouldStayMuted;
+          setActivePlaybackBlocked(false);
+          if (!shouldStayMuted) setNeedsPlaybackGesture(false);
         } else {
           if (currentVideo) currentVideo.muted = true;
           setDirectSlot(targetSlot);
+          targetVideo.muted = shouldStayMuted;
+          setActivePlaybackBlocked(false);
+          if (!shouldStayMuted) setNeedsPlaybackGesture(false);
           window.setTimeout(() => {
             if (generation !== directSwapGenerationRef.current || !currentVideo) return;
             currentVideo.pause();
@@ -795,6 +825,10 @@ export function LiveClassRoomMobileFirst({
         loadedMediaTypeRef.current = authorization.playbackType;
         loadedAuthorizationUrlRef.current = authorization.url;
         forceLiveEdgeOnNextAuthorizationRef.current = false;
+        if (authorizationRetryTimerRef.current !== null) {
+          window.clearTimeout(authorizationRetryTimerRef.current);
+          authorizationRetryTimerRef.current = null;
+        }
       };
 
       targetVideo.addEventListener("loadedmetadata", () => void promote(), { once: true });
@@ -845,6 +879,7 @@ export function LiveClassRoomMobileFirst({
         hls.on(Hls.Events.MANIFEST_PARSED, positionAtLiveEdge);
         hls.on(Hls.Events.ERROR, (_event, data) => {
           if (data.fatal) {
+            setActivePlaybackBlocked(true);
             setNeedsPlaybackGesture(true);
             setError("The live stream could not be loaded.");
           }
@@ -960,8 +995,17 @@ export function LiveClassRoomMobileFirst({
       ) {
         return;
       }
+      setActivePlaybackBlocked(true);
       forceLiveEdgeOnNextAuthorizationRef.current = true;
-      void requestPlayback().catch(() => setNeedsPlaybackGesture(true));
+      void requestPlayback().catch(() => {
+        const activeVideo = currentAudioVideo();
+        if (
+          activeVideo === video &&
+          (video.paused || video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA)
+        ) {
+          setNeedsPlaybackGesture(true);
+        }
+      });
     }, LIVE_STALL_RECOVERY_MS);
   }, [clearStallRecovery, currentAudioVideo, requestPlayback]);
 
@@ -972,6 +1016,7 @@ export function LiveClassRoomMobileFirst({
       !video.ended
     ) {
       clearStallRecovery();
+      setActivePlaybackBlocked(true);
       // The public player has no pause control, so a visible pause is a browser/
       // decoder interruption rather than user intent. Recover the moving picture
       // immediately in muted autoplay-safe mode before asking for any gesture.
@@ -986,6 +1031,7 @@ export function LiveClassRoomMobileFirst({
   const handlePlaybackError = (video: HTMLVideoElement) => {
     if (video !== currentAudioVideo()) return;
     clearStallRecovery();
+    setActivePlaybackBlocked(true);
     forceLiveEdgeOnNextAuthorizationRef.current = true;
     setNeedsPlaybackGesture(true);
     void requestPlayback().catch(() => undefined);
@@ -998,7 +1044,8 @@ export function LiveClassRoomMobileFirst({
       return;
     }
 
-    const recoveringPausedPlayback = needsPlaybackGesture || video.paused;
+    const recoveringPausedPlayback =
+      video.paused || video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA;
     mutedRef.current = false;
     setMuted(false);
     video.muted = false;
@@ -1014,6 +1061,7 @@ export function LiveClassRoomMobileFirst({
       try {
         await video.play();
         clearStallRecovery();
+        setActivePlaybackBlocked(false);
         setNeedsPlaybackGesture(false);
       } catch {
         // Keep the picture live even when a mobile browser refuses audible
@@ -1024,8 +1072,10 @@ export function LiveClassRoomMobileFirst({
         try {
           await video.play();
           clearStallRecovery();
+          setActivePlaybackBlocked(false);
           setNeedsPlaybackGesture(false);
         } catch {
+          setActivePlaybackBlocked(true);
           setNeedsPlaybackGesture(true);
           forceLiveEdgeOnNextAuthorizationRef.current = true;
           void requestPlayback().catch(() => setNeedsPlaybackGesture(true));
@@ -1093,6 +1143,13 @@ export function LiveClassRoomMobileFirst({
 
   const isTestMode = playback?.testMode === true;
   const authorization = playback?.authorization ?? null;
+  const showAudioPrompt = authorization && authorization.playbackType !== "EMBED"
+    ? shouldShowLiveAudioPrompt({
+        muted,
+        needsPlaybackGesture,
+        activePlaybackBlocked,
+      })
+    : false;
 
   return (
     <main className="min-h-dvh bg-neutral-950 text-white">
@@ -1165,6 +1222,7 @@ export function LiveClassRoomMobileFirst({
                         onPlaying={(event) => {
                           if (event.currentTarget === currentAudioVideo()) {
                             clearStallRecovery();
+                            setActivePlaybackBlocked(false);
                             setNeedsPlaybackGesture(false);
                           }
                         }}
@@ -1191,6 +1249,7 @@ export function LiveClassRoomMobileFirst({
                   onPlaying={(event) => {
                     if (event.currentTarget === currentAudioVideo()) {
                       clearStallRecovery();
+                      setActivePlaybackBlocked(false);
                       setNeedsPlaybackGesture(false);
                     }
                   }}
@@ -1211,14 +1270,14 @@ export function LiveClassRoomMobileFirst({
                 <Radio className="size-3" /> LIVE
               </div>
 
-              {(muted || needsPlaybackGesture) && authorization && authorization.playbackType !== "EMBED" ? (
+              {showAudioPrompt ? (
                 <button
                   type="button"
                   className="absolute inset-0 flex items-center justify-center bg-black/15"
                   onClick={resumePlayback}
                 >
                   <span className="flex items-center gap-2 rounded-full bg-black/75 px-5 py-3 text-sm font-medium backdrop-blur">
-                    <Volume2 className="size-4" /> {needsPlaybackGesture ? "Tap to resume" : "Tap to hear audio"}
+                    <Volume2 className="size-4" /> {muted ? "Tap to hear audio" : "Tap to resume"}
                   </span>
                 </button>
               ) : null}
