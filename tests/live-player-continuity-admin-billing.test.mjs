@@ -168,7 +168,10 @@ test('hidden DIRECT authorization refresh cannot raise the active audio prompt o
     direct.indexOf('try {\n          await targetVideo.play()'),
     direct.indexOf('if (generation !== directSwapGenerationRef.current) return;', direct.indexOf('try {\n          await targetVideo.play()')),
   );
-  assert.doesNotMatch(preloadCatch, /setNeedsPlaybackGesture\(true\)/);
+  assert.match(
+    preloadCatch,
+    /currentVideo === currentAudioVideo\(\)[\s\S]*currentVideo\.paused \|\|[\s\S]*currentVideo\.readyState < HTMLMediaElement\.HAVE_FUTURE_DATA[\s\S]*setNeedsPlaybackGesture\(true\)/,
+  );
   assert.doesNotMatch(preloadCatch, /setMuted\(true\)/);
 });
 
