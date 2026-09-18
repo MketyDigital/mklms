@@ -76,6 +76,7 @@ const SHARED_CHAT_REFRESH_MS = 3_000;
 const LIVE_CHAT_INITIAL_CONTEXT = 10;
 const LIVE_CHAT_MAX_RENDERED = 80;
 const LIVE_CHAT_BOTTOM_THRESHOLD_PX = 48;
+const LIVE_STALL_RECOVERY_MS = 8_000;
 
 type DirectSlot = 0 | 1;
 
@@ -150,6 +151,7 @@ export function LiveClassRoomMobileFirst({
   const forceLiveEdgeOnNextAuthorizationRef = useRef(false);
   const serverClockOffsetMsRef = useRef(0);
   const mutedRef = useRef(true);
+  const stallRecoveryTimerRef = useRef<number | null>(null);
   const previousStorageKeyRef = useRef<string | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const seenStagedMessageIdsRef = useRef<Set<string>>(new Set());
@@ -205,6 +207,14 @@ export function LiveClassRoomMobileFirst({
     () => Date.now() + serverClockOffsetMsRef.current,
     [],
   );
+
+  const clearStallRecovery = useCallback(() => {
+    if (stallRecoveryTimerRef.current === null) return;
+    window.clearTimeout(stallRecoveryTimerRef.current);
+    stallRecoveryTimerRef.current = null;
+  }, []);
+
+  useEffect(() => clearStallRecovery, [clearStallRecovery]);
 
   useEffect(() => {
     const previousKey = previousStorageKeyRef.current;
@@ -879,18 +889,37 @@ export function LiveClassRoomMobileFirst({
     }
   };
 
+  const scheduleStallRecovery = useCallback((video: HTMLVideoElement) => {
+    if (video !== currentAudioVideo()) return;
+    clearStallRecovery();
+    stallRecoveryTimerRef.current = window.setTimeout(() => {
+      stallRecoveryTimerRef.current = null;
+      if (
+        video !== currentAudioVideo() ||
+        roomStateRef.current?.state !== "LIVE" ||
+        (!video.paused && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA)
+      ) {
+        return;
+      }
+      forceLiveEdgeOnNextAuthorizationRef.current = true;
+      void requestPlayback().catch(() => setNeedsPlaybackGesture(true));
+    }, LIVE_STALL_RECOVERY_MS);
+  }, [clearStallRecovery, currentAudioVideo, requestPlayback]);
+
   const handlePlaybackPaused = (video: HTMLVideoElement) => {
     if (
       document.visibilityState === "visible" &&
       video === currentAudioVideo() &&
       !video.ended
     ) {
+      clearStallRecovery();
       setNeedsPlaybackGesture(true);
     }
   };
 
   const handlePlaybackError = (video: HTMLVideoElement) => {
     if (video !== currentAudioVideo()) return;
+    clearStallRecovery();
     forceLiveEdgeOnNextAuthorizationRef.current = true;
     setNeedsPlaybackGesture(true);
     void requestPlayback().catch(() => undefined);
@@ -1036,8 +1065,11 @@ export function LiveClassRoomMobileFirst({
                         disablePictureInPicture
                         onSeeking={(event) => handleSeeking(event.currentTarget)}
                         onPause={(event) => handlePlaybackPaused(event.currentTarget)}
+                        onWaiting={(event) => scheduleStallRecovery(event.currentTarget)}
+                        onStalled={(event) => scheduleStallRecovery(event.currentTarget)}
                         onPlaying={(event) => {
                           if (event.currentTarget === currentAudioVideo()) {
+                            clearStallRecovery();
                             setNeedsPlaybackGesture(false);
                           }
                         }}
@@ -1059,8 +1091,11 @@ export function LiveClassRoomMobileFirst({
                   disablePictureInPicture
                   onSeeking={(event) => handleSeeking(event.currentTarget)}
                   onPause={(event) => handlePlaybackPaused(event.currentTarget)}
+                  onWaiting={(event) => scheduleStallRecovery(event.currentTarget)}
+                  onStalled={(event) => scheduleStallRecovery(event.currentTarget)}
                   onPlaying={(event) => {
                     if (event.currentTarget === currentAudioVideo()) {
+                      clearStallRecovery();
                       setNeedsPlaybackGesture(false);
                     }
                   }}
