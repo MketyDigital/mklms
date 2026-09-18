@@ -693,8 +693,13 @@ export function LiveClassRoomMobileFirst({
 
   const expectedPosition = useCallback(() => {
     const currentState = roomStateRef.current;
-    if (!currentState?.session || currentState.liveOffsetSeconds === null) {
-      return playbackRef.current?.startAtSeconds ?? 0;
+    const currentPlayback = playbackRef.current;
+    if (
+      !currentState?.session ||
+      currentState.liveOffsetSeconds === null ||
+      currentState.session.id !== currentPlayback?.sessionId
+    ) {
+      return currentPlayback?.startAtSeconds ?? 0;
     }
     return resolveBroadcastPosition({
       liveOffsetSeconds: currentState.liveOffsetSeconds,
