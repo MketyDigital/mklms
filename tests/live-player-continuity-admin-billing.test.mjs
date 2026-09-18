@@ -11,6 +11,7 @@ test('live player renews authorization without jumping an active viewer backward
 
   assert.match(source, /sameLoadedMedia\s*&&\s*!forceLiveEdge/);
   assert.match(source, /targetVideo\.currentTime\s*=\s*currentVideo\.currentTime/);
+  assert.match(source, /currentVideo\.currentTime - targetVideo\.currentTime > 0\.75/);
   assert.match(source, /preservedPosition/);
   assert.match(source, /video\.currentTime\s*<\s*target/);
   assert.match(source, /if \(needsPlaybackGesture\) correctPosition\(video\)/);
