@@ -967,7 +967,14 @@ export function LiveClassRoomMobileFirst({
       !video.ended
     ) {
       clearStallRecovery();
-      setNeedsPlaybackGesture(true);
+      // The public player has no pause control, so a visible pause is a browser/
+      // decoder interruption rather than user intent. Recover the moving picture
+      // immediately in muted autoplay-safe mode before asking for any gesture.
+      void keepPlaybackRunning(video, { preferAudio: false }).then((playing) => {
+        if (playing) return;
+        forceLiveEdgeOnNextAuthorizationRef.current = true;
+        void requestPlayback().catch(() => setNeedsPlaybackGesture(true));
+      });
     }
   };
 
