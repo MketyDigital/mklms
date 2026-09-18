@@ -112,6 +112,44 @@ test('foreground and pause recovery failures only request a prompt while the sam
   assert.match(source, /const handlePlaybackPaused[\s\S]*requestPlayback\(\)\.catch\(\(\) => \{[\s\S]*video === currentAudioVideo\(\)[\s\S]*setNeedsPlaybackGesture\(true\)/);
 });
 
+test('forced recovery is not skipped when a session-bound DIRECT authorization URL is unchanged', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+
+  assert.match(source, /const forceLiveEdge = forceLiveEdgeOnNextAuthorizationRef\.current/);
+  assert.match(source, /if \(sameLoadedMedia && sameAuthorization && !forceLiveEdge\) return/);
+  assert.match(source, /recoveryUrl\.searchParams\.set\("mk_recovery", String\(generation\)\)/);
+  assert.match(source, /targetVideo\.src = sourceUrl/);
+});
+
+test('returning to a healthy visible live player does not mute or rebuild it unnecessarily', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+  const refreshStart = source.indexOf('const refreshVisiblePlayback = () =>');
+  const refreshEnd = source.indexOf('const onVisibilityChange = () =>', refreshStart);
+  const refresh = source.slice(refreshStart, refreshEnd);
+
+  assert.ok(refreshStart >= 0 && refreshEnd > refreshStart, 'foreground recovery block must exist');
+  assert.match(refresh, /let needsRecovery =/);
+  assert.match(refresh, /video\.paused/);
+  assert.match(refresh, /video\.readyState < HTMLMediaElement\.HAVE_FUTURE_DATA/);
+  assert.match(refresh, /shouldCorrectBroadcastPosition/);
+  assert.match(refresh, /if \(!needsRecovery\)[\s\S]*setActivePlaybackBlocked\(false\)[\s\S]*return/);
+  assert.doesNotMatch(refresh, /setMuted\(true\)/);
+  assert.doesNotMatch(refresh, /video\.muted = true/);
+});
+
+test('real playback errors attempt silent automatic recovery before showing a gesture prompt', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+  const errorStart = source.indexOf('const handlePlaybackError =');
+  const errorEnd = source.indexOf('\n  };', errorStart);
+  const handler = source.slice(errorStart, errorEnd);
+
+  assert.match(handler, /setNeedsPlaybackGesture\(false\)/);
+  assert.match(handler, /forceLiveEdgeOnNextAuthorizationRef\.current = true/);
+  assert.match(handler, /requestPlayback\(\)\.catch/);
+  assert.match(handler, /video === currentAudioVideo\(\)/);
+  assert.match(handler, /setNeedsPlaybackGesture\(true\)/);
+});
+
 test('hidden DIRECT authorization refresh cannot raise the active audio prompt or emit duplicate audio', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
   const directStart = source.indexOf('if (authorization.playbackType === "DIRECT")');
