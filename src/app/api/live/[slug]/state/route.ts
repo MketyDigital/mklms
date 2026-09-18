@@ -33,6 +33,17 @@ export async function GET(
   const session = state.session
     ? batch.sessions.find((item) => item.id === state.session?.id) ?? null
     : null;
+  const endedSession = state.state === "ENDED"
+    ? [...batch.sessions]
+        .filter((item) => (
+          item.status === "PUBLISHED" &&
+          item.startsAt.getTime() + item.durationSeconds * 1000 <= now.getTime()
+        ))
+        .sort((a, b) => (
+          b.startsAt.getTime() + b.durationSeconds * 1000 -
+          (a.startsAt.getTime() + a.durationSeconds * 1000)
+        ))[0] ?? null
+    : null;
   const stagedMessages = session
     ? await repository.listTimelineMessages(session.id)
     : [];
@@ -94,8 +105,8 @@ export async function GET(
         : null,
       ended: state.state === "ENDED"
         ? {
-            message: session?.endedMessage ?? batch.endedMessage ?? "This live class has ended.",
-            redirectUrl: session?.endedRedirectUrl ?? batch.endedRedirectUrl ?? null,
+            message: endedSession?.endedMessage ?? batch.endedMessage ?? "This live class has ended.",
+            redirectUrl: endedSession?.endedRedirectUrl ?? batch.endedRedirectUrl ?? null,
           }
         : null,
     },
