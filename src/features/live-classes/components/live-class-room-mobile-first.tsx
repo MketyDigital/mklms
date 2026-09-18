@@ -1276,6 +1276,7 @@ export function LiveClassRoomMobileFirst({
       try {
         await video.play();
         clearStallRecovery();
+        forceLiveEdgeOnNextAuthorizationRef.current = false;
         setActivePlaybackBlocked(false);
         setNeedsPlaybackGesture(false);
       } catch {
@@ -1287,6 +1288,7 @@ export function LiveClassRoomMobileFirst({
         try {
           await video.play();
           clearStallRecovery();
+          forceLiveEdgeOnNextAuthorizationRef.current = false;
           setActivePlaybackBlocked(false);
           setNeedsPlaybackGesture(false);
         } catch {
