@@ -16,6 +16,16 @@ test('live player renews authorization without jumping an active viewer backward
   assert.match(source, /if \(needsPlaybackGesture\) correctPosition\(video\)/);
 });
 
+test('live timing and token refresh use the server-synchronized clock instead of the viewer device clock', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+
+  assert.match(source, /serverClockOffsetMsRef/);
+  assert.match(source, /response\.headers\.get\("Age"\)/);
+  assert.match(source, /new Date\(synchronizedNowMs\(\)\)/);
+  assert.match(source, /expiresAt[\s\S]*synchronizedNowMs\(\)/);
+  assert.doesNotMatch(source, /clientNow:\s*new Date\(\)/);
+});
+
 test('visibility return and playback errors explicitly rejoin the authoritative live edge', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
 
