@@ -19,7 +19,8 @@
  */
 
 const CONFIG = {
-  TEMPLATE_PRESENTATION_ID: "PASTE_4_BY_3_GOOGLE_SLIDES_ID_HERE",
+  TEMPLATE_PRESENTATION_ID: "1NmdftAs05jhrfhnTNlaqBDozTyHN-PjjzosBKgqyuFA",
+  SPREADSHEET_ID: "1DC-13zG9vZWu9fef2PRyxWXwxS6WbTHLuTPwfF4SBAs",
   CERT_ARTWORK_URL:
     "https://raw.githubusercontent.com/MketyDigital/mklms/main/certs/cert.png",
 
@@ -105,33 +106,16 @@ function setupCertificateTemplate() {
 function setupLegacyCertificateIssuer() {
   assertTemplateConfigured_();
 
-  const spreadsheet = SpreadsheetApp.create("Starpips Legacy Certificate Issuer");
+  const spreadsheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
   const spreadsheetId = spreadsheet.getId();
 
-  const approved = spreadsheet.getSheets()[0];
-  approved.setName(CONFIG.APPROVED_SHEET_NAME);
-  approved
-    .getRange(1, 1, 1, 4)
-    .setValues([["Email", "Full Name", "Graduation Date", "Notes"]]);
-  approved.setFrozenRows(1);
-
-  const issued = spreadsheet.insertSheet(CONFIG.ISSUED_SHEET_NAME);
-  issued
-    .getRange(1, 1, 1, 9)
-    .setValues([
-      [
-        "Email",
-        "Full Name",
-        "Graduation Date",
-        "PDF File ID",
-        "PDF File URL",
-        "Status",
-        "First Sent At",
-        "Last Sent At",
-        "Last Error",
-      ],
-    ]);
-  issued.setFrozenRows(1);
+  const approved = spreadsheet.getSheetByName(CONFIG.APPROVED_SHEET_NAME);
+  const issued = spreadsheet.getSheetByName(CONFIG.ISSUED_SHEET_NAME);
+  if (!approved || !issued) {
+    throw new Error(
+      "The prepared Approved Graduates and Issued Certificates sheets are missing.",
+    );
+  }
 
   const form = FormApp.create(CONFIG.FORM_TITLE);
   form.setDescription(CONFIG.FORM_DESCRIPTION);
@@ -433,22 +417,11 @@ function sanitizeFilename_(value) {
 }
 
 function getSpreadsheetId_() {
-  const id = PropertiesService.getScriptProperties().getProperty(
-    "LEGACY_CERT_SPREADSHEET_ID",
-  );
-  if (!id) {
-    throw new Error(
-      "Issuer setup has not been completed. Run setupLegacyCertificateIssuer() first.",
-    );
-  }
-  return id;
+  return CONFIG.SPREADSHEET_ID;
 }
 
 function assertTemplateConfigured_() {
-  if (
-    !CONFIG.TEMPLATE_PRESENTATION_ID ||
-    CONFIG.TEMPLATE_PRESENTATION_ID.includes("PASTE_")
-  ) {
+  if (!CONFIG.TEMPLATE_PRESENTATION_ID || !CONFIG.SPREADSHEET_ID) {
     throw new Error(
       "Set CONFIG.TEMPLATE_PRESENTATION_ID to your 4:3 Google Slides certificate template first.",
     );
