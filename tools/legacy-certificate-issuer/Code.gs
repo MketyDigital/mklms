@@ -1,21 +1,28 @@
 /**
  * Starpips Legacy Certificate Issuer
  *
- * Standalone Google Apps Script.
+ * Standalone Google Apps Script for pre-MkLMS graduates.
  * Keeps legacy certificate issuance separate from MkLMS.
  *
- * One-time flow:
- * 1. Create a blank Google Slides file and set Page setup to Standard (4:3).
- * 2. Put that Slides file ID in CONFIG.TEMPLATE_PRESENTATION_ID.
- * 3. Run setupCertificateTemplate() once. It pulls certs/cert.png from GitHub,
- *    fills the slide, and adds {{NAME}} / {{DATE}} placeholders.
- * 4. Run setupLegacyCertificateIssuer() once. It creates the Google Form,
- *    response spreadsheet, Approved Graduates sheet, Issued Certificates sheet,
- *    and installs the form-submit trigger.
- * 5. Add approved legacy students to the Approved Graduates sheet.
+ * CURRENT STATE (2026-09-20):
+ * - Google Slides certificate template already exists, is 4:3, and is prepared.
+ * - Google Sheet register already exists with Approved Graduates and
+ *   Issued Certificates tabs.
+ * - Both exact Google file IDs are hard-coded below.
+ * - Certificate numbers are intentionally omitted.
  *
- * No SMTP setup is needed. MailApp sends from the Google account that owns
+ * NEXT STEP:
+ * Run setupLegacyCertificateIssuer() ONCE in the user's Apps Script project.
+ * It creates the Google Form, connects it to the prepared Sheet, and installs
+ * the form-submit trigger.
+ *
+ * Do NOT run setupCertificateTemplate() during normal continuation; it is only
+ * a rebuild helper if the prepared Slides template is lost or intentionally reset.
+ *
+ * No SMTP setup is needed. MailApp sends from the Google account that authorizes
  * this Apps Script project.
+ *
+ * Full continuation instructions: HANDOFF.md in this folder.
  */
 
 const CONFIG = {
