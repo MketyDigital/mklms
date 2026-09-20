@@ -237,26 +237,15 @@ The user does not need to manually create the Google Form or trigger.
 
 # Before testing
 
-Open:
+No approval list is required.
 
-```text
-Starpips Legacy Certificate Register
-→ Approved Graduates
-```
+Use your own email address for the first test submission so you can confirm the full flow safely.
 
-Add one test person.
+The student enters:
 
-Recommended first test: use the owner's own email.
-
-Example:
-
-| Email | Full Name | Graduation Date | Notes |
-| --- | --- | --- | --- |
-| your@email.com | Test Graduate | 15 August 2025 | Test only |
-
-Only the **Email** column is required by the current approval logic.
-
-The student may type their own name and graduation date on the Form.
+- Full Name
+- Email Address
+- Graduation Date
 
 ---
 
@@ -265,7 +254,7 @@ The student may type their own name and graduation date on the Form.
 After setup is complete:
 
 1. open the Form public URL;
-2. enter the same email placed in Approved Graduates;
+2. enter your own email address;
 3. enter a test name;
 4. enter a graduation date;
 5. submit.
@@ -347,19 +336,22 @@ centered
 Current configuration:
 
 ```js
-APPROVAL_MODE: "EMAIL"
+APPROVAL_MODE: "OFF"
 ```
 
-Therefore:
+Therefore there is **no manual or pre-approved student check**.
 
-- email found in Approved Graduates → certificate may be issued;
-- email not found → no certificate is sent;
-- unrecognized submission is logged as:
-  `REVIEW REQUIRED`.
+Anyone with the Google Form link can submit:
 
-This is intentional.
+- Full Name
+- Email Address
+- Graduation Date
 
-Do not switch the form to fully open issuance unless there is a specific reason.
+After a valid submission, the certificate is generated and emailed automatically.
+
+The `Approved Graduates` tab may remain in the spreadsheet for future use, but it is currently **not used** by the live legacy certificate flow.
+
+If tighter control is ever needed later, change `APPROVAL_MODE` back to `"EMAIL"` and load approved emails into the `Approved Graduates` tab.
 
 ---
 
@@ -482,16 +474,6 @@ Check:
 3. spam/junk folder
 4. Google account daily Apps Script email quota
 
-## Status says REVIEW REQUIRED
-
-The submitted email is not present in:
-
-```text
-Approved Graduates → Email
-```
-
-Add the correct email and submit again.
-
 ---
 
 # Launch checklist
@@ -500,7 +482,6 @@ Do not distribute the Form until all boxes are checked.
 
 - [ ] `setupLegacyCertificateIssuer()` ran successfully
 - [ ] Form public URL was obtained
-- [ ] own/test email added to Approved Graduates
 - [ ] test submission completed
 - [ ] email arrived
 - [ ] PDF opened successfully
@@ -509,9 +490,7 @@ Do not distribute the Form until all boxes are checked.
 - [ ] no certificate number visible
 - [ ] Issued Certificates shows SENT
 - [ ] second submission resends rather than creating duplicate
-- [ ] unapproved test email produces REVIEW REQUIRED
 - [ ] form wording reviewed
-- [ ] old-student approval list loaded
 
 Once these checks pass, distribute the Form public URL to old Starpips graduates.
 
