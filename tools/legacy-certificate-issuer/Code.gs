@@ -41,7 +41,8 @@ const CONFIG = {
 
   // EMAIL = only emails in Approved Graduates may receive certificates.
   // OFF = every valid submission may receive a certificate.
-  APPROVAL_MODE: "EMAIL",
+  // Current legacy workflow intentionally uses OFF.
+  APPROVAL_MODE: "OFF",
 
   EMAIL_SUBJECT: "Your Starpips Certificate",
   EMAIL_BODY:
