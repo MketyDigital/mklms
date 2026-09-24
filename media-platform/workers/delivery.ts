@@ -5,6 +5,7 @@ export interface Env extends MediaProviderEnv {
   BUCKET_DIRECTORY: KVNamespace;
   MEDIA_R2_BUCKET?: R2Bucket;
   MEDIA_USAGE_ANALYTICS?: AnalyticsEngineDataset;
+  MEDIA_ASSET_PURGE_SECRET?: string;
 }
 
 type BucketRoute = {
@@ -35,9 +36,28 @@ function recordUsage(env:Env,route:BucketRoute,bytes:number){
 
 export default {
   async fetch(request:Request,env:Env,ctx:ExecutionContext):Promise<Response>{
-    if(request.method!=="GET" && request.method!=="HEAD") return new Response("Method Not Allowed",{status:405});
-
     const url=new URL(request.url);
+
+    if(request.method==="POST" && url.pathname==="/_mkety/purge"){
+      const provided=request.headers.get("x-mkety-purge-secret")||"";
+      const expected=env.MEDIA_ASSET_PURGE_SECRET||"";
+      if(!expected || provided.length!==expected.length){
+        return new Response("Unauthorized",{status:401});
+      }
+      let diff=0;
+      for(let i=0;i<expected.length;i++) diff|=expected.charCodeAt(i)^provided.charCodeAt(i);
+      if(diff!==0) return new Response("Unauthorized",{status:401});
+
+      const body=await request.json().catch(()=>null) as {url?:string}|null;
+      if(!body?.url) return new Response("Bad Request",{status:400});
+      const target=new URL(body.url);
+      if(target.origin!==url.origin) return new Response("Bad Request",{status:400});
+      const cache=(caches as CacheStorage & { default: Cache }).default;
+      const deleted=await cache.delete(new Request(target.toString(),{method:"GET"}));
+      return Response.json({ok:true,deleted});
+    }
+
+    if(request.method!=="GET" && request.method!=="HEAD") return new Response("Method Not Allowed",{status:405});
     const parts=url.pathname.split("/").filter(Boolean);
     if(parts.length<3) return new Response("Not Found",{status:404});
 
