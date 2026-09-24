@@ -28,5 +28,10 @@ export default async function BucketPage({params}:{params:Promise<{id:string}>})
       </tbody></table>
       {!objects.results?.length && <p className="muted">No files yet.</p>}
     </div>
+    {!objects.results?.length && ["owner","admin"].includes(user.role) && <div className="card" style={{marginTop:18}}>
+      <h3>Delete bucket</h3>
+      <p className="muted">Only empty buckets can be deleted.</p>
+      <form method="post" action="/api/buckets/delete"><input type="hidden" name="bucketId" value={id}/><button className="btn secondary">Delete empty bucket</button></form>
+    </div>}
   </main>;
 }
