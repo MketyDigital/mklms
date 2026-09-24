@@ -36,15 +36,21 @@ export async function POST(request:Request){
   const existingSlug=await db.prepare("SELECT id FROM media_tenants WHERE slug=? LIMIT 1").bind(slug).first();
   if(existingUser||existingSlug) return NextResponse.redirect(new URL("/operator?error=exists",request.url),303);
 
-  const tenantId=crypto.randomUUID();
-  const userId=crypto.randomUUID();
-  const invoiceId=crypto.randomUUID();
-  const passwordHash=await hashPassword(password);
-  const reference="MKM-"+crypto.randomUUID().replace(/-/g,"").slice(0,10).toUpperCase();
-  const amount=await calculateTermPrice(monthlyUsd,term);
-  const dueAt=new Date(Date.now()+72*60*60*1000).toISOString();
-
+  let phase="prepare";
   try{
+    const tenantId=crypto.randomUUID();
+    const userId=crypto.randomUUID();
+    const invoiceId=crypto.randomUUID();
+
+    phase="password";
+    const passwordHash=await hashPassword(password);
+
+    phase="pricing";
+    const reference="MKM-"+crypto.randomUUID().replace(/-/g,"").slice(0,10).toUpperCase();
+    const amount=await calculateTermPrice(monthlyUsd,term);
+    const dueAt=new Date(Date.now()+72*60*60*1000).toISOString();
+
+    phase="database";
     await db.batch([
       db.prepare("INSERT INTO media_tenants (id,slug,name,status,plan_code) VALUES (?,?,?,'pending','starter')").bind(tenantId,slug,String(req.company_name)),
       db.prepare("INSERT INTO media_users (id,username,password_hash,status) VALUES (?,?,?,'active')").bind(userId,username,passwordHash),
@@ -57,13 +63,14 @@ export async function POST(request:Request){
       db.prepare("UPDATE media_enterprise_requests SET status='provisioned',tenant_id=?,updated_at=datetime('now') WHERE id=?").bind(tenantId,requestId),
       db.prepare("INSERT INTO media_audit_log (id,tenant_id,actor_type,actor_id,action,target_type,target_id) VALUES (?,?,'operator','operator','enterprise.provisioned','tenant',?)").bind(crypto.randomUUID(),tenantId,tenantId),
     ]);
+
+    return NextResponse.redirect(new URL("/operator?provisioned=1&username="+encodeURIComponent(username)+"&invoice="+encodeURIComponent(reference),request.url),303);
   }catch(error:any){
-    console.error("Enterprise provisioning failed",error);
+    console.error("Enterprise provisioning failed",phase,error);
     return NextResponse.json({
       error:"Enterprise provisioning failed",
+      phase,
       diagnostic:String(error?.message||error||"unknown").slice(0,800),
     },{status:500});
   }
-
-  return NextResponse.redirect(new URL("/operator?provisioned=1&username="+encodeURIComponent(username)+"&invoice="+encodeURIComponent(reference),request.url),303);
 }
