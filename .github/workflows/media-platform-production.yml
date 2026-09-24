@@ -53,7 +53,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for name in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN MEDIA_OPERATOR_ACCESS_KEY MEDIA_OPERATOR_SESSION_SECRET NOWPAYMENTS_API_KEY NOWPAYMENTS_IPN_SECRET; do
+          for name in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN MEDIA_OPERATOR_ACCESS_KEY MEDIA_OPERATOR_SESSION_SECRET; do
             if [ -z "${!name:-}" ]; then
               echo "Missing required production secret: $name"
               exit 1
@@ -157,10 +157,9 @@ jobs:
 
           jq -n             --arg operatorKey "$MEDIA_OPERATOR_ACCESS_KEY"             --arg operatorSession "$MEDIA_OPERATOR_SESSION_SECRET"             --arg npApi "$NOWPAYMENTS_API_KEY"             --arg npIpn "$NOWPAYMENTS_IPN_SECRET"             --arg tgToken "${MEDIA_TELEGRAM_BOT_TOKEN:-}"             --arg tgChat "${MEDIA_TELEGRAM_CHAT_ID:-}"             --arg tgOps "${MEDIA_TELEGRAM_OPERATOR_IDS:-}"             --arg tgWebhook "$TELEGRAM_WEBHOOK_SECRET"             '{
               MEDIA_OPERATOR_ACCESS_KEY:$operatorKey,
-              MEDIA_OPERATOR_SESSION_SECRET:$operatorSession,
-              NOWPAYMENTS_API_KEY:$npApi,
-              NOWPAYMENTS_IPN_SECRET:$npIpn
+              MEDIA_OPERATOR_SESSION_SECRET:$operatorSession
             }
+            + (if ($npApi!="" and $npIpn!="") then {NOWPAYMENTS_API_KEY:$npApi,NOWPAYMENTS_IPN_SECRET:$npIpn} else {} end)
             + (if $tgToken=="" then {} else {MEDIA_TELEGRAM_BOT_TOKEN:$tgToken} end)
             + (if $tgChat=="" then {} else {MEDIA_TELEGRAM_CHAT_ID:$tgChat} end)
             + (if $tgOps=="" then {} else {MEDIA_TELEGRAM_OPERATOR_IDS:$tgOps} end)
