@@ -34,7 +34,7 @@ export default async function BillingPage({searchParams}:{searchParams:Promise<R
 
   return (
     <main className="wrap">
-      <nav className="nav"><div className="brand">Mkety Media</div><div><Link href="/dashboard">Dashboard</Link></div></nav>
+      <nav className="nav"><div className="brand">Mkety Media</div><div><Link href="/dashboard">Dashboard</Link><form style={{display:"inline"}} method="post" action="/api/auth/logout"><button className="btn secondary">Logout</button></form></div></nav>
 
       <div className="card">
         <h1>Billing & capacity</h1>
@@ -77,11 +77,27 @@ export default async function BillingPage({searchParams}:{searchParams:Promise<R
               <button className="btn secondary">Replace unpaid invoice</button>
               <p className="muted">Your current unpaid invoice is cancelled and replaced. Your account and username stay the same.</p>
             </form>
+            <form method="post" action="/api/billing/cancel" style={{marginTop:10}}>
+              <button className="btn secondary">Cancel this unpaid invoice</button>
+              <p className="muted">You can log out and return later. Your account remains pending and no storage activates until a new invoice is paid.</p>
+            </form>
           </details>}
         </div>
       )}
 
-      {invoice&&["rejected","expired","cancelled"].includes(String(invoice.status))&&(
+      {state.status==="pending"&&!hasPending&&(
+        <div className="card" style={{marginTop:18}}>
+          <h2>Choose your plan and continue</h2>
+          <p className="muted">Your account is saved, but no active payment is pending. Choose any current public plan and billing term to create a fresh invoice.</p>
+          <form method="post" action="/api/billing/change-plan" className="form">
+            <label>Plan<select name="plan" defaultValue={currentPlan?.plan_code||"starter"}>{(plansResult.results||[]).map((p:any)=><option key={p.code} value={p.code}>{p.name} — {"$"}{Number(p.monthly_usd).toFixed(0)}/mo</option>)}</select></label>
+            <label>Billing term<select name="term" defaultValue={String(state.billingTermMonths)}>{(billingTerms as any[]).map((t:any)=><option key={t.months} value={t.months}>{t.label}{Number(t.discountPercent||0)>0?" — "+Number(t.discountPercent)+"% off":""}</option>)}</select></label>
+            <button className="btn">Create payment</button>
+          </form>
+        </div>
+      )}
+
+      {invoice&&["rejected","expired","cancelled"].includes(String(invoice.status))&&state.status!=="pending"&&(
         <div className="notice danger" style={{marginTop:18}}>
           <p>That payment request is no longer payable.</p>
           <form method="post" action="/api/billing/retry"><button className="btn">Create a new payment</button></form>
