@@ -4,6 +4,8 @@ export type MediaCloudflareEnv = {
   MEDIA_DB: D1Database;
   BUCKET_DIRECTORY?: KVNamespace;
   MEDIA_R2_BUCKET?: R2Bucket;
+  MEDIA_AUTH_RATE_LIMITER?: RateLimit;
+  MEDIA_MUTATION_RATE_LIMITER?: RateLimit;
   [key: string]: unknown;
 };
 
