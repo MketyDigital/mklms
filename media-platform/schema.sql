@@ -70,3 +70,109 @@ CREATE TABLE IF NOT EXISTS media_subscriptions (
   current_period_end timestamptz,
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- Operator-managed product configuration.
+CREATE TABLE IF NOT EXISTS media_operator_settings (
+  key text PRIMARY KEY,
+  value_json jsonb NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  updated_by text
+);
+
+CREATE TABLE IF NOT EXISTS media_plans (
+  code text PRIMARY KEY,
+  name text NOT NULL,
+  monthly_usd numeric(12,2) NOT NULL CHECK (monthly_usd >= 0),
+  storage_bytes bigint NOT NULL CHECK (storage_bytes >= 0),
+  delivery_bytes bigint NOT NULL CHECK (delivery_bytes >= 0),
+  delivery_requests bigint NOT NULL CHECK (delivery_requests >= 0),
+  logical_buckets integer NOT NULL CHECK (logical_buckets >= 0),
+  team_seats integer NOT NULL CHECK (team_seats >= 1),
+  max_object_bytes bigint NOT NULL CHECK (max_object_bytes > 0),
+  overage_mode text NOT NULL CHECK (overage_mode IN ('hard-cap','prepaid-wallet')),
+  dedicated_storage_eligible boolean NOT NULL DEFAULT false,
+  active boolean NOT NULL DEFAULT true,
+  display_order integer NOT NULL DEFAULT 100,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS media_users (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  email text UNIQUE NOT NULL,
+  display_name text,
+  status text NOT NULL DEFAULT 'active' CHECK (status IN ('active','disabled')),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS media_memberships (
+  tenant_id uuid NOT NULL REFERENCES media_tenants(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES media_users(id) ON DELETE CASCADE,
+  role text NOT NULL CHECK (role IN ('owner','admin','member','billing')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (tenant_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS media_invoices (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES media_tenants(id) ON DELETE CASCADE,
+  reference text UNIQUE NOT NULL,
+  amount_usd numeric(12,2) NOT NULL CHECK (amount_usd > 0),
+  payment_method text NOT NULL CHECK (payment_method IN ('nowpayments','bank_transfer','invoice')),
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','paid','expired','rejected','cancelled')),
+  provider_invoice_id text,
+  provider_payment_id text,
+  due_at timestamptz,
+  paid_at timestamptz,
+  approved_by text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS media_payment_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  invoice_id uuid REFERENCES media_invoices(id) ON DELETE CASCADE,
+  provider text NOT NULL,
+  external_event_id text,
+  event_type text NOT NULL,
+  payload_hash text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (provider, external_event_id)
+);
+
+CREATE TABLE IF NOT EXISTS media_prepaid_wallets (
+  tenant_id uuid PRIMARY KEY REFERENCES media_tenants(id) ON DELETE CASCADE,
+  balance_usd numeric(12,4) NOT NULL DEFAULT 0 CHECK (balance_usd >= 0),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS media_quota_reservations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES media_tenants(id) ON DELETE CASCADE,
+  bucket_id uuid NOT NULL REFERENCES media_buckets(id) ON DELETE CASCADE,
+  reservation_key text UNIQUE NOT NULL,
+  reserved_bytes bigint NOT NULL CHECK (reserved_bytes > 0),
+  expires_at timestamptz NOT NULL,
+  committed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS media_audit_log (
+  id bigserial PRIMARY KEY,
+  tenant_id uuid REFERENCES media_tenants(id) ON DELETE SET NULL,
+  actor_type text NOT NULL CHECK (actor_type IN ('customer','operator','system','payment')),
+  actor_id text,
+  action text NOT NULL,
+  target_type text,
+  target_id text,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS media_objects_bucket_status_idx
+  ON media_objects(bucket_id, status);
+CREATE INDEX IF NOT EXISTS media_usage_daily_tenant_date_idx
+  ON media_usage_daily(tenant_id, usage_date);
+CREATE INDEX IF NOT EXISTS media_invoices_tenant_status_idx
+  ON media_invoices(tenant_id, status);
+CREATE INDEX IF NOT EXISTS media_audit_log_tenant_created_idx
+  ON media_audit_log(tenant_id, created_at DESC);
