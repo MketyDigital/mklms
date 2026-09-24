@@ -67,10 +67,14 @@ export async function POST(request:Request){
     return NextResponse.redirect(new URL("/operator?provisioned=1&username="+encodeURIComponent(username)+"&invoice="+encodeURIComponent(reference),request.url),303);
   }catch(error:any){
     console.error("Enterprise provisioning failed",phase,error);
-    return NextResponse.json({
-      error:"Enterprise provisioning failed",
-      phase,
-      diagnostic:String(error?.message||error||"unknown").slice(0,800),
-    },{status:500});
+    const message=String(error?.message||error||"unknown");
+    const diagnostic=message
+      .replace(/[\r\n]+/g," ")
+      .replace(/[^A-Za-z0-9 _.:(),'"\-]/g,"")
+      .slice(0,300);
+    return NextResponse.redirect(new URL(
+      "/operator?error=provision&phase="+encodeURIComponent(phase)+"&diagnostic="+encodeURIComponent(diagnostic),
+      request.url
+    ),303);
   }
 }
