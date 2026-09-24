@@ -5,6 +5,8 @@ import { getBillingTerms,getSetting } from "../../src/lib/operator-settings";
 import { configuredProviders } from "../../src/config/providers";
 import { getProviderEnv } from "../../src/lib/provider-env";
 
+export const dynamic = "force-dynamic";
+
 function gb(bytes:any){return bytes==null?"":(Number(bytes)/1024**3).toFixed(0);}
 
 export default async function OperatorPage(){
