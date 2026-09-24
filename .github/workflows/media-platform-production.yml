@@ -165,11 +165,16 @@ jobs:
         run: |
           set -euo pipefail
           TELEGRAM_WEBHOOK_SECRET=""
+          TELEGRAM_BOT_USERNAME=""
           PURGE_SECRET=$(printf '%s' "$MEDIA_OPERATOR_SESSION_SECRET|mkety-media-assets-purge" | sha256sum | cut -d' ' -f1)
           echo "::add-mask::$PURGE_SECRET"
           if [ -n "${MEDIA_TELEGRAM_BOT_TOKEN:-}" ]; then
             TELEGRAM_WEBHOOK_SECRET=$(printf '%s' "$MEDIA_OPERATOR_SESSION_SECRET|mkety-media-telegram" | sha256sum | cut -d' ' -f1)
             echo "::add-mask::$TELEGRAM_WEBHOOK_SECRET"
+            curl --silent --show-error --fail-with-body               "https://api.telegram.org/bot$MEDIA_TELEGRAM_BOT_TOKEN/getMe"               >/tmp/tg-getme.json
+            jq -e '.ok == true' /tmp/tg-getme.json >/dev/null
+            TELEGRAM_BOT_USERNAME=$(jq -r '.result.username // empty' /tmp/tg-getme.json)
+            test -n "$TELEGRAM_BOT_USERNAME"
           fi
 
           jq -n             --arg operatorKey "$MEDIA_OPERATOR_ACCESS_KEY"             --arg operatorSession "$MEDIA_OPERATOR_SESSION_SECRET"             --arg npApi "$NOWPAYMENTS_API_KEY"             --arg npIpn "$NOWPAYMENTS_IPN_SECRET"             --arg tgToken "${MEDIA_TELEGRAM_BOT_TOKEN:-}"             --arg tgChat "${MEDIA_TELEGRAM_CHAT_ID:-}"             --arg tgOps "${MEDIA_TELEGRAM_OPERATOR_IDS:-}"             --arg tgWebhook "$TELEGRAM_WEBHOOK_SECRET" \
@@ -182,12 +187,13 @@ jobs:
             + (if $tgToken=="" then {} else {MEDIA_TELEGRAM_BOT_TOKEN:$tgToken} end)
             + (if $tgChat=="" then {} else {MEDIA_TELEGRAM_CHAT_ID:$tgChat} end)
             + (if $tgOps=="" then {} else {MEDIA_TELEGRAM_OPERATOR_IDS:$tgOps} end)
-            + (if $tgWebhook=="" then {} else {MEDIA_TELEGRAM_WEBHOOK_SECRET:$tgWebhook} end)'             >/tmp/media-portal-secrets.json
+            + (if $tgWebhook=="" then {} else {MEDIA_TELEGRAM_WEBHOOK_SECRET:$tgWebhook} end)
+            + (if $tgUsername=="" then {} else {MEDIA_TELEGRAM_BOT_USERNAME:$tgUsername} end)'             >/tmp/media-portal-secrets.json
           npx wrangler secret bulk /tmp/media-portal-secrets.json --name "$PORTAL_WORKER"
           rm -f /tmp/media-portal-secrets.json
 
           if [ -n "${MEDIA_TELEGRAM_BOT_TOKEN:-}" ] && [ -n "$TELEGRAM_WEBHOOK_SECRET" ]; then
-            curl --silent --show-error --fail-with-body               "https://api.telegram.org/bot$MEDIA_TELEGRAM_BOT_TOKEN/setWebhook"               -H "Content-Type: application/json"               --data "$(jq -nc --arg url 'https://media.mkety.com/api/telegram/webhook' --arg secret "$TELEGRAM_WEBHOOK_SECRET" '{url:$url,secret_token:$secret,drop_pending_updates:false}')"               >/tmp/tg-webhook.json
+            curl --silent --show-error --fail-with-body               "https://api.telegram.org/bot$MEDIA_TELEGRAM_BOT_TOKEN/setWebhook"               -H "Content-Type: application/json"               --data "$(jq -nc --arg url 'https://media.mkety.com/api/telegram/webhook' --arg secret "$TELEGRAM_WEBHOOK_SECRET" '{url:$url,secret_token:$secret,drop_pending_updates:false,allowed_updates:["message","callback_query"]}')"                >/tmp/tg-webhook.json
             jq -e '.ok == true' /tmp/tg-webhook.json >/dev/null
           fi
 
