@@ -40,6 +40,7 @@ export async function POST(request:Request){
       String(form.get("overage")||"hard-cap"),
       enterprise,
       infrastructure,
+      String(form.get("preferredPoolKey")||"r2-global"),
       [1,3,6,12].includes(term)?term:1,
     ),
     db.prepare("INSERT INTO media_audit_log (id,tenant_id,actor_type,actor_id,action,target_type,target_id) VALUES (?,?,'operator','operator','tenant.commercial.updated','tenant',?)")
