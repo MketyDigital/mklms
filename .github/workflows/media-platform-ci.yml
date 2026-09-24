@@ -1,0 +1,58 @@
+name: Mkety Media isolated CI
+
+on:
+  push:
+    branches:
+      - media-platform
+    paths:
+      - "media-platform/**"
+      - ".github/workflows/media-platform-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: media-platform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install isolated dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Substitute CI-only resource identifiers
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in wrangler.jsonc wrangler.portal.jsonc wrangler.delivery.jsonc wrangler.maintenance.jsonc; do
+            sed -i 's/REPLACE_WITH_MEDIA_D1_ID/11111111111111111111111111111111/g' "$file" || true
+            sed -i 's/REPLACE_WITH_MEDIA_BUCKET_DIRECTORY_KV_ID/22222222222222222222222222222222/g' "$file" || true
+            sed -i 's/REPLACE_WITH_MEDIA_R2_BUCKET/mkety-media-ci/g' "$file" || true
+          done
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: Next production build
+        run: npm run build
+
+      - name: OpenNext Cloudflare build
+        run: npm run cf:build
+
+      - name: Portal Worker dry-run
+        run: npx wrangler deploy -c wrangler.jsonc --dry-run
+
+      - name: Asset Worker dry-run
+        run: npx wrangler deploy -c wrangler.delivery.jsonc --dry-run
+
+      - name: Maintenance Worker dry-run
+        run: npx wrangler deploy -c wrangler.maintenance.jsonc --dry-run
