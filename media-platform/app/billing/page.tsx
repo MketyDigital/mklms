@@ -17,7 +17,7 @@ export default async function BillingPage({searchParams}:{searchParams:Promise<R
   const state=await getTenantState(user.tenantId);
   const db=getMediaDb();
   const [invoice,plansResult,addonsResult,activeAddonsResult,bank,billingTerms]=await Promise.all([
-    db.prepare("SELECT id,reference,amount_usd,amount_local,local_currency,status,payment_method,due_at FROM media_invoices WHERE tenant_id=? ORDER BY created_at DESC LIMIT 1").bind(user.tenantId).first<any>(),
+    db.prepare("SELECT id,reference,amount_usd,amount_local,local_currency,status,payment_method,provider_invoice_id,due_at FROM media_invoices WHERE tenant_id=? ORDER BY created_at DESC LIMIT 1").bind(user.tenantId).first<any>(),
     db.prepare("SELECT code,name,monthly_usd,storage_bytes,delivery_bytes,delivery_requests,logical_buckets,team_seats FROM media_plans WHERE active=1 AND code<>'enterprise' ORDER BY monthly_usd").all<any>(),
     db.prepare("SELECT code,name,price_usd,storage_bytes,delivery_bytes,delivery_requests FROM media_addon_products WHERE active=1 ORDER BY display_order,price_usd").all<any>(),
     db.prepare("SELECT a.product_code,p.name,a.storage_bytes,a.delivery_bytes,a.delivery_requests,a.ends_at FROM media_tenant_addons a JOIN media_addon_products p ON p.code=a.product_code WHERE a.tenant_id=? AND a.starts_at<=datetime('now') AND a.ends_at>datetime('now') ORDER BY a.created_at DESC").bind(user.tenantId).all<any>(),
@@ -69,7 +69,7 @@ export default async function BillingPage({searchParams}:{searchParams:Promise<R
             </div>
           )}
           <p className="muted">No quota or plan increase is applied before payment verification.</p>
-          {state.status==="pending"&&<details style={{marginTop:18}}>
+          {state.status==="pending"&&String(invoice.payment_method||"invoice")==="invoice"&&<details style={{marginTop:18}}>
             <summary><strong>Choose a different plan or billing term</strong></summary>
             <form method="post" action="/api/billing/change-plan" className="form" style={{marginTop:12}}>
               <label>Plan<select name="plan" defaultValue={currentPlan?.plan_code||"starter"}>{(plansResult.results||[]).map((p:any)=><option key={p.code} value={p.code}>{p.name} — {"$"}{Number(p.monthly_usd).toFixed(0)}/mo</option>)}</select></label>
@@ -82,6 +82,7 @@ export default async function BillingPage({searchParams}:{searchParams:Promise<R
               <p className="muted">You can log out and return later. Your account remains pending and no storage activates until a new invoice is paid.</p>
             </form>
           </details>}
+          {state.status==="pending"&&String(invoice.payment_method||"invoice")!=="invoice"&&<p className="muted">A payment method has already been started for this invoice. To avoid paying an old/cancelled reference, finish this payment or contact Mkety Support before changing the plan.</p>}
         </div>
       )}
 
