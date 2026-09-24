@@ -3,7 +3,7 @@ import { getMediaDb } from "./postgres";
 export async function getTenantState(tenantId: string) {
   const db = getMediaDb();
   const row = await db.prepare(
-    "SELECT t.id,t.slug,t.name,t.status,t.plan_code,p.name AS plan_name,p.monthly_usd,p.storage_bytes,p.delivery_bytes,p.delivery_requests,p.logical_buckets,p.team_seats,p.max_object_bytes,p.overage_mode,c.display_name,c.monthly_usd AS custom_monthly_usd,c.storage_bytes AS custom_storage_bytes,c.delivery_bytes AS custom_delivery_bytes,c.delivery_requests AS custom_delivery_requests,c.logical_buckets AS custom_logical_buckets,c.team_seats AS custom_team_seats,c.max_object_bytes AS custom_max_object_bytes,c.overage_mode AS custom_overage_mode,c.enterprise_features,c.infrastructure_mode,c.billing_term_months,s.status AS subscription_status,s.current_period_end,COALESCE(w.balance_usd,0) AS prepaid_balance FROM media_tenants t JOIN media_plans p ON p.code=t.plan_code LEFT JOIN media_tenant_commercial_terms c ON c.tenant_id=t.id LEFT JOIN media_subscriptions s ON s.tenant_id=t.id LEFT JOIN media_prepaid_wallets w ON w.tenant_id=t.id WHERE t.id=? LIMIT 1"
+    "SELECT t.id,t.slug,t.name,t.status,t.plan_code,p.name AS plan_name,p.monthly_usd,p.storage_bytes,p.delivery_bytes,p.delivery_requests,p.logical_buckets,p.team_seats,p.max_object_bytes,p.overage_mode,c.display_name,c.monthly_usd AS custom_monthly_usd,c.storage_bytes AS custom_storage_bytes,c.delivery_bytes AS custom_delivery_bytes,c.delivery_requests AS custom_delivery_requests,c.logical_buckets AS custom_logical_buckets,c.team_seats AS custom_team_seats,c.max_object_bytes AS custom_max_object_bytes,c.overage_mode AS custom_overage_mode,c.enterprise_features,c.infrastructure_mode,c.preferred_pool_key,c.billing_term_months,s.status AS subscription_status,s.current_period_end,COALESCE(w.balance_usd,0) AS prepaid_balance FROM media_tenants t JOIN media_plans p ON p.code=t.plan_code LEFT JOIN media_tenant_commercial_terms c ON c.tenant_id=t.id LEFT JOIN media_subscriptions s ON s.tenant_id=t.id LEFT JOIN media_prepaid_wallets w ON w.tenant_id=t.id WHERE t.id=? LIMIT 1"
   ).bind(tenantId).first<any>();
   if (!row) throw new Error("Tenant not found");
 
@@ -27,7 +27,7 @@ export async function getTenantState(tenantId: string) {
     maxObjectBytes:Number(row.custom_max_object_bytes ?? row.max_object_bytes),
     overageMode:String(row.custom_overage_mode ?? row.overage_mode),
     enterpriseFeatures:Boolean(row.enterprise_features),
-    infrastructureMode:String(row.infrastructure_mode ?? "automatic"),
+    infrastructureMode:String(row.infrastructure_mode ?? "automatic"),\n    preferredPoolKey:row.preferred_pool_key ? String(row.preferred_pool_key) : null,
     billingTermMonths:Number(row.billing_term_months ?? 1),
     renewalAt:row.current_period_end ? String(row.current_period_end) : null,
     prepaidBalanceUsd:Number(row.prepaid_balance ?? 0),
