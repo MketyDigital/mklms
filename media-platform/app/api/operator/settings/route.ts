@@ -30,6 +30,18 @@ export async function POST(request:Request){
     });
   }
 
+  if(kind==="portal"){
+    await setSetting("portal_content",{
+      heroTitle:String(form.get("heroTitle")||""),
+      heroSubtitle:String(form.get("heroSubtitle")||""),
+      enterpriseTitle:String(form.get("enterpriseTitle")||""),
+      enterpriseText:String(form.get("enterpriseText")||""),
+      maintenanceNotice:String(form.get("maintenanceNotice")||""),
+      signupEnabled:form.get("signupEnabled")==="on",
+      planBenefits:String(form.get("planBenefits")||"").split("\n").map((v)=>v.trim()).filter(Boolean),
+    });
+  }
+
   if(kind==="enforcement"){
     await setSetting("enforcement",{
       warning70:true,
