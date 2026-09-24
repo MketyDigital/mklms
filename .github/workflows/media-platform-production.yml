@@ -177,7 +177,9 @@ jobs:
             test -n "$TELEGRAM_BOT_USERNAME"
           fi
 
-          jq -n             --arg operatorKey "$MEDIA_OPERATOR_ACCESS_KEY"             --arg operatorSession "$MEDIA_OPERATOR_SESSION_SECRET"             --arg npApi "$NOWPAYMENTS_API_KEY"             --arg npIpn "$NOWPAYMENTS_IPN_SECRET"             --arg tgToken "${MEDIA_TELEGRAM_BOT_TOKEN:-}"             --arg tgChat "${MEDIA_TELEGRAM_CHAT_ID:-}"             --arg tgOps "${MEDIA_TELEGRAM_OPERATOR_IDS:-}"             --arg tgWebhook "$TELEGRAM_WEBHOOK_SECRET" \
+          jq -n             --arg operatorKey "$MEDIA_OPERATOR_ACCESS_KEY"             --arg operatorSession "$MEDIA_OPERATOR_SESSION_SECRET"             --arg npApi "$NOWPAYMENTS_API_KEY"             --arg npIpn "$NOWPAYMENTS_IPN_SECRET"             --arg tgToken "${MEDIA_TELEGRAM_BOT_TOKEN:-}"             --arg tgChat "${MEDIA_TELEGRAM_CHAT_ID:-}"             --arg tgOps "${MEDIA_TELEGRAM_OPERATOR_IDS:-}" \
+            --arg tgWebhook "$TELEGRAM_WEBHOOK_SECRET" \
+            --arg tgUsername "$TELEGRAM_BOT_USERNAME" \
             --arg purgeSecret "$PURGE_SECRET"             '{
               MEDIA_OPERATOR_ACCESS_KEY:$operatorKey,
               MEDIA_OPERATOR_SESSION_SECRET:$operatorSession,
