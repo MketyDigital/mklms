@@ -12,7 +12,7 @@ export default function UploadClient({bucketId}:{bucketId:string}){
     if(!sign.ok){setStatus(signed.error||"Upload could not start");return;}
 
     setStatus("Uploading "+file.name+"...");
-    const put=await fetch(signed.uploadUrl,{method:"PUT",headers:{"content-type":file.type||"application/octet-stream"},body:file});
+    const put=await fetch(signed.uploadUrl,{method:"PUT",headers:{"content-type":file.type||"application/octet-stream",...(signed.uploadHeaders||{})},body:file});
     if(!put.ok){setStatus("Upload failed");return;}
 
     const finalize=await fetch("/api/uploads/finalize",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({reservationId:signed.reservationId,objectId:signed.objectId})});
