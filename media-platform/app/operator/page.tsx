@@ -15,7 +15,7 @@ export default async function OperatorPage(){
     db.prepare("SELECT t.id,t.slug,t.name,t.status,t.plan_code,c.* FROM media_tenants t LEFT JOIN media_tenant_commercial_terms c ON c.tenant_id=t.id ORDER BY t.created_at DESC LIMIT 200").all<any>(),
     db.prepare("SELECT * FROM media_provider_pools ORDER BY priority").all<any>(),
     getBillingTerms(),
-    getSetting<any>("bank_transfer",{enabled:false,bankName:"",accountName:"",accountNumber:"",instructions:""}),
+    getSetting<any>("bank_transfer",{enabled:false,currency:"NGN",usdToLocalRate:0,roundTo:100,bankName:"",accountName:"",accountNumber:"",instructions:""}),
     getSetting<any>("enforcement",{graceDays:3,suspendDeliveryAfterGrace:true}),
   ]);
   const configured=new Map(configuredProviders(getProviderEnv()).map((p)=>[p.id,p.status]));
@@ -32,7 +32,7 @@ export default async function OperatorPage(){
     <section className="card" style={{marginTop:18}}><h2>Local bank transfer</h2>
       <form method="post" action="/api/operator/settings"><input type="hidden" name="kind" value="bank"/>
       <label><input type="checkbox" name="enabled" defaultChecked={Boolean(bank.enabled)}/> Enable bank transfer</label>
-      <label>Bank name<input name="bankName" defaultValue={bank.bankName||""}/></label>
+      <label>Local currency<input name="currency" defaultValue={bank.currency||"NGN"}/></label>\n      <label>USD to local rate<input name="usdToLocalRate" type="number" step="0.01" defaultValue={Number(bank.usdToLocalRate||0)}/></label>\n      <label>Round local amount to<input name="roundTo" type="number" step="1" defaultValue={Number(bank.roundTo||100)}/></label>\n      <label>Bank name<input name="bankName" defaultValue={bank.bankName||""}/></label>
       <label>Account name<input name="accountName" defaultValue={bank.accountName||""}/></label>
       <label>Account number<input name="accountNumber" defaultValue={bank.accountNumber||""}/></label>
       <label>Instructions<input name="instructions" defaultValue={bank.instructions||""}/></label>
