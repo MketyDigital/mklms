@@ -25,7 +25,9 @@ export default async function BillingPage({searchParams}:{searchParams:Promise<R
   ]);
 
   const hasPending=Boolean(invoice&&invoice.status==="pending");
-  const nowPaymentsConfigured=Boolean((getMediaEnv() as any).NOWPAYMENTS_API_KEY && (getMediaEnv() as any).NOWPAYMENTS_IPN_SECRET);
+  const runtime=getMediaEnv() as any;
+  const nowPaymentsConfigured=Boolean(runtime.NOWPAYMENTS_API_KEY&&runtime.NOWPAYMENTS_IPN_SECRET);
+  const telegramBotUsername=String(runtime.MEDIA_TELEGRAM_BOT_USERNAME||"");
   const currentPlan=await db.prepare("SELECT plan_code FROM media_tenants WHERE id=? LIMIT 1").bind(user.tenantId).first<any>();
   const currentPublicPlan=(plansResult.results||[]).find((p:any)=>p.code===currentPlan?.plan_code);
 
@@ -56,6 +58,8 @@ export default async function BillingPage({searchParams}:{searchParams:Promise<R
               <p>{String(bank.bankName||"")}</p><p>{String(bank.accountName||"")}</p><p><strong>{String(bank.accountNumber||"")}</strong></p>
               {bank.instructions&&<p>{String(bank.instructions)}</p>}
               <p>Use <strong>{String(invoice.reference)}</strong> as your reference where possible. Your purchase activates only after Mkety verifies the transfer.</p>
+              {telegramBotUsername&&<p style={{marginTop:16}}><a className="btn" href={"https://t.me/"+telegramBotUsername+"?start=pay_"+encodeURIComponent(String(invoice.reference))} target="_blank">Send proof on Telegram</a></p>}
+              {!telegramBotUsername&&<p className="muted">Telegram proof submission is not configured yet. You can still contact Mkety support while the transfer is verified manually.</p>}
             </div>
           ):(
             <div className="toolbar" style={{marginTop:18}}>
