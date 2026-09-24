@@ -4,9 +4,10 @@ function cfg(){
   const env=getMediaEnv();
   const token=String(env.MEDIA_CF_API_TOKEN||"");
   const zoneId=String(env.MEDIA_SAAS_ZONE_ID||"");
-  const cnameTarget=String(env.MEDIA_SAAS_CNAME_TARGET||"assets.mkety.app");
+  const cnameTarget=String(env.MEDIA_SAAS_CNAME_TARGET||"media-fallback.mkety.app");
+  const workerName=String(env.MEDIA_ASSETS_WORKER_NAME||"mkety-media-assets");
   if(!token||!zoneId) throw new Error("Custom-domain infrastructure is not configured");
-  return {token,zoneId,cnameTarget};
+  return {token,zoneId,cnameTarget,workerName};
 }
 
 async function cf(path:string,init:RequestInit={}){
@@ -36,4 +37,26 @@ export async function createCustomHostname(hostname:string){
 
 export async function getCustomHostname(id:string){
   return cf("/custom_hostnames/"+encodeURIComponent(id));
+}
+
+export async function ensureCustomHostnameWorkerRoute(hostname:string){
+  const {workerName}=cfg();
+  const pattern=hostname.toLowerCase()+"/*";
+  const routes=await cf("/workers/routes") as any[];
+  const existing=(routes||[]).find((route:any)=>String(route.pattern).toLowerCase()===pattern);
+  if(existing){
+    if(String(existing.script||"")!==workerName){
+      const updated=await cf("/workers/routes/"+encodeURIComponent(String(existing.id)),{
+        method:"PUT",
+        body:JSON.stringify({pattern,script:workerName}),
+      });
+      return String(updated.id||existing.id);
+    }
+    return String(existing.id);
+  }
+  const created=await cf("/workers/routes",{
+    method:"POST",
+    body:JSON.stringify({pattern,script:workerName}),
+  });
+  return String(created.id||"");
 }
