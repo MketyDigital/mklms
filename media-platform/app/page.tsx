@@ -23,7 +23,7 @@ export default async function Home(){
   ]);
 
   return <main className="wrap">
-    <nav className="nav"><div className="brand">Mkety Media</div><div><Link href="/login">Login</Link>{portal.signupEnabled!==false&&<Link className="btn" href="/signup">Get started</Link>}</div></nav>
+    <nav className="nav"><div className="brand">Mkety Media</div><div><Link href="/trust">Trust & infrastructure</Link><Link href="/login">Login</Link>{portal.signupEnabled!==false&&<Link className="btn" href="/signup">Get started</Link>}</div></nav>
     {portal.maintenanceNotice&&<div className="notice">{String(portal.maintenanceNotice)}</div>}
     <section className="hero"><h1>{String(portal.heroTitle)}</h1><p>{String(portal.heroSubtitle)}</p></section>
     <section><h2>Plans</h2><p className="muted">Monthly, 3-month, 6-month and yearly billing. Longer terms receive a small discount.</p>
