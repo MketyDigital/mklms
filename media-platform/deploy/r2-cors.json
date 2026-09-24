@@ -1,0 +1,19 @@
+[
+  {
+    "AllowedOrigins": [
+      "https://media.mkety.com"
+    ],
+    "AllowedMethods": [
+      "PUT",
+      "HEAD"
+    ],
+    "AllowedHeaders": [
+      "Content-Type",
+      "x-ms-blob-type"
+    ],
+    "ExposeHeaders": [
+      "ETag"
+    ],
+    "MaxAgeSeconds": 3600
+  }
+]
