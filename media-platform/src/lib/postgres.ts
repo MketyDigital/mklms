@@ -10,6 +10,7 @@ export type MediaCloudflareEnv = {
   MEDIA_CF_API_TOKEN?: string;
   MEDIA_SAAS_ZONE_ID?: string;
   MEDIA_SAAS_CNAME_TARGET?: string;
+  MEDIA_ASSETS_WORKER_NAME?: string;
   [key: string]: unknown;
 };
 
