@@ -221,3 +221,6 @@ VALUES
 ('backblaze-b2','Mkety Storage','backblaze',NULL,0,60,'unknown'),
 ('wasabi','Mkety Storage','wasabi',NULL,0,60,'unknown'),
 ('digitalocean-spaces','Mkety Storage','digitalocean',NULL,0,60,'unknown');
+
+ALTER TABLE media_invoices ADD COLUMN amount_local REAL;
+ALTER TABLE media_invoices ADD COLUMN local_currency TEXT;
