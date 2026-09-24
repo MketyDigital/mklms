@@ -54,7 +54,10 @@ export default async function OperatorPage(){
     <section className="card" style={{marginTop:18}}><h2>Local bank transfer</h2>
       <form method="post" action="/api/operator/settings"><input type="hidden" name="kind" value="bank"/>
       <label><input type="checkbox" name="enabled" defaultChecked={Boolean(bank.enabled)}/> Enable bank transfer</label>
-      <label>Local currency<input name="currency" defaultValue={bank.currency||"NGN"}/></label>\n      <label>USD to local rate<input name="usdToLocalRate" type="number" step="0.01" defaultValue={Number(bank.usdToLocalRate||0)}/></label>\n      <label>Round local amount to<input name="roundTo" type="number" step="1" defaultValue={Number(bank.roundTo||100)}/></label>\n      <label>Bank name<input name="bankName" defaultValue={bank.bankName||""}/></label>
+      <label>Local currency<input name="currency" defaultValue={bank.currency||"NGN"}/></label>
+      <label>USD to local rate<input name="usdToLocalRate" type="number" step="0.01" defaultValue={Number(bank.usdToLocalRate||0)}/></label>
+      <label>Round local amount to<input name="roundTo" type="number" step="1" defaultValue={Number(bank.roundTo||100)}/></label>
+      <label>Bank name<input name="bankName" defaultValue={bank.bankName||""}/></label>
       <label>Account name<input name="accountName" defaultValue={bank.accountName||""}/></label>
       <label>Account number<input name="accountNumber" defaultValue={bank.accountNumber||""}/></label>
       <label>Instructions<input name="instructions" defaultValue={bank.instructions||""}/></label>
@@ -112,7 +115,8 @@ export default async function OperatorPage(){
       <label>Seats<input name="seats" type="number" defaultValue={t.team_seats??""} placeholder="blank = base"/></label>
       <label>Max object GB<input name="maxObjectGb" type="number" defaultValue={gb(t.max_object_bytes)} placeholder="blank = base"/></label>
       <label>Billing term<select name="term" defaultValue={t.billing_term_months||1}><option value="1">Monthly</option><option value="3">3 months</option><option value="6">6 months</option><option value="12">12 months</option></select></label>
-      <label>Infrastructure<select name="infrastructure" defaultValue={t.infrastructure_mode||"automatic"}><option value="automatic">Automatic</option><option value="regional">Regional</option><option value="dedicated">Dedicated</option></select></label>\n      <label>Internal storage pool<select name="preferredPoolKey" defaultValue={t.preferred_pool_key||"r2-global"}>{(poolsResult.results||[]).map((p:any)=><option key={p.pool_key} value={p.pool_key}>{p.label}</option>)}</select></label>
+      <label>Infrastructure<select name="infrastructure" defaultValue={t.infrastructure_mode||"automatic"}><option value="automatic">Automatic</option><option value="regional">Regional</option><option value="dedicated">Dedicated</option></select></label>
+      <label>Internal storage pool<select name="preferredPoolKey" defaultValue={t.preferred_pool_key||"r2-global"}>{(poolsResult.results||[]).map((p:any)=><option key={p.pool_key} value={p.pool_key}>{p.label}</option>)}</select></label>
       <p className="muted">Overage: hard cap (launch safety)</p>
       <label><input type="checkbox" name="enterprise" defaultChecked={Boolean(t.enterprise_features)}/> Enterprise capabilities</label>
       <button className="btn">Save customer</button>
