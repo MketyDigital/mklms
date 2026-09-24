@@ -294,3 +294,46 @@ VALUES (
   'portal_content',
   '{"heroTitle":"Upload once. Get fast links. Keep your media simple.","heroSubtitle":"Managed image, video and file storage with cached delivery, straightforward limits and one clean dashboard.","enterpriseTitle":"Need custom limits?","enterpriseText":"Tell us what you need and Mkety will prepare a private Enterprise offer.","maintenanceNotice":"Private launch: self-service signup opens after final platform verification.","signupEnabled":false,"planBenefits":["Images, video and files","Cached Mkety delivery links","Usage and limit dashboard","Secure direct uploads","Preview, copy links and delete","Payment and renewal controls"]}'
 );
+
+
+CREATE TABLE IF NOT EXISTS media_telegram_contacts (
+  chat_id TEXT PRIMARY KEY,
+  telegram_user_id TEXT,
+  username TEXT,
+  first_name TEXT,
+  last_name TEXT,
+  state TEXT NOT NULL DEFAULT 'support',
+  invoice_id TEXT REFERENCES media_invoices(id) ON DELETE SET NULL,
+  support_mode TEXT NOT NULL DEFAULT 'general',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS media_telegram_relays (
+  id TEXT PRIMARY KEY,
+  operator_chat_id TEXT NOT NULL,
+  operator_message_id INTEGER NOT NULL,
+  customer_chat_id TEXT NOT NULL,
+  customer_message_id INTEGER,
+  relay_kind TEXT NOT NULL DEFAULT 'support',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (operator_chat_id, operator_message_id)
+);
+CREATE INDEX IF NOT EXISTS media_telegram_relays_customer_idx
+  ON media_telegram_relays(customer_chat_id, created_at);
+
+CREATE TABLE IF NOT EXISTS media_telegram_payment_proofs (
+  id TEXT PRIMARY KEY,
+  invoice_id TEXT NOT NULL REFERENCES media_invoices(id) ON DELETE CASCADE,
+  customer_chat_id TEXT NOT NULL,
+  customer_message_id INTEGER NOT NULL,
+  operator_summary_message_id INTEGER,
+  operator_proof_message_id INTEGER,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending','approved','rejected')),
+  reviewed_by TEXT,
+  reviewed_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS media_telegram_payment_proofs_invoice_idx
+  ON media_telegram_payment_proofs(invoice_id, status, created_at);
