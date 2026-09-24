@@ -16,7 +16,7 @@ export async function POST(request:Request){
     requests:Number(form.get("requests")||0),
     buckets:Number(form.get("buckets")||0),
     seats:Number(form.get("seats")||1),
-    maxObjectGb:Number(form.get("maxObjectGb")||1),
+    maxObjectGb:Math.min(5,Number(form.get("maxObjectGb")||1)),
     overage:"hard-cap",
     dedicated:form.get("dedicated")==="on"?1:0,
     active:form.get("active")==="on"?1:0,
