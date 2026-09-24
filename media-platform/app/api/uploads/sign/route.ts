@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "../../../../src/lib/current-user";
 import { getTenantState } from "../../../../src/lib/tenant-state";
-import { getMediaDb } from "../../../../src/lib/postgres";
+import { getMediaDb, getMediaEnv } from "../../../../src/lib/postgres";
 import { getProviderEnv } from "../../../../src/lib/provider-env";
 import { createProvider } from "../../../../src/providers/factory";
 import { allowMutation } from "../../../../src/lib/rate-limit";
@@ -44,21 +44,39 @@ export async function POST(request:Request){
   const objectKey=objectId+"-"+safeName(name);
   const storageKey=String(bucket.prefix)+objectKey;
   const reservationId=crypto.randomUUID();
-  const expiresAt=new Date(Date.now()+15*60*1000).toISOString();
-
-  await db.batch([
-    db.prepare("INSERT INTO media_quota_reservations (id,tenant_id,bucket_id,reservation_key,reserved_bytes,expires_at) VALUES (?,?,?,?,?,?)")
-      .bind(reservationId,user.tenantId,bucketId,objectId,size,expiresAt),
-    db.prepare("INSERT INTO media_objects (id,bucket_id,object_key,content_type,size_bytes,status) VALUES (?,?,?,?,?,'pending')")
-      .bind(objectId,bucketId,objectKey,contentType,size),
-  ]);
+  const expiresAt=new Date(Date.now()+30*60*1000).toISOString();
+  const publicUrl="https://assets.mkety.app/"+encodeURIComponent(user.tenantSlug)+"/"+encodeURIComponent(String(bucket.slug))+"/"+objectKey;
 
   try{
+    if(String(bucket.pool_key)==="r2-global" && getMediaEnv().MEDIA_R2_BUCKET){
+      const multipart=await getMediaEnv().MEDIA_R2_BUCKET!.createMultipartUpload(storageKey,{httpMetadata:{contentType}});
+      await db.batch([
+        db.prepare("INSERT INTO media_quota_reservations (id,tenant_id,bucket_id,reservation_key,reserved_bytes,expires_at,provider_upload_id,storage_key) VALUES (?,?,?,?,?,?,?,?)")
+          .bind(reservationId,user.tenantId,bucketId,objectId,size,expiresAt,multipart.uploadId,storageKey),
+        db.prepare("INSERT INTO media_objects (id,bucket_id,object_key,content_type,size_bytes,status) VALUES (?,?,?,?,?,'pending')")
+          .bind(objectId,bucketId,objectKey,contentType,size),
+      ]);
+      return NextResponse.json({
+        uploadMode:"r2-multipart",
+        reservationId,
+        objectId,
+        objectKey,
+        publicUrl,
+        chunkSize:20*1024*1024,
+      });
+    }
+
+    await db.batch([
+      db.prepare("INSERT INTO media_quota_reservations (id,tenant_id,bucket_id,reservation_key,reserved_bytes,expires_at,storage_key) VALUES (?,?,?,?,?,?,?)")
+        .bind(reservationId,user.tenantId,bucketId,objectId,size,expiresAt,storageKey),
+      db.prepare("INSERT INTO media_objects (id,bucket_id,object_key,content_type,size_bytes,status) VALUES (?,?,?,?,?,'pending')")
+        .bind(objectId,bucketId,objectKey,contentType,size),
+    ]);
+
     const provider=createProvider(String(bucket.pool_key),getProviderEnv());
     const uploadUrl=await provider.createUploadUrl({key:storageKey,contentType,expiresInSeconds:900});
-    const publicUrl="https://assets.mkety.app/"+encodeURIComponent(user.tenantSlug)+"/"+encodeURIComponent(String(bucket.slug))+"/"+objectKey;
-    const uploadHeaders=String(bucket.pool_key)==="azure-blob" ? {"x-ms-blob-type":"BlockBlob"} : {};
-    return NextResponse.json({uploadUrl,uploadHeaders,reservationId,objectId,objectKey,publicUrl});
+    const uploadHeaders=String(bucket.pool_key)==="azure-blob" ? {"x-ms-blob-type":"BlockBlob","content-type":contentType} : {"content-type":contentType};
+    return NextResponse.json({uploadMode:"presigned",uploadUrl,uploadHeaders,reservationId,objectId,objectKey,publicUrl});
   }catch(error){
     await db.batch([
       db.prepare("DELETE FROM media_quota_reservations WHERE id=?").bind(reservationId),
