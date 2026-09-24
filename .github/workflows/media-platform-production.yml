@@ -167,8 +167,14 @@ jobs:
           set -euo pipefail
           TELEGRAM_WEBHOOK_SECRET=""
           TELEGRAM_BOT_USERNAME=""
+          SAAS_ZONE_ID=""
           PURGE_SECRET=$(printf '%s' "$MEDIA_OPERATOR_SESSION_SECRET|mkety-media-assets-purge" | sha256sum | cut -d' ' -f1)
           echo "::add-mask::$PURGE_SECRET"
+
+          curl --silent --show-error --fail-with-body \
+            "https://api.cloudflare.com/client/v4/zones?name=mkety.app&account.id=$CLOUDFLARE_ACCOUNT_ID&per_page=5" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" >/tmp/media-saas-zone.json
+          SAAS_ZONE_ID=$(jq -r '.result[0].id // empty' /tmp/media-saas-zone.json)
 
           if [ -n "${MEDIA_TELEGRAM_BOT_TOKEN:-}" ]; then
             TELEGRAM_WEBHOOK_SECRET=$(printf '%s' "$MEDIA_OPERATOR_SESSION_SECRET|mkety-media-telegram" | sha256sum | cut -d' ' -f1)
@@ -184,7 +190,7 @@ jobs:
             curl --silent --show-error --fail-with-body \
               "https://api.telegram.org/bot$MEDIA_TELEGRAM_BOT_TOKEN/setMyCommands" \
               -H "Content-Type: application/json" \
-              --data '{"commands":[{"command":"start","description":"Open Mkety Media support"},{"command":"pay","description":"Submit payment proof using an invoice reference"},{"command":"whoami","description":"Show your Telegram user ID"},{"command":"bindgroup","description":"Bind this group as the Mkety operator inbox"},{"command":"groupid","description":"Show or bind this operator group"}]}' \
+              --data '{"commands":[{"command":"start","description":"Open Mkety Media support"},{"command":"pay","description":"Submit payment proof using an invoice reference"}]}' \
               >/tmp/tg-commands.json
             jq -e '.ok == true' /tmp/tg-commands.json >/dev/null
 
@@ -207,11 +213,16 @@ jobs:
             --arg tgWebhook "$TELEGRAM_WEBHOOK_SECRET" \
             --arg tgUsername "$TELEGRAM_BOT_USERNAME" \
             --arg purgeSecret "$PURGE_SECRET" \
+            --arg cfToken "$CLOUDFLARE_API_TOKEN" \
+            --arg saasZone "$SAAS_ZONE_ID" \
+            --arg saasTarget "assets.mkety.app" \
             '{
               MEDIA_OPERATOR_ACCESS_KEY:$operatorKey,
               MEDIA_OPERATOR_SESSION_SECRET:$operatorSession,
-              MEDIA_ASSET_PURGE_SECRET:$purgeSecret
-            }
+              MEDIA_ASSET_PURGE_SECRET:$purgeSecret,
+              MEDIA_CF_API_TOKEN:$cfToken,
+              MEDIA_SAAS_CNAME_TARGET:$saasTarget
+            }\n            + (if $saasZone=="" then {} else {MEDIA_SAAS_ZONE_ID:$saasZone} end)
             + (if ($npApi!="" and $npIpn!="") then {NOWPAYMENTS_API_KEY:$npApi,NOWPAYMENTS_IPN_SECRET:$npIpn} else {} end)
             + (if $tgToken=="" then {} else {MEDIA_TELEGRAM_BOT_TOKEN:$tgToken} end)
             + (if $tgChat=="" then {} else {MEDIA_TELEGRAM_CHAT_ID:$tgChat} end)
@@ -251,6 +262,14 @@ jobs:
               printf '%s' "$MEDIA_TELEGRAM_OPERATOR_IDS" | grep -Eq '^[0-9]+(,[0-9]+)*$'
             fi
 
+            if [ -n "${MEDIA_TELEGRAM_CHAT_ID:-}" ]; then
+              curl --silent --show-error \
+                "https://api.telegram.org/bot$MEDIA_TELEGRAM_BOT_TOKEN/setMyCommands" \
+                -H "Content-Type: application/json" \
+                --data "$(jq -nc --arg chat "$MEDIA_TELEGRAM_CHAT_ID" '{scope:{type:"chat",chat_id:$chat},commands:[{command:"start",description:"Support menu"},{command:"pay",description:"Submit payment proof"},{command:"whoami",description:"Show operator ID"},{command:"bindgroup",description:"Bind this operator inbox"},{command:"groupid",description:"Show/bind operator group"}]}')" \
+                >/tmp/tg-operator-commands.json || true
+            fi
+
             if [ -n "${MEDIA_TELEGRAM_CHAT_ID:-}" ] && [ -n "${MEDIA_TELEGRAM_OPERATOR_IDS:-}" ]; then
               TG_GROUP_STATUS=$(curl --silent --show-error \
                 --output /tmp/tg-operator-test.json --write-out '%{http_code}' \
@@ -262,6 +281,25 @@ jobs:
                 jq '{ok,description,error_code}' /tmp/tg-operator-test.json
                 echo "Add the bot to the private operator group and send /bindgroup or /groupid from an authorized operator to bind it automatically."
               fi
+            fi
+          fi
+
+      - name: Configure custom-domain fallback origin
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --silent --show-error --fail-with-body \
+            "https://api.cloudflare.com/client/v4/zones?name=mkety.app&account.id=$CLOUDFLARE_ACCOUNT_ID&per_page=5" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" >/tmp/media-saas-zone.json
+          SAAS_ZONE_ID=$(jq -r '.result[0].id // empty' /tmp/media-saas-zone.json)
+          if [ -n "$SAAS_ZONE_ID" ]; then
+            SAAS_FALLBACK_STATUS=$(curl --silent --show-error --output /tmp/saas-fallback.json --write-out '%{http_code}' \
+              --request PUT "https://api.cloudflare.com/client/v4/zones/$SAAS_ZONE_ID/custom_hostnames/fallback_origin" \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" \
+              --data '{"origin":"assets.mkety.app"}')
+            if [ "$SAAS_FALLBACK_STATUS" != "200" ] || ! jq -e '.success == true' /tmp/saas-fallback.json >/dev/null 2>&1; then
+              echo "Custom-domain fallback origin is not active yet; core Mkety Media remains available."
+              jq '{success,errors,messages}' /tmp/saas-fallback.json 2>/dev/null || true
             fi
           fi
 
