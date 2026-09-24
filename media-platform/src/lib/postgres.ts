@@ -7,6 +7,9 @@ export type MediaCloudflareEnv = {
   MEDIA_AUTH_RATE_LIMITER?: RateLimit;
   MEDIA_MUTATION_RATE_LIMITER?: RateLimit;
   MEDIA_ASSET_PURGE_SECRET?: string;
+  MEDIA_CF_API_TOKEN?: string;
+  MEDIA_SAAS_ZONE_ID?: string;
+  MEDIA_SAAS_CNAME_TARGET?: string;
   [key: string]: unknown;
 };
 
