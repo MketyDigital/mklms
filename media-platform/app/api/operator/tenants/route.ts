@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { isOperator } from "../../../../src/auth/operator";
 import { getMediaDb, getMediaEnv } from "../../../../src/lib/postgres";
+import { calculateTermPrice } from "../../../../src/lib/operator-settings";
 
 function gb(value:FormDataEntryValue|null){
-  const n=Number(value||0);
+  if(value===null || String(value).trim()==="") return null;
+  const n=Number(value);
   return Number.isFinite(n)&&n>=0?Math.round(n*1024**3):null;
 }
 
@@ -34,13 +36,13 @@ export async function POST(request:Request){
       tenantId,
       String(current.plan_code),
       displayName||null,
-      customPriceRaw===""?null:Number(customPriceRaw),
+      customMonthly,
       gb(form.get("storageGb")),
       gb(form.get("deliveryGb")),
       form.get("requests")?Number(form.get("requests")):null,
       form.get("buckets")?Number(form.get("buckets")):null,
       form.get("seats")?Number(form.get("seats")):null,
-      Math.min(5*1024**3,gb(form.get("maxObjectGb")) ?? 5*1024**3),
+      maxObjectBytes===null?null:Math.min(5*1024**3,maxObjectBytes),
       "hard-cap",
       enterprise,
       infrastructure,
@@ -50,6 +52,16 @@ export async function POST(request:Request){
     db.prepare("INSERT INTO media_audit_log (id,tenant_id,actor_type,actor_id,action,target_type,target_id) VALUES (?,?,'operator','operator','tenant.commercial.updated','tenant',?)")
       .bind(crypto.randomUUID(),tenantId,tenantId),
   ]);
+  const effectiveMonthly=customMonthly===null
+    ? Number((await db.prepare("SELECT monthly_usd FROM media_plans WHERE code=? LIMIT 1").bind(String(current.plan_code)).first<any>())?.monthly_usd||0)
+    : customMonthly;
+  const pending=await db.prepare("SELECT id FROM media_invoices WHERE tenant_id=? AND status='pending' ORDER BY created_at DESC LIMIT 1").bind(tenantId).first<any>();
+  if(pending && effectiveMonthly>0){
+    const amount=await calculateTermPrice(effectiveMonthly,[1,3,6,12].includes(term)?term:1);
+    await db.prepare("UPDATE media_invoices SET amount_usd=?,amount_local=NULL,local_currency=NULL,payment_method='invoice',updated_at=datetime('now') WHERE id=?")
+      .bind(amount,String(pending.id)).run();
+  }
+
   const directory=getMediaEnv().BUCKET_DIRECTORY;
   if(directory && String(current.slug)!==requestedSlug){
     for(const bucket of buckets.results||[]){
