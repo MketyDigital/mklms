@@ -29,7 +29,7 @@ export class R2BindingProvider implements StorageProvider {
     });
   }
 
-  async createDownloadUrl() {
+  async createDownloadUrl(_input: { key: string; expiresInSeconds?: number }): Promise<string> {
     throw new Error("Public delivery should use assets.mkety.app, not direct R2 URLs.");
   }
 
