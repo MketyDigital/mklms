@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getMediaDb } from "../../../../src/lib/postgres";
 import { hashPassword } from "../../../../src/auth/password";
 import { newSessionToken, sessionCookie, sessionTokenHash } from "../../../../src/auth/session";
-import { BILLING_TERMS, termPrice } from "../../../../src/config/terms";
+import { getBillingTerms, calculateTermPrice } from "../../../../src/lib/operator-settings";
 
 function slugify(input: string) {
   return input.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,50);
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   if(!name || !/^[A-Za-z0-9_-]{3,40}$/.test(username) || password.length<10) {
     return NextResponse.redirect(new URL("/signup?error=invalid",request.url),303);
   }
-  if(!BILLING_TERMS.some((term)=>term.months===termMonths)) {
+  const billingTerms=await getBillingTerms();\n  if(!(billingTerms as any[]).some((term)=>Number(term.months)===termMonths)) {
     return NextResponse.redirect(new URL("/signup?error=term",request.url),303);
   }
 
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   const suffix=crypto.randomUUID().slice(0,6);
   const slug=((slugify(name)||"customer")+"-"+suffix).slice(0,63);
   const reference="MKM-"+crypto.randomUUID().replace(/-/g,"").slice(0,10).toUpperCase();
-  const amount=termPrice(Number(plan.monthly_usd),termMonths);
+  const amount=await calculateTermPrice(Number(plan.monthly_usd),termMonths);
   const expiresAt=new Date(Date.now()+30*24*60*60*1000).toISOString();
   const dueAt=new Date(Date.now()+24*60*60*1000).toISOString();
 
