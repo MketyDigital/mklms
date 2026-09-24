@@ -532,3 +532,59 @@ Keep these rules:
 - keep small multi-month discounts;
 - use operator-editable add-on packs instead of unbilled overage;
 - monitor provider bill vs Mkety revenue before increasing plan allowances.
+
+
+## Telegram support inbox — production design
+
+Mkety Media uses a dedicated customer-facing Telegram bot and one private Mkety operator group.
+
+Customer behavior:
+- customer DMs the bot;
+- `/start` shows General Support, Enterprise Support and Submit Payment Proof;
+- Billing bank-transfer screen deep-links to `?start=pay_<invoice-reference>`;
+- Enterprise page deep-links to `?start=enterprise`;
+- text/photos/documents are relayed into the private operator group;
+- customer never joins or sees the operator group.
+
+Operator behavior:
+- reply directly to the bot-relayed customer header or copied customer message in the private operator group;
+- the bot copies the operator reply back into the correct customer's private bot chat;
+- only Telegram user IDs listed in `MEDIA_TELEGRAM_OPERATOR_IDS` can relay operator replies or approve/reject payment proofs;
+- payment proof approval activates the real pending invoice through the normal settlement path;
+- rejecting a proof does NOT cancel the invoice; customer may submit a corrected proof.
+
+Discovery commands:
+- DM the bot: `/whoami` -> exact Telegram numeric user ID for `MEDIA_TELEGRAM_OPERATOR_IDS`;
+- in the private operator group: `/groupid` -> exact chat ID for `MEDIA_TELEGRAM_CHAT_ID`.
+
+Required GitHub secrets:
+1. `MEDIA_TELEGRAM_BOT_TOKEN`
+2. `MEDIA_TELEGRAM_CHAT_ID`
+3. `MEDIA_TELEGRAM_OPERATOR_IDS` (comma-separated numeric IDs)
+
+Do NOT create GitHub secrets for:
+- `MEDIA_TELEGRAM_WEBHOOK_SECRET` — derived automatically during deployment;
+- `MEDIA_TELEGRAM_BOT_USERNAME` — discovered automatically from Telegram `getMe`.
+
+Two-stage setup:
+1. Add only `MEDIA_TELEGRAM_BOT_TOKEN` and deploy.
+   - deployment calls Telegram `getMe`;
+   - stores bot username;
+   - registers webhook at `https://media.mkety.com/api/telegram/webhook`;
+   - `/whoami` and `/groupid` immediately work.
+2. Create/add bot to a private operator group.
+   - DM bot `/whoami`;
+   - in group send `/groupid`;
+   - save returned IDs as the remaining GitHub secrets;
+   - deploy again.
+
+Privacy Mode may remain ON. Telegram still delivers replies to the bot's own messages, which is the only ordinary group-message path used by the support relay.
+
+Payment proof safety:
+- selecting bank transfer never creates an approval button by itself;
+- approval buttons appear only after a photo/document proof is submitted for a real pending invoice;
+- bot displays invoice, customer and expected amount to operators;
+- operator must independently verify bank credit before approving;
+- authorized operator ID is recorded in proof review/audit settlement metadata.
+
+Operator web fallback remains available even if Telegram is unavailable.
