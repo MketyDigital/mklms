@@ -5,16 +5,13 @@ import { getTenantState } from "../../src/lib/tenant-state";
 import { getMediaDb } from "../../src/lib/postgres";
 
 export default async function BillingPage() {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  const user=await getCurrentUser();
+  if(!user) redirect("/login");
 
-  const state = await getTenantState(user.tenantId);
-  const db = getMediaDb();
-  const invoiceResult = await db.query(
-    "SELECT id,reference,amount_usd,status,payment_method,due_at FROM media_invoices WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 1",
-    [user.tenantId],
-  );
-  const invoice = invoiceResult.rows[0];
+  const state=await getTenantState(user.tenantId);
+  const invoice=await getMediaDb().prepare(
+    "SELECT id,reference,amount_usd,status,payment_method,due_at FROM media_invoices WHERE tenant_id=? ORDER BY created_at DESC LIMIT 1"
+  ).bind(user.tenantId).first<any>();
 
   return (
     <main className="wrap">
@@ -30,18 +27,18 @@ export default async function BillingPage() {
         {state.renewalAt && <p>Renews/ends: {new Date(state.renewalAt).toLocaleDateString()}</p>}
       </div>
 
-      {invoice && invoice.status === "pending" && (
+      {invoice && invoice.status==="pending" && (
         <div className="card" style={{marginTop:18}}>
           <h2>Payment due</h2>
-          <p>Invoice <strong>{invoice.reference}</strong></p>
+          <p>Invoice <strong>{String(invoice.reference)}</strong></p>
           <div className="price">{"$"}{Number(invoice.amount_usd).toFixed(2)}</div>
           <div className="toolbar" style={{marginTop:18}}>
             <form method="post" action="/api/billing/nowpayments">
-              <input type="hidden" name="invoiceId" value={invoice.id} />
+              <input type="hidden" name="invoiceId" value={String(invoice.id)} />
               <button className="btn">Pay automatically</button>
             </form>
             <form method="post" action="/api/billing/bank-transfer">
-              <input type="hidden" name="invoiceId" value={invoice.id} />
+              <input type="hidden" name="invoiceId" value={String(invoice.id)} />
               <button className="btn secondary">Pay by bank transfer</button>
             </form>
           </div>
@@ -49,9 +46,7 @@ export default async function BillingPage() {
         </div>
       )}
 
-      {state.status === "active" && (
-        <div className="notice success" style={{marginTop:18}}>Your account is active.</div>
-      )}
+      {state.status==="active" && <div className="notice success" style={{marginTop:18}}>Your account is active.</div>}
     </main>
   );
 }
