@@ -1,13 +1,17 @@
 import Link from "next/link";
 import { getPublicPlans } from "../src/lib/plans-db";
-import { BILLING_TERMS, termPrice } from "../src/config/terms";
+import { getBillingTerms } from "../src/lib/operator-settings";
 
 function gb(bytes: number) {
   return Math.round(Number(bytes) / 1024 ** 3);
 }
 
+function termPrice(monthlyUsd:number,months:number,discountPercent:number){
+  return Math.round(monthlyUsd*months*(1-discountPercent/100)*100)/100;
+}
+
 export default async function Home() {
-  const plans = await getPublicPlans();
+  const [plans,terms] = await Promise.all([getPublicPlans(),getBillingTerms()]);
 
   return (
     <main className="wrap">
@@ -49,15 +53,11 @@ export default async function Home() {
                 <li>Payment and renewal controls</li>
                 {plan.dedicated_storage_eligible && <li>Regional or dedicated infrastructure eligibility</li>}
               </ul>
-
-              <Link className="btn" href={"/signup?plan=" + plan.code}>
-                Choose {plan.name}
-              </Link>
-
+              <Link className="btn" href={"/signup?plan=" + plan.code}>Choose {plan.name}</Link>
               <div style={{marginTop:14}} className="muted">
-                {BILLING_TERMS.filter((term) => term.months > 1).map((term) => (
+                {(terms as any[]).filter((term)=>Number(term.months)>1).map((term)=>(
                   <div key={term.months}>
-                    {term.label}: {"$"}{termPrice(Number(plan.monthly_usd), term.months).toFixed(2)} ({term.discountPercent}% off)
+                    {term.label}: {"$"}{termPrice(Number(plan.monthly_usd),Number(term.months),Number(term.discountPercent||0)).toFixed(2)} ({Number(term.discountPercent||0)}% off)
                   </div>
                 ))}
               </div>
