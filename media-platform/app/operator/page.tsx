@@ -10,12 +10,13 @@ function gb(bytes:any){return bytes==null?"":(Number(bytes)/1024**3).toFixed(0);
 export default async function OperatorPage(){
   if(!(await isOperator())) redirect("/operator/login");
   const db=getMediaDb();
-  const [plansResult,addonsResult,tenantsResult,poolsResult,pendingInvoices,terms,bank,enforcement,portal]=await Promise.all([
+  const [plansResult,addonsResult,tenantsResult,poolsResult,pendingInvoices,enterpriseRequests,terms,bank,enforcement,portal]=await Promise.all([
     db.prepare("SELECT * FROM media_plans ORDER BY display_order").all<any>(),
     db.prepare("SELECT * FROM media_addon_products ORDER BY display_order,price_usd").all<any>(),
     db.prepare("SELECT t.id,t.slug,t.name,t.status,t.plan_code,c.* FROM media_tenants t LEFT JOIN media_tenant_commercial_terms c ON c.tenant_id=t.id ORDER BY t.created_at DESC LIMIT 200").all<any>(),
     db.prepare("SELECT * FROM media_provider_pools ORDER BY priority").all<any>(),
     db.prepare("SELECT i.id,i.reference,i.amount_usd,i.amount_local,i.local_currency,i.payment_method,i.created_at,t.name AS tenant_name FROM media_invoices i JOIN media_tenants t ON t.id=i.tenant_id WHERE i.status='pending' ORDER BY i.created_at DESC LIMIT 100").all<any>(),
+    db.prepare("SELECT * FROM media_enterprise_requests WHERE status IN ('new','contacted') ORDER BY created_at DESC LIMIT 100").all<any>(),
     getBillingTerms(),
     getSetting<any>("bank_transfer",{enabled:false,currency:"NGN",usdToLocalRate:0,roundTo:100,bankName:"",accountName:"",accountNumber:"",instructions:""}),
     getSetting<any>("enforcement",{graceDays:3,suspendDeliveryAfterGrace:true}),
@@ -71,6 +72,30 @@ export default async function OperatorPage(){
       <label><input type="checkbox" name="suspendDelivery" defaultChecked={Boolean(enforcement.suspendDeliveryAfterGrace)}/> Suspend public delivery after grace</label>
       <button className="btn">Save enforcement</button></form>
     </section>
+
+    <h2 style={{marginTop:30}}>Enterprise requests</h2>
+    <div className="grid">{(enterpriseRequests.results||[]).map((r:any)=><form className="card" method="post" action="/api/operator/enterprise" key={r.id}>
+      <input type="hidden" name="requestId" value={r.id}/>
+      <h3>{r.company_name}</h3>
+      <p className="muted">{r.contact_name} · {r.telegram_contact}</p>
+      {r.requirements&&<p>{r.requirements}</p>}
+      <label>Username<input name="username" required placeholder="companyadmin"/></label>
+      <label>Temporary password<input type="password" name="password" required minLength={10}/></label>
+      <label>Public slug<input name="slug" required defaultValue={String(r.company_name||"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,40)}/></label>
+      <label>Monthly USD<input name="monthlyUsd" type="number" step="0.01" min="0" defaultValue="5"/></label>
+      <label>Billing term<select name="term" defaultValue="1"><option value="1">Monthly</option><option value="3">3 months</option><option value="6">6 months</option><option value="12">12 months</option></select></label>
+      <label>Storage GB<input name="storageGb" type="number" min="1" defaultValue="10"/></label>
+      <label>Delivery GB<input name="deliveryGb" type="number" min="1" defaultValue="100"/></label>
+      <label>Requests<input name="requests" type="number" min="1" defaultValue="1000000"/></label>
+      <label>Buckets<input name="buckets" type="number" min="1" defaultValue="3"/></label>
+      <label>Seats<input name="seats" type="number" min="1" defaultValue="1"/></label>
+      <label>Max object GB<input name="maxObjectGb" type="number" min="1" defaultValue="2"/></label>
+      <label>Infrastructure<select name="infrastructure" defaultValue="automatic"><option value="automatic">Automatic</option><option value="regional">Regional</option><option value="dedicated">Dedicated</option></select></label>
+      <label>Internal pool<select name="preferredPoolKey" defaultValue="r2-global">{(poolsResult.results||[]).map((p:any)=><option key={p.pool_key} value={p.pool_key}>{p.label}</option>)}</select></label>
+      <button className="btn">Provision Enterprise account</button>
+      <p className="muted">After provisioning, send the agreed username/password privately. Access remains pending until the invoice is paid.</p>
+    </form>)}
+    {!enterpriseRequests.results?.length&&<div className="notice">No pending Enterprise requests.</div>}</div>
 
     <h2 style={{marginTop:30}}>Pending payments</h2>
     <div className="card"><table className="table"><thead><tr><th>Customer</th><th>Invoice</th><th>Amount</th><th>Method</th><th></th></tr></thead><tbody>
