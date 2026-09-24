@@ -33,6 +33,11 @@ export class R2BindingProvider implements StorageProvider {
     throw new Error("Public delivery should use assets.mkety.app, not direct R2 URLs.");
   }
 
+  async headObject(key: string) {
+    const object = await this.bucket.head(key);
+    return object ? { size: object.size, etag: object.etag, contentType: object.httpMetadata?.contentType } : null;
+  }
+
   async deleteObject(key: string) {
     await this.bucket.delete(key);
   }
