@@ -45,6 +45,8 @@ export default async function Dashboard() {
         <div>
           <Link href="/buckets">Buckets</Link>
           <Link href="/billing">Billing</Link>
+          <Link href="/export">Export</Link>
+          <Link href="/domains">Custom domains</Link>
           {["owner","admin"].includes(user.role) && <Link href="/team">Team</Link>}
           <form style={{display:"inline"}} method="post" action="/api/auth/logout">
             <button className="btn secondary">Logout</button>
@@ -77,6 +79,8 @@ export default async function Dashboard() {
         <div className="toolbar">
           <Link className="btn" href="/buckets">Manage buckets & files</Link>
           <Link className="btn secondary" href="/billing">Plan & billing</Link>
+          <Link className="btn secondary" href="/export">Export library</Link>
+          {state.enterpriseFeatures&&<Link className="btn secondary" href="/domains">Custom domain</Link>}
         </div>
       </div>
     </main>
