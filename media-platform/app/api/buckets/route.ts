@@ -33,9 +33,12 @@ export async function POST(request:Request){
     const directory=getMediaEnv().BUCKET_DIRECTORY;
     if(directory){
       await directory.put(user.tenantSlug+"/"+slug,JSON.stringify({
+        tenantId:user.tenantId,
+        bucketId:id,
         poolKey,
         prefix,
         cacheControl,
+        deliveryBlocked:false,
       }));
     }
 
