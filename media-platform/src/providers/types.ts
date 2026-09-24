@@ -18,6 +18,7 @@ export interface StorageProvider {
     key: string;
     expiresInSeconds?: number;
   }): Promise<string>;
+  headObject(key: string): Promise<{ size: number; etag?: string; contentType?: string } | null>;
   deleteObject(key: string): Promise<void>;
   listObjects(prefix: string, cursor?: string): Promise<{
     objects: ObjectDescriptor[];
