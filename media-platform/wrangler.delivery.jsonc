@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/wrangler/config-schema.json",
-  "name": "mkety-media-delivery",
+  "name": "mkety-media-assets",
   "main": "workers/delivery.ts",
   "compatibility_date": "2026-09-24",
   "compatibility_flags": ["nodejs_compat"],
@@ -9,6 +9,12 @@
     {
       "binding": "BUCKET_DIRECTORY",
       "id": "REPLACE_WITH_MEDIA_BUCKET_DIRECTORY_KV_ID"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA_R2_BUCKET",
+      "bucket_name": "REPLACE_WITH_MEDIA_R2_BUCKET"
     }
   ]
 }
