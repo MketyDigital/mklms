@@ -226,3 +226,48 @@ VALUES
 ('digitalocean-spaces','Mkety Storage','digitalocean',NULL,0,60,'unknown');
 
 
+
+CREATE TABLE IF NOT EXISTS media_addon_products (
+  code TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  price_usd REAL NOT NULL CHECK (price_usd >= 0),
+  storage_bytes INTEGER NOT NULL DEFAULT 0,
+  delivery_bytes INTEGER NOT NULL DEFAULT 0,
+  delivery_requests INTEGER NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1,
+  display_order INTEGER NOT NULL DEFAULT 100,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS media_tenant_addons (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES media_tenants(id) ON DELETE CASCADE,
+  product_code TEXT NOT NULL REFERENCES media_addon_products(code),
+  storage_bytes INTEGER NOT NULL DEFAULT 0,
+  delivery_bytes INTEGER NOT NULL DEFAULT 0,
+  delivery_requests INTEGER NOT NULL DEFAULT 0,
+  starts_at TEXT NOT NULL,
+  ends_at TEXT NOT NULL,
+  invoice_id TEXT REFERENCES media_invoices(id),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS media_tenant_addons_active_idx
+  ON media_tenant_addons(tenant_id,starts_at,ends_at);
+
+CREATE TABLE IF NOT EXISTS media_purchases (
+  invoice_id TEXT PRIMARY KEY REFERENCES media_invoices(id) ON DELETE CASCADE,
+  tenant_id TEXT NOT NULL REFERENCES media_tenants(id) ON DELETE CASCADE,
+  purchase_type TEXT NOT NULL CHECK (purchase_type IN ('subscription','plan_upgrade','addon')),
+  target_plan_code TEXT,
+  addon_code TEXT,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT OR IGNORE INTO media_addon_products
+(code,name,price_usd,storage_bytes,delivery_bytes,delivery_requests,active,display_order)
+VALUES
+('storage-10','Extra 10 GB Storage',3,10737418240,0,0,1,10),
+('delivery-100','Extra 100 GB Delivery',3,0,107374182400,0,1,20),
+('requests-1m','Extra 1 Million Requests',2,0,0,1000000,1,30),
+('boost-pack','Extra Capacity Pack',6,10737418240,107374182400,1000000,1,40);
