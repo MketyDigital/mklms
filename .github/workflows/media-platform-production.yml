@@ -1,4 +1,4 @@
-# deploy Cloudflare-compatible password KDF
+# deploy Cloudflare-compatible password KDF buffer fix
 name: Deploy Mkety Media production
 
 on:
