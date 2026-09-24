@@ -18,14 +18,16 @@ export async function settleInvoice(input:{
 }){
   const db=getMediaDb();
   const invoice=await db.prepare(
-    "SELECT i.id,i.tenant_id,i.status,c.billing_term_months FROM media_invoices i LEFT JOIN media_tenant_commercial_terms c ON c.tenant_id=i.tenant_id WHERE i.id=? LIMIT 1"
+    "SELECT i.id,i.tenant_id,i.status,c.billing_term_months,s.current_period_end FROM media_invoices i LEFT JOIN media_tenant_commercial_terms c ON c.tenant_id=i.tenant_id LEFT JOIN media_subscriptions s ON s.tenant_id=i.tenant_id WHERE i.id=? LIMIT 1"
   ).bind(input.invoiceId).first<any>();
   if(!invoice) throw new Error("Invoice not found");
   if(invoice.status==="paid") return {ok:true,alreadyPaid:true};
   if(invoice.status!=="pending") throw new Error("Invoice is not payable");
 
   const months=Number(invoice.billing_term_months||1);
-  const periodEnd=addMonths(new Date(),months).toISOString();
+  const existingEnd=invoice.current_period_end?new Date(String(invoice.current_period_end)):null;
+  const base=existingEnd && existingEnd.getTime()>Date.now()?existingEnd:new Date();
+  const periodEnd=addMonths(base,months).toISOString();
   const now=new Date().toISOString();
 
   await db.batch([
