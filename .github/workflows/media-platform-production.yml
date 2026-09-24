@@ -49,6 +49,9 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Record source revision
+        run: echo "Deploying Mkety Media from $(git rev-parse HEAD)"
+
       - name: Verify required production secrets
         shell: bash
         run: |
