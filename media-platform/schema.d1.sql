@@ -206,9 +206,9 @@ INSERT OR IGNORE INTO media_plans
 (code,name,monthly_usd,storage_bytes,delivery_bytes,delivery_requests,logical_buckets,team_seats,max_object_bytes,overage_mode,dedicated_storage_eligible,active,display_order)
 VALUES
 ('starter','Starter',5,10737418240,107374182400,1000000,3,1,2147483648,'hard-cap',0,1,10),
-('growth','Growth',15,53687091200,536870912000,5000000,10,3,10737418240,'prepaid-wallet',0,1,20),
-('business','Business',39,214748364800,2147483648000,20000000,50,10,26843545600,'prepaid-wallet',1,1,30),
-('enterprise','Enterprise',99,536870912000,5368709120000,50000000,250,25,53687091200,'prepaid-wallet',1,1,40);
+('growth','Growth',15,53687091200,536870912000,5000000,10,3,10737418240,'hard-cap',0,1,20),
+('business','Business',39,214748364800,2147483648000,20000000,50,10,26843545600,'hard-cap',1,1,30),
+('enterprise','Enterprise',99,536870912000,5368709120000,50000000,250,25,53687091200,'hard-cap',1,1,40);
 
 INSERT OR IGNORE INTO media_provider_pools
 (pool_key,label,provider,region_label,available_to_customers,priority,health_status)
