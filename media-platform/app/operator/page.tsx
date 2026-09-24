@@ -101,7 +101,7 @@ export default async function OperatorPage(){
 
     <h2 style={{marginTop:30}}>Customers</h2>
     <div className="grid">{(tenantsResult.results||[]).map((t:any)=><form className="card" method="post" action="/api/operator/tenants" key={t.id}>
-      <input type="hidden" name="tenantId" value={t.id}/><h3>{t.name}</h3><p className="muted">{t.slug} · base {t.plan_code}</p>
+      <input type="hidden" name="tenantId" value={t.id}/><h3>{t.name}</h3><p className="muted">base {t.plan_code}</p><label>Public slug<input name="slug" defaultValue={t.slug}/></label>
       <label>Account status<select name="status" defaultValue={t.status}><option value="pending">Pending</option><option value="active">Active</option><option value="suspended">Suspended</option><option value="closed">Closed</option></select></label>
       <label>Private display name<input name="displayName" defaultValue={t.display_name||""} placeholder="e.g. Starpips Launch"/></label>
       <label>Custom monthly USD<input name="monthlyUsd" type="number" step="0.01" defaultValue={t.monthly_usd??""} placeholder="blank = base plan"/></label>
