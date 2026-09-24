@@ -231,3 +231,21 @@ ALTER TABLE media_tenants ADD CONSTRAINT media_tenants_status_check
 ALTER TABLE media_subscriptions DROP CONSTRAINT IF EXISTS media_subscriptions_status_check;
 ALTER TABLE media_subscriptions ADD CONSTRAINT media_subscriptions_status_check
   CHECK (status IN ('pending','trial','active','past_due','manual','cancelled'));
+
+ALTER TABLE media_provider_accounts DROP CONSTRAINT IF EXISTS media_provider_accounts_provider_check;
+ALTER TABLE media_provider_accounts ADD CONSTRAINT media_provider_accounts_provider_check
+  CHECK (provider IN ('r2','oci','aws','gcs','azure','backblaze','wasabi','digitalocean'));
+
+ALTER TABLE media_buckets ALTER COLUMN provider_account_id DROP NOT NULL;
+ALTER TABLE media_buckets ADD COLUMN IF NOT EXISTS pool_key text NOT NULL DEFAULT 'r2-global';
+
+ALTER TABLE media_provider_accounts
+  ADD COLUMN IF NOT EXISTS pool_key text,
+  ADD COLUMN IF NOT EXISTS available_to_customers boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS priority integer NOT NULL DEFAULT 100,
+  ADD COLUMN IF NOT EXISTS health_status text NOT NULL DEFAULT 'unknown'
+    CHECK (health_status IN ('unknown','healthy','degraded','offline'));
+
+CREATE UNIQUE INDEX IF NOT EXISTS media_provider_accounts_pool_key_idx
+  ON media_provider_accounts(pool_key)
+  WHERE pool_key IS NOT NULL;
