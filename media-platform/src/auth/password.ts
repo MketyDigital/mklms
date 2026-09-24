@@ -24,15 +24,17 @@ function roundSalt(base:Uint8Array,round:number){
 }
 
 async function deriveRound(materialBytes:Uint8Array,salt:Uint8Array){
+  const materialBuffer=new Uint8Array(materialBytes).buffer as ArrayBuffer;
+  const saltBuffer=new Uint8Array(salt).buffer as ArrayBuffer;
   const material=await crypto.subtle.importKey(
     "raw",
-    materialBytes,
+    materialBuffer,
     "PBKDF2",
     false,
     ["deriveBits"],
   );
   return new Uint8Array(await crypto.subtle.deriveBits(
-    {name:"PBKDF2",hash:"SHA-256",salt,iterations:PBKDF2_ITERATIONS},
+    {name:"PBKDF2",hash:"SHA-256",salt:saltBuffer,iterations:PBKDF2_ITERATIONS},
     material,
     256,
   ));
@@ -81,9 +83,11 @@ export async function verifyPassword(password:string,stored:string){
     if(!Number.isInteger(iterations)||iterations<1||iterations>PBKDF2_ITERATIONS) return false;
     const salt=fromBase64(parts[2]||"");
     const expected=fromBase64(parts[3]||"");
-    const material=await crypto.subtle.importKey("raw",encoder.encode(password),"PBKDF2",false,["deriveBits"]);
+    const passwordBuffer=new Uint8Array(encoder.encode(password)).buffer as ArrayBuffer;
+    const saltBuffer=new Uint8Array(salt).buffer as ArrayBuffer;
+    const material=await crypto.subtle.importKey("raw",passwordBuffer,"PBKDF2",false,["deriveBits"]);
     const derived=new Uint8Array(await crypto.subtle.deriveBits(
-      {name:"PBKDF2",hash:"SHA-256",salt,iterations},
+      {name:"PBKDF2",hash:"SHA-256",salt:saltBuffer,iterations},
       material,
       256,
     ));
