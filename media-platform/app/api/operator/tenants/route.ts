@@ -38,7 +38,7 @@ export async function POST(request:Request){
       form.get("requests")?Number(form.get("requests")):null,
       form.get("buckets")?Number(form.get("buckets")):null,
       form.get("seats")?Number(form.get("seats")):null,
-      gb(form.get("maxObjectGb")),
+      Math.min(5*1024**3,gb(form.get("maxObjectGb")) ?? 5*1024**3),
       "hard-cap",
       enterprise,
       infrastructure,
