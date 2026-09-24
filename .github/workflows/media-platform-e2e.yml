@@ -1,0 +1,150 @@
+name: Mkety Media disposable production E2E
+
+on:
+  push:
+    branches:
+      - media-platform
+    paths:
+      - ".github/workflows/media-platform-e2e.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mkety-media-e2e
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      MEDIA_OPERATOR_ACCESS_KEY: ${{ secrets.MEDIA_OPERATOR_ACCESS_KEY || secrets.MKETY_ADMIN_ACCESS_KEY }}
+      BASE_URL: https://media.mkety.com
+    steps:
+      - name: Verify prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN MEDIA_OPERATOR_ACCESS_KEY; do
+            test -n "${!name:-}" || { echo "Missing $name"; exit 1; }
+          done
+
+      - name: Run disposable customer flow
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUN="$GITHUB_RUN_ID"
+          COMPANY="Mkety Test $RUN"
+          USERNAME="mketytest$RUN"
+          PASSWORD=$(openssl rand -hex 16)
+          SLUG="mkety-test-$RUN"
+          TG="@mketytest$RUN"
+          echo "::add-mask::$PASSWORD"
+
+          AUTH=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json")
+
+          curl -fsS "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database?per_page=100" "${AUTH[@]}" >/tmp/d1-list.json
+          D1_ID=$(jq -r '.result[] | select(.name=="mkety-media") | (.uuid // .id)' /tmp/d1-list.json | head -n1)
+          test -n "$D1_ID" && test "$D1_ID" != "null"
+
+          d1_query() {
+            local sql="$1"; shift
+            local params='[]'
+            for value in "$@"; do
+              params=$(jq -c --arg v "$value" '. + [$v]' <<<"$params")
+            done
+            jq -nc --arg sql "$sql" --argjson params "$params" '{sql:$sql,params:$params}' >/tmp/d1-query.json
+            curl -fsS --request POST               "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database/$D1_ID/query"               "${AUTH[@]}" --data @/tmp/d1-query.json
+          }
+
+          cleanup() {
+            set +e
+            if [ -n "${OBJECT_ID:-}" ] && [ -f /tmp/user.cookies ]; then
+              curl -sS -o /dev/null -b /tmp/user.cookies -X POST "$BASE_URL/api/objects/delete" --data-urlencode "objectId=$OBJECT_ID"
+            fi
+            if [ -n "${REQUEST_ID:-}" ]; then
+              d1_query "DELETE FROM media_enterprise_requests WHERE id=?" "$REQUEST_ID" >/dev/null
+            fi
+            if [ -n "${TENANT_ID:-}" ]; then
+              d1_query "DELETE FROM media_tenants WHERE id=?" "$TENANT_ID" >/dev/null
+            fi
+            if [ -n "${USER_ID:-}" ]; then
+              d1_query "DELETE FROM media_users WHERE id=?" "$USER_ID" >/dev/null
+            fi
+          }
+          trap cleanup EXIT
+
+          echo "1. Private launch and Enterprise page"
+          curl -fsS "$BASE_URL/signup" | grep -q "Signups are currently paused"
+          curl -fsS "$BASE_URL/enterprise" >/dev/null
+
+          echo "2. Enterprise request"
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$BASE_URL/api/enterprise/request"             --data-urlencode "companyName=$COMPANY"             --data-urlencode "contactName=Mkety QA"             --data-urlencode "telegramContact=$TG"             --data-urlencode "requirements=Disposable production E2E")
+          test "$code" = "303"
+
+          req=$(d1_query "SELECT id FROM media_enterprise_requests WHERE company_name=? ORDER BY created_at DESC LIMIT 1" "$COMPANY")
+          REQUEST_ID=$(jq -r '.result[0].results[0].id // empty' <<<"$req")
+          test -n "$REQUEST_ID"
+
+          echo "3. Operator login and provision"
+          code=$(curl -sS -o /dev/null -c /tmp/op.cookies -w '%{http_code}' -X POST "$BASE_URL/api/operator/login"             --data-urlencode "accessKey=$MEDIA_OPERATOR_ACCESS_KEY")
+          test "$code" = "303"
+
+          code=$(curl -sS -o /dev/null -b /tmp/op.cookies -c /tmp/op.cookies -w '%{http_code}' -X POST "$BASE_URL/api/operator/enterprise"             --data-urlencode "requestId=$REQUEST_ID"             --data-urlencode "username=$USERNAME"             --data-urlencode "password=$PASSWORD"             --data-urlencode "slug=$SLUG"             --data-urlencode "monthlyUsd=1"             --data-urlencode "term=1"             --data-urlencode "storageGb=1"             --data-urlencode "deliveryGb=1"             --data-urlencode "requests=10000"             --data-urlencode "buckets=2"             --data-urlencode "seats=1"             --data-urlencode "maxObjectGb=1"             --data-urlencode "infrastructure=automatic"             --data-urlencode "preferredPoolKey=r2-global")
+          test "$code" = "303"
+
+          row=$(d1_query "SELECT t.id AS tenant_id,m.user_id AS user_id,i.id AS invoice_id FROM media_tenants t JOIN media_memberships m ON m.tenant_id=t.id AND m.role='owner' JOIN media_invoices i ON i.tenant_id=t.id AND i.status='pending' WHERE t.slug=? ORDER BY i.created_at DESC LIMIT 1" "$SLUG")
+          TENANT_ID=$(jq -r '.result[0].results[0].tenant_id // empty' <<<"$row")
+          USER_ID=$(jq -r '.result[0].results[0].user_id // empty' <<<"$row")
+          INVOICE_ID=$(jq -r '.result[0].results[0].invoice_id // empty' <<<"$row")
+          test -n "$TENANT_ID" && test -n "$USER_ID" && test -n "$INVOICE_ID"
+
+          echo "4. Approve invoice and customer login"
+          code=$(curl -sS -o /dev/null -b /tmp/op.cookies -w '%{http_code}' -X POST "$BASE_URL/api/operator/invoices"             --data-urlencode "invoiceId=$INVOICE_ID" --data-urlencode "action=approve")
+          test "$code" = "303"
+
+          code=$(curl -sS -o /dev/null -c /tmp/user.cookies -w '%{http_code}' -X POST "$BASE_URL/api/auth/login"             --data-urlencode "username=$USERNAME" --data-urlencode "password=$PASSWORD")
+          test "$code" = "303"
+          curl -fsS -b /tmp/user.cookies "$BASE_URL/dashboard" | grep -q "$COMPANY"
+
+          echo "5. Create bucket"
+          curl -sS -D /tmp/bucket.headers -o /dev/null -b /tmp/user.cookies -c /tmp/user.cookies -X POST "$BASE_URL/api/buckets"             --data-urlencode "name=e2e"
+          LOCATION=$(awk 'BEGIN{IGNORECASE=1} /^location:/{print $2}' /tmp/bucket.headers | tr -d '\r' | tail -n1)
+          BUCKET_ID="${LOCATION##*/}"
+          test -n "$BUCKET_ID"
+
+          echo "6. Upload through native R2 multipart path"
+          printf '%s' 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=' | base64 -d >/tmp/test.png
+          SIZE=$(stat -c%s /tmp/test.png)
+          SIGN=$(curl -fsS -b /tmp/user.cookies -H 'content-type: application/json' -X POST "$BASE_URL/api/uploads/sign"             --data "$(jq -nc --arg bucketId "$BUCKET_ID" --arg name "pixel.png" --argjson size "$SIZE" '{bucketId:$bucketId,name:$name,size:$size,contentType:"image/png"}')")
+          test "$(jq -r '.uploadMode' <<<"$SIGN")" = "r2-multipart"
+          RESERVATION_ID=$(jq -r '.reservationId' <<<"$SIGN")
+          OBJECT_ID=$(jq -r '.objectId' <<<"$SIGN")
+          PUBLIC_URL=$(jq -r '.publicUrl' <<<"$SIGN")
+
+          PART=$(curl -fsS -b /tmp/user.cookies -X PUT             "$BASE_URL/api/uploads/r2/part?reservationId=$(jq -rn --arg v "$RESERVATION_ID" '$v|@uri')&partNumber=1"             --data-binary @/tmp/test.png)
+          ETAG=$(jq -r '.etag' <<<"$PART")
+          test -n "$ETAG"
+
+          curl -fsS -b /tmp/user.cookies -H 'content-type: application/json' -X POST "$BASE_URL/api/uploads/r2/complete"             --data "$(jq -nc --arg reservationId "$RESERVATION_ID" --arg objectId "$OBJECT_ID" --arg etag "$ETAG" '{reservationId:$reservationId,objectId:$objectId,parts:[{partNumber:1,etag:$etag}]}')"             | jq -e '.ok==true' >/dev/null
+
+          echo "7. Public delivery and Range"
+          code=$(curl -sS -o /tmp/object.png -w '%{http_code}' "$PUBLIC_URL")
+          test "$code" = "200"
+          cmp /tmp/test.png /tmp/object.png
+          code=$(curl -sS -H 'Range: bytes=0-9' -o /tmp/range.bin -w '%{http_code}' "$PUBLIC_URL")
+          test "$code" = "206"
+          test "$(stat -c%s /tmp/range.bin)" = "10"
+
+          echo "8. Delete and cache purge"
+          code=$(curl -sS -o /dev/null -b /tmp/user.cookies -w '%{http_code}' -X POST "$BASE_URL/api/objects/delete" --data-urlencode "objectId=$OBJECT_ID")
+          test "$code" = "303"
+          OBJECT_ID=""
+          code=$(curl -sS -o /dev/null -w '%{http_code}' "$PUBLIC_URL")
+          test "$code" = "404"
+
+          echo "Mkety Media disposable production E2E passed."
