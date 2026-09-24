@@ -5,101 +5,56 @@ import { newSessionToken, sessionCookie, sessionTokenHash } from "../../../../sr
 import { BILLING_TERMS, termPrice } from "../../../../src/config/terms";
 
 function slugify(input: string) {
-  return input.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50);
+  return input.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,50);
 }
 
 export async function POST(request: Request) {
-  const form = await request.formData();
-  const name = String(form.get("name") || "").trim();
-  const username = String(form.get("username") || "").trim();
-  const password = String(form.get("password") || "");
-  const planCode = String(form.get("plan") || "starter");
-  const termMonths = Number(form.get("term") || 1);
+  const form=await request.formData();
+  const name=String(form.get("name")||"").trim();
+  const username=String(form.get("username")||"").trim();
+  const password=String(form.get("password")||"");
+  const planCode=String(form.get("plan")||"starter");
+  const termMonths=Number(form.get("term")||1);
 
-  if (!name || !/^[A-Za-z0-9_-]{3,40}$/.test(username) || password.length < 10) {
-    return NextResponse.redirect(new URL("/signup?error=invalid", request.url), 303);
+  if(!name || !/^[A-Za-z0-9_-]{3,40}$/.test(username) || password.length<10) {
+    return NextResponse.redirect(new URL("/signup?error=invalid",request.url),303);
   }
-  if (!BILLING_TERMS.some((term) => term.months === termMonths)) {
-    return NextResponse.redirect(new URL("/signup?error=term", request.url), 303);
+  if(!BILLING_TERMS.some((term)=>term.months===termMonths)) {
+    return NextResponse.redirect(new URL("/signup?error=term",request.url),303);
   }
 
-  const db = getMediaDb();
-  const client = await db.connect();
-  try {
-    await client.query("BEGIN");
+  const db=getMediaDb();
+  const plan=await db.prepare("SELECT * FROM media_plans WHERE code=? AND active=1 LIMIT 1").bind(planCode).first<any>();
+  if(!plan) return NextResponse.redirect(new URL("/signup?error=plan",request.url),303);
 
-    const planResult = await client.query(
-      "SELECT * FROM media_plans WHERE code=$1 AND active=true LIMIT 1",
-      [planCode],
-    );
-    const plan = planResult.rows[0];
-    if (!plan) throw new Error("Unknown plan");
+  const existing=await db.prepare("SELECT id FROM media_users WHERE username=? COLLATE NOCASE LIMIT 1").bind(username).first();
+  if(existing) return NextResponse.redirect(new URL("/signup?error=username",request.url),303);
 
-    const existing = await client.query(
-      "SELECT 1 FROM media_users WHERE lower(username)=lower($1) LIMIT 1",
-      [username],
-    );
-    if (existing.rowCount) {
-      await client.query("ROLLBACK");
-      return NextResponse.redirect(new URL("/signup?error=username", request.url), 303);
-    }
+  const tenantId=crypto.randomUUID();
+  const userId=crypto.randomUUID();
+  const invoiceId=crypto.randomUUID();
+  const token=newSessionToken();
+  const tokenHash=await sessionTokenHash(token);
+  const passwordHash=await hashPassword(password);
+  const suffix=crypto.randomUUID().slice(0,6);
+  const slug=((slugify(name)||"customer")+"-"+suffix).slice(0,63);
+  const reference="MKM-"+crypto.randomUUID().replace(/-/g,"").slice(0,10).toUpperCase();
+  const amount=termPrice(Number(plan.monthly_usd),termMonths);
+  const expiresAt=new Date(Date.now()+30*24*60*60*1000).toISOString();
+  const dueAt=new Date(Date.now()+24*60*60*1000).toISOString();
 
-    let slug = slugify(name) || "customer";
-    const suffix = crypto.randomUUID().slice(0, 6);
-    slug = (slug + "-" + suffix).slice(0, 63);
+  await db.batch([
+    db.prepare("INSERT INTO media_tenants (id,slug,name,status,plan_code) VALUES (?,?,?,'pending',?)").bind(tenantId,slug,name,planCode),
+    db.prepare("INSERT INTO media_users (id,username,password_hash,status) VALUES (?,?,?,'active')").bind(userId,username,passwordHash),
+    db.prepare("INSERT INTO media_memberships (tenant_id,user_id,role) VALUES (?,?,'owner')").bind(tenantId,userId),
+    db.prepare("INSERT INTO media_subscriptions (tenant_id,status) VALUES (?,'pending')").bind(tenantId),
+    db.prepare("INSERT INTO media_tenant_commercial_terms (tenant_id,base_plan_code,billing_term_months) VALUES (?,?,?)").bind(tenantId,planCode,termMonths),
+    db.prepare("INSERT INTO media_invoices (id,tenant_id,reference,amount_usd,payment_method,status,due_at) VALUES (?,?,?,?,'invoice','pending',?)").bind(invoiceId,tenantId,reference,amount,dueAt),
+    db.prepare("INSERT INTO media_sessions (token_hash,user_id,expires_at) VALUES (?,?,?)").bind(tokenHash,userId,expiresAt),
+    db.prepare("INSERT INTO media_audit_log (id,tenant_id,actor_type,actor_id,action,target_type,target_id) VALUES (?,?,'customer',?,'account.created','tenant',?)").bind(crypto.randomUUID(),tenantId,userId,tenantId),
+  ]);
 
-    const tenantResult = await client.query(
-      "INSERT INTO media_tenants (slug,name,status,plan_code,storage_quota_bytes) VALUES ($1,$2,'pending',$3,$4) RETURNING id",
-      [slug, name, planCode, plan.storage_bytes],
-    );
-    const tenantId = tenantResult.rows[0].id;
-
-    const passwordHash = await hashPassword(password);
-    const userResult = await client.query(
-      "INSERT INTO media_users (username,email,password_hash,status) VALUES ($1,$2,$3,'active') RETURNING id",
-      [username, username.toLowerCase() + "@local.mkety.media", passwordHash],
-    );
-    const userId = userResult.rows[0].id;
-
-    await client.query(
-      "INSERT INTO media_memberships (tenant_id,user_id,role) VALUES ($1,$2,'owner')",
-      [tenantId, userId],
-    );
-
-    await client.query(
-      "INSERT INTO media_subscriptions (tenant_id,status,payment_provider) VALUES ($1,'pending',NULL)",
-      [tenantId],
-    );
-
-    await client.query(
-      "INSERT INTO media_tenant_commercial_terms (tenant_id,base_plan_code,billing_term_months) VALUES ($1,$2,$3)",
-      [tenantId, planCode, termMonths],
-    );
-
-    const monthly = Number(plan.monthly_usd);
-    const amount = termPrice(monthly, termMonths);
-    const reference = "MKM-" + crypto.randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase();
-    await client.query(
-      "INSERT INTO media_invoices (tenant_id,reference,amount_usd,payment_method,status,due_at) VALUES ($1,$2,$3,'invoice','pending',now()+interval '24 hours')",
-      [tenantId, reference, amount],
-    );
-
-    const token = newSessionToken();
-    const tokenHash = await sessionTokenHash(token);
-    await client.query(
-      "INSERT INTO media_sessions (token_hash,user_id,expires_at) VALUES ($1,$2,now()+interval '30 days')",
-      [tokenHash, userId],
-    );
-
-    await client.query("COMMIT");
-    const response = NextResponse.redirect(new URL("/billing", request.url), 303);
-    response.headers.set("Set-Cookie", sessionCookie(token));
-    return response;
-  } catch (error) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    console.error(error);
-    return NextResponse.redirect(new URL("/signup?error=failed", request.url), 303);
-  } finally {
-    client.release();
-  }
+  const response=NextResponse.redirect(new URL("/billing",request.url),303);
+  response.headers.set("Set-Cookie",sessionCookie(token));
+  return response;
 }
