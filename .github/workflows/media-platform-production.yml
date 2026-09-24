@@ -195,8 +195,45 @@ jobs:
           rm -f /tmp/media-portal-secrets.json
 
           if [ -n "${MEDIA_TELEGRAM_BOT_TOKEN:-}" ] && [ -n "$TELEGRAM_WEBHOOK_SECRET" ]; then
-            curl --silent --show-error --fail-with-body               "https://api.telegram.org/bot$MEDIA_TELEGRAM_BOT_TOKEN/setWebhook"               -H "Content-Type: application/json"               --data "$(jq -nc --arg url 'https://media.mkety.com/api/telegram/webhook' --arg secret "$TELEGRAM_WEBHOOK_SECRET" '{url:$url,secret_token:$secret,drop_pending_updates:false,allowed_updates:["message","callback_query"]}')"                >/tmp/tg-webhook.json
+            curl --silent --show-error --fail-with-body               "https://api.telegram.org/bot$MEDIA_TELEGRAM_BOT_TOKEN/setWebhook"               -H "Content-Type: application/json"               --data "$(jq -nc --arg url 'https://media.mkety.com/api/telegram/webhook' --arg secret "$TELEGRAM_WEBHOOK_SECRET" '{url:$url,secret_token:$secret,drop_pending_updates:false,allowed_updates:["message","callback_query"]}')"               >/tmp/tg-webhook.json
             jq -e '.ok == true' /tmp/tg-webhook.json >/dev/null
+
+            curl --silent --show-error --fail-with-body               "https://api.telegram.org/bot$MEDIA_TELEGRAM_BOT_TOKEN/getWebhookInfo"               >/tmp/tg-webhook-info.json
+            jq -e '.ok == true and .result.url == "https://media.mkety.com/api/telegram/webhook"' /tmp/tg-webhook-info.json >/dev/null
+
+            if [ -n "${MEDIA_TELEGRAM_CHAT_ID:-}" ]; then
+              printf '%s' "$MEDIA_TELEGRAM_CHAT_ID" | grep -Eq '^-?[0-9]+
+      - name: Smoke test production domains
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in             "https://media.mkety.com/"             "https://media.mkety.com/login"             "https://media.mkety.com/enterprise"; do
+            curl --silent --show-error --fail --retry 8 --retry-delay 5 "$url" >/dev/null
+          done
+          status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "https://assets.mkety.app/not-a-tenant/not-a-bucket/not-a-file")
+          test "$status" = "404"
+          echo "Mkety Media production smoke checks passed."
+
+            fi
+            if [ -n "${MEDIA_TELEGRAM_OPERATOR_IDS:-}" ]; then
+              printf '%s' "$MEDIA_TELEGRAM_OPERATOR_IDS" | grep -Eq '^[0-9]+(,[0-9]+)*
+      - name: Smoke test production domains
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in             "https://media.mkety.com/"             "https://media.mkety.com/login"             "https://media.mkety.com/enterprise"; do
+            curl --silent --show-error --fail --retry 8 --retry-delay 5 "$url" >/dev/null
+          done
+          status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "https://assets.mkety.app/not-a-tenant/not-a-bucket/not-a-file")
+          test "$status" = "404"
+          echo "Mkety Media production smoke checks passed."
+
+            fi
+
+            if [ -n "${MEDIA_TELEGRAM_CHAT_ID:-}" ] && [ -n "${MEDIA_TELEGRAM_OPERATOR_IDS:-}" ]; then
+              curl --silent --show-error --fail-with-body                 "https://api.telegram.org/bot$MEDIA_TELEGRAM_BOT_TOKEN/sendMessage"                 -H "Content-Type: application/json"                 --data "$(jq -nc --arg chat "$MEDIA_TELEGRAM_CHAT_ID" --arg username "$TELEGRAM_BOT_USERNAME" '{chat_id:$chat,text:("✅ Mkety Media bot connected\n\nBot: @"+$username+"\nWebhook: active\nOperator authorization: configured\n\nCustomers can now use support, Enterprise chat and payment-proof submission.")}')"                 >/tmp/tg-operator-test.json
+              jq -e '.ok == true' /tmp/tg-operator-test.json >/dev/null
+            fi
           fi
 
       - name: Smoke test production domains
