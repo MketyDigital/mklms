@@ -1,4 +1,4 @@
-# deploy enterprise provisioning diagnostic
+# deploy enterprise provisioning diagnostic full-phase
 name: Deploy Mkety Media production
 
 on:
