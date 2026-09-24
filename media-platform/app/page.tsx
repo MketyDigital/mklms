@@ -26,6 +26,11 @@ export default async function Home(){
     <nav className="nav"><div className="brand">Mkety Media</div><div><Link href="/trust">Trust & infrastructure</Link><Link href="/login">Login</Link>{portal.signupEnabled!==false&&<Link className="btn" href="/signup">Get started</Link>}</div></nav>
     {portal.maintenanceNotice&&<div className="notice">{String(portal.maintenanceNotice)}</div>}
     <section className="hero"><h1>{String(portal.heroTitle)}</h1><p>{String(portal.heroSubtitle)}</p></section>
+    <section className="grid" style={{marginBottom:24}}>
+      <article className="card"><h2>Portable by design</h2><p>Export your complete library as JSON/CSV or generate download-all scripts without asking support for permission.</p><Link href="/trust">See portability & trust details</Link></article>
+      <article className="card"><h2>Predictable prepaid limits</h2><p>Public plans are hard-capped. Upgrade or add prepaid capacity instead of accumulating surprise infrastructure overage.</p></article>
+      <article className="card"><h2>Brand it on Enterprise</h2><p>Custom/Enterprise accounts can request a branded media hostname such as <strong>media.example.com</strong> plus custom limits and infrastructure requirements.</p><Link href="/enterprise">Talk to Enterprise</Link></article>
+    </section>
     <section><h2>Plans</h2><p className="muted">Monthly, 3-month, 6-month and yearly billing. Longer terms receive a small discount.</p>
       <div className="grid plans">{plans.map((plan:any)=><article className="card" key={plan.code}>
         <h3>{plan.name}</h3><div className="price">{"$"}{Number(plan.monthly_usd).toFixed(0)}<span className="muted" style={{fontSize:14}}>/mo</span></div>
