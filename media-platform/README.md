@@ -1,46 +1,91 @@
 # Mkety Media Platform
 
-Isolated enterprise media/object-storage control plane.
+Isolated Mkety media/object-storage product.
 
 ## Domains
 - Control plane: `media.mkety.com`
 - Public data plane: `assets.mkety.app`
 
 ## Product model
-Customers create Mkety *logical buckets*. A logical bucket maps to a provider plus a storage prefix. This avoids provisioning a physical cloud bucket for every customer while preserving tenant isolation.
+Customers create Mkety logical buckets. A logical bucket maps internally to a storage pool and prefix. Customers never see storage-provider names.
 
 Public object URL:
 `https://assets.mkety.app/{tenantSlug}/{bucketSlug}/{objectKey}`
 
-## Providers
-Initial provider interface supports S3-compatible backends:
+## Launch storage policy
+- Standard/self-service customers use Mkety's R2 pool.
+- Enterprise-capability customers may be pinned by a Mkety operator to another configured pool.
+- Provider names remain operator-only.
+- All launch plans use hard caps. There is no unbounded post-paid overage.
+- Large uploads go browser -> provider using short-lived presigned URLs.
+- R2 launch readiness requires R2 S3 credentials for upload signing; the R2 Worker binding is used for efficient delivery/delete.
+
+## V1 provider adapters
 - Cloudflare R2
 - OCI Object Storage S3 Compatibility API
 - Amazon S3
-- Google Cloud Storage interoperability mode (subject to provider-specific validation)
+- Google Cloud Storage interoperability
+- Backblaze B2
+- Wasabi
+- DigitalOcean Spaces
+- Azure Blob Storage
 
-Azure Blob Storage is intentionally a separate adapter because Azure Blob is not natively the same S3 API surface.
+Adapters can ship disabled. A provider is usable only when its enable flag and required secret/config values are present. Operator controls decide whether an active pool is available for Enterprise placement.
 
 ## Architecture
-1. `media.mkety.com` — account/bucket/file/billing portal.
-2. PostgreSQL — tenants, users, logical buckets, provider configs, objects, quotas, subscriptions.
-3. Direct browser uploads using short-lived presigned URLs; media bytes do not traverse the control-plane application.
-4. `assets.mkety.app` — public delivery Worker. It resolves the logical bucket, fetches the origin, and uses Cloudflare Cache API for public objects.
-5. Storage credentials stay server-side and are encrypted/secret-managed. Never expose provider credentials to browsers.
+1. `media.mkety.com` — public pricing, signup, login, customer dashboard, buckets/files, billing, team, operator console.
+2. Cloudflare D1 — tiny control-plane metadata: users, sessions, plans, subscriptions, invoices, logical buckets, object metadata, usage, audit.
+3. Cloudflare KV — disposable edge directory mapping `tenant/bucket` to internal storage route metadata.
+4. R2/object-storage providers — actual media bytes.
+5. `assets.mkety.app` — public delivery Worker with Cache API, Range support and Analytics Engine metering.
+6. `mkety-media-maintenance` — scheduled usage aggregation, renewal invoice creation, grace/suspension enforcement and edge-route blocking.
+7. NOWPayments — automated payment path using signed IPN verification.
+8. Telegram Bot API — operator Approve/Reject path for local bank transfers.
+
+## Auth
+V1 intentionally has no Supabase Auth, email magic links or Zitadel dependency.
+
+Customers:
+- create username + password before payment;
+- password is PBKDF2-SHA256 hashed;
+- secure HttpOnly session cookie;
+- account storage remains disabled until payment settles.
+
+Mkety operator:
+- separate long access key;
+- separate HMAC-signed HttpOnly operator session;
+- secrets are never displayed in the operator UI.
 
 ## Branch isolation
-This code lives on the dedicated `media-platform` branch and under `media-platform/`. Do not merge or deploy it through MkLMS production workflows.
+This product lives only on the dedicated `media-platform` branch under `media-platform/`.
+Do not deploy it through MkLMS production workflows and do not move `production/starpips` or `production/mkety-academy` as part of Media work.
 
-## Billing
-Billing is provider-neutral. A tenant subscription controls quota and feature access. Payment adapters can include NOWPayments and manually-approved local bank transfers. Storage operations only depend on subscription state, not payment provider implementation.
+## Current status
+Implemented in source:
+- public pricing and operator-managed plans/term discounts;
+- monthly / 3 / 6 / 12 month billing;
+- customer signup/login/logout;
+- exact per-customer commercial overrides;
+- Enterprise capability flag with any limits/price;
+- customer dashboard usage counters;
+- logical bucket creation;
+- direct-upload signing + quota reservation/finalization;
+- file list/view/delete;
+- team member self-service within seat limits;
+- NOWPayments invoice/IPN settlement;
+- local bank transfer with Telegram operator approval;
+- provider abstraction and V1 adapters;
+- cached public delivery + video Range requests;
+- Analytics Engine metering;
+- scheduled renewal/usage/payment enforcement;
+- operator console for plans, discounts, bank details, enforcement, providers and customer overrides.
 
-## Next implementation milestones
-- tenant authentication + sessions
-- provider credential encryption
-- bucket/object CRUD API
-- presigned multipart uploads
-- public delivery worker + cache-control
-- usage ledger/quota enforcement
-- NOWPayments webhook adapter
-- local transfer invoice/approval flow
-- enterprise admin console
+Still required before first deployment:
+- provision the dedicated D1/KV/R2 resources;
+- fill Wrangler resource IDs/bucket name;
+- configure secrets;
+- configure R2 CORS for `media.mkety.com`;
+- set Telegram webhook;
+- attach Worker custom domains;
+- run the isolated CI/build gate and fix any compiler/runtime issues found;
+- seed/test Starpips as the first paid custom customer.
