@@ -1,0 +1,14 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "mkety-media-delivery",
+  "main": "workers/delivery.ts",
+  "compatibility_date": "2026-09-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "kv_namespaces": [
+    {
+      "binding": "BUCKET_DIRECTORY",
+      "id": "REPLACE_WITH_MEDIA_BUCKET_DIRECTORY_KV_ID"
+    }
+  ]
+}
