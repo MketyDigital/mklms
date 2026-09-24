@@ -5,6 +5,8 @@ import {
   telegramConfig,
   telegramDisplayName,
   telegramMessageId,
+  telegramOperatorChatId,
+  bindTelegramOperatorChat,
 } from "../../../../src/billing/telegram";
 import { settleInvoice } from "../../../../src/billing/settle";
 
@@ -102,9 +104,9 @@ async function saveRelay(operatorChatId:string,operatorMessageId:number,customer
 }
 
 async function relaySupportMessage(message:any){
-  const cfg=telegramConfig();
   const chatId=String(message.chat.id);
-  if(!cfg.chatId){
+  const operatorChatId=await telegramOperatorChatId();
+  if(!operatorChatId){
     await telegram("sendMessage",{chat_id:chatId,text:"Mkety support inbox is still being configured. Please try again shortly."});
     return;
   }
@@ -116,7 +118,7 @@ async function relaySupportMessage(message:any){
   const from=message.from||{};
   const username=from.username?"@"+String(from.username):"none";
   const header=await telegram("sendMessage",{
-    chat_id:cfg.chatId,
+    chat_id:operatorChatId,
     text:"📩 Mkety Media "+(mode==="enterprise"?"Enterprise":"Support")+"\n"+
       "Customer: "+telegramDisplayName(from)+"\n"+
       "Telegram: "+username+"\n"+
@@ -124,24 +126,24 @@ async function relaySupportMessage(message:any){
       "Chat ID: "+chatId+"\n\nReply to this header or the copied message to answer the customer.",
   });
   const headerId=telegramMessageId(header);
-  await saveRelay(cfg.chatId,headerId,chatId,Number(message.message_id||0)||null,"support");
+  await saveRelay(operatorChatId,headerId,chatId,Number(message.message_id||0)||null,"support");
 
   const copied=await telegram("copyMessage",{
-    chat_id:cfg.chatId,
+    chat_id:operatorChatId,
     from_chat_id:chatId,
     message_id:Number(message.message_id),
     reply_parameters:headerId?{message_id:headerId}:undefined,
   });
   const copiedId=telegramMessageId(copied);
-  await saveRelay(cfg.chatId,copiedId,chatId,Number(message.message_id||0)||null,"support");
+  await saveRelay(operatorChatId,copiedId,chatId,Number(message.message_id||0)||null,"support");
 
   await telegram("sendMessage",{chat_id:chatId,text:"✅ Your message has been sent to Mkety Support. A team member can reply to you here."});
 }
 
 async function submitProof(message:any){
-  const cfg=telegramConfig();
   const chatId=String(message.chat.id);
-  if(!cfg.chatId){
+  const operatorChatId=await telegramOperatorChatId();
+  if(!operatorChatId){
     await telegram("sendMessage",{chat_id:chatId,text:"Payment-proof review is still being configured. Please try again shortly."});
     return;
   }
@@ -178,7 +180,7 @@ async function submitProof(message:any){
   const from=message.from||{};
 
   const summary=await telegram("sendMessage",{
-    chat_id:cfg.chatId,
+    chat_id:operatorChatId,
     text:"🧾 Payment proof received\n\n"+
       "Customer: "+String(invoice.tenant_name)+"\n"+
       "Telegram: "+telegramDisplayName(from)+(from.username?" (@"+String(from.username)+")":"")+"\n"+
@@ -193,7 +195,7 @@ async function submitProof(message:any){
   const summaryId=telegramMessageId(summary);
 
   const copied=await telegram("copyMessage",{
-    chat_id:cfg.chatId,
+    chat_id:operatorChatId,
     from_chat_id:chatId,
     message_id:Number(message.message_id),
     reply_parameters:summaryId?{message_id:summaryId}:undefined,
@@ -209,8 +211,8 @@ async function submitProof(message:any){
     ).bind(chatId),
   ]);
 
-  await saveRelay(cfg.chatId,summaryId,chatId,Number(message.message_id),"payment");
-  await saveRelay(cfg.chatId,proofMessageId,chatId,Number(message.message_id),"payment");
+  await saveRelay(operatorChatId,summaryId,chatId,Number(message.message_id),"payment");
+  await saveRelay(operatorChatId,proofMessageId,chatId,Number(message.message_id),"payment");
 
   await telegram("sendMessage",{
     chat_id:chatId,
@@ -324,7 +326,8 @@ async function handleProofCallback(callback:any){
 
 async function handleOperatorReply(message:any){
   const cfg=telegramConfig();
-  if(String(message.chat?.id||"")!==cfg.chatId) return;
+  const operatorChatId=await telegramOperatorChatId();
+  if(String(message.chat?.id||"")!==operatorChatId) return;
   const operatorId=String(message.from?.id||"");
   if(!cfg.operatorIds.includes(operatorId)) return;
   const repliedId=Number(message.reply_to_message?.message_id||0);
@@ -332,13 +335,13 @@ async function handleOperatorReply(message:any){
 
   const relay=await getMediaDb().prepare(
     "SELECT customer_chat_id FROM media_telegram_relays WHERE operator_chat_id=? AND operator_message_id=? LIMIT 1"
-  ).bind(cfg.chatId,repliedId).first<any>();
+  ).bind(operatorChatId,repliedId).first<any>();
   if(!relay) return;
 
   try{
     await telegram("copyMessage",{
       chat_id:String(relay.customer_chat_id),
-      from_chat_id:cfg.chatId,
+      from_chat_id:operatorChatId,
       message_id:Number(message.message_id),
     });
   }catch{
@@ -352,24 +355,32 @@ async function handleMessage(message:any){
   const cfg=telegramConfig();
   const text=String(message.text||message.caption||"");
   const cmd=command(text);
+  const operatorId=String(message.from?.id||"");
 
   if(cmd==="/whoami"){
     await telegram("sendMessage",{
       chat_id:String(message.chat.id),
-      text:"Your Telegram user ID is:\n"+String(message.from?.id||"")+"\n\nUse this number in MEDIA_TELEGRAM_OPERATOR_IDS if this account should be allowed to approve/reject payments and answer customers.",
+      text:"Your Telegram user ID is:\n"+operatorId+"\n\nThis account is "+(cfg.operatorIds.includes(operatorId)?"AUTHORIZED":"NOT YET AUTHORIZED")+" for Mkety Media operator actions.",
     });
     return;
   }
 
-  if(cmd==="/groupid"){
+  if((cmd==="/groupid" || cmd==="/bindgroup") && !isPrivate(message)){
+    if(!cfg.operatorIds.includes(operatorId)){
+      await telegram("sendMessage",{chat_id:String(message.chat.id),text:"This Telegram account is not authorized to bind the Mkety Media operator group."});
+      return;
+    }
+    const chatId=String(message.chat.id);
+    await bindTelegramOperatorChat(chatId,operatorId);
     await telegram("sendMessage",{
-      chat_id:String(message.chat.id),
-      text:"This chat ID is:\n"+String(message.chat.id)+"\n\nUse it as MEDIA_TELEGRAM_CHAT_ID for the Mkety Media operator inbox.",
+      chat_id:chatId,
+      text:"✅ This group is now the Mkety Media operator inbox.\n\nChat ID: "+chatId+"\nAuthorized by operator: "+operatorId+"\n\nCustomer support, Enterprise enquiries and payment proofs will be relayed here.",
     });
     return;
   }
 
-  if(String(message.chat?.id||"")===cfg.chatId && !isPrivate(message)){
+  const operatorChatId=await telegramOperatorChatId();
+  if(String(message.chat?.id||"")===operatorChatId && !isPrivate(message)){
     await handleOperatorReply(message);
     return;
   }
@@ -444,7 +455,8 @@ export async function POST(request:Request){
     if(update?.callback_query){
       const callback=update.callback_query;
       const callbackChatId=String(callback?.message?.chat?.id||"");
-      if(callbackChatId && callbackChatId===cfg.chatId){
+      const operatorChatId=await telegramOperatorChatId();
+      if(callbackChatId && callbackChatId===operatorChatId){
         await handleProofCallback(callback);
       }else{
         await handleCustomerCallback(callback);
