@@ -1,0 +1,185 @@
+name: Deploy Mkety Media production
+
+on:
+  push:
+    branches:
+      - media-platform
+    paths:
+      - ".github/workflows/media-platform-production.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mkety-media-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: media-platform
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      MEDIA_OPERATOR_ACCESS_KEY: ${{ secrets.MEDIA_OPERATOR_ACCESS_KEY || secrets.MKETY_ADMIN_ACCESS_KEY }}
+      MEDIA_OPERATOR_SESSION_SECRET: ${{ secrets.MEDIA_OPERATOR_SESSION_SECRET || secrets.MKETY_ADMIN_SESSION_SECRET }}
+      NOWPAYMENTS_API_KEY: ${{ secrets.NOWPAYMENTS_API_KEY }}
+      NOWPAYMENTS_IPN_SECRET: ${{ secrets.NOWPAYMENTS_IPN_SECRET }}
+      MEDIA_TELEGRAM_BOT_TOKEN: ${{ secrets.MEDIA_TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+      MEDIA_TELEGRAM_CHAT_ID: ${{ secrets.MEDIA_TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID }}
+      MEDIA_TELEGRAM_OPERATOR_IDS: ${{ secrets.MEDIA_TELEGRAM_OPERATOR_IDS }}
+      D1_NAME: mkety-media
+      KV_TITLE: mkety-media-directory
+      R2_BUCKET: mkety-media-storage
+      PORTAL_WORKER: mkety-media
+      ASSETS_WORKER: mkety-media-assets
+      MAINTENANCE_WORKER: mkety-media-maintenance
+    steps:
+      - name: Checkout media-platform
+        uses: actions/checkout@v4
+        with:
+          ref: media-platform
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Verify required production secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN MEDIA_OPERATOR_ACCESS_KEY MEDIA_OPERATOR_SESSION_SECRET NOWPAYMENTS_API_KEY NOWPAYMENTS_IPN_SECRET; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing required production secret: $name"
+              exit 1
+            fi
+          done
+          if [ "${#MEDIA_OPERATOR_ACCESS_KEY}" -lt 24 ]; then
+            echo "MEDIA_OPERATOR_ACCESS_KEY/MKETY_ADMIN_ACCESS_KEY must be at least 24 characters."
+            exit 1
+          fi
+          if [ "${#MEDIA_OPERATOR_SESSION_SECRET}" -lt 32 ]; then
+            echo "MEDIA_OPERATOR_SESSION_SECRET/MKETY_ADMIN_SESSION_SECRET must be at least 32 characters."
+            exit 1
+          fi
+
+      - name: Install isolated dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Provision or reuse D1, KV and R2
+        id: infra
+        shell: bash
+        run: |
+          set -euo pipefail
+          AUTH=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json")
+
+          curl --silent --show-error --fail-with-body             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database?per_page=100"             "${AUTH[@]}" >/tmp/d1-list.json
+          D1_ID=$(jq -r --arg n "$D1_NAME" '.result[]? | select(.name==$n) | (.uuid // .id)' /tmp/d1-list.json | head -n1)
+          if [ -z "$D1_ID" ]; then
+            jq -n --arg name "$D1_NAME" '{name:$name}' >/tmp/d1-create.json
+            curl --silent --show-error --fail-with-body --request POST               "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database"               "${AUTH[@]}" --data @/tmp/d1-create.json >/tmp/d1-created.json
+            D1_ID=$(jq -r '.result.uuid // .result.id' /tmp/d1-created.json)
+          fi
+          test -n "$D1_ID" && test "$D1_ID" != "null"
+
+          curl --silent --show-error --fail-with-body             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/storage/kv/namespaces?per_page=100"             "${AUTH[@]}" >/tmp/kv-list.json
+          KV_ID=$(jq -r --arg n "$KV_TITLE" '.result[]? | select(.title==$n) | .id' /tmp/kv-list.json | head -n1)
+          if [ -z "$KV_ID" ]; then
+            jq -n --arg title "$KV_TITLE" '{title:$title}' >/tmp/kv-create.json
+            curl --silent --show-error --fail-with-body --request POST               "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/storage/kv/namespaces"               "${AUTH[@]}" --data @/tmp/kv-create.json >/tmp/kv-created.json
+            KV_ID=$(jq -r '.result.id' /tmp/kv-created.json)
+          fi
+          test -n "$KV_ID" && test "$KV_ID" != "null"
+
+          R2_API="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets"
+          status=$(curl --silent --show-error --output /tmp/r2.json --write-out '%{http_code}'             --request GET "$R2_API/$R2_BUCKET" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          if [ "$status" = "404" ]; then
+            jq -n --arg name "$R2_BUCKET" '{name:$name}' >/tmp/r2-create.json
+            curl --silent --show-error --fail-with-body --request POST "$R2_API"               "${AUTH[@]}" --data @/tmp/r2-create.json >/tmp/r2.json
+          elif [ "$status" != "200" ]; then
+            cat /tmp/r2.json
+            exit 1
+          fi
+          jq -e '.success == true' /tmp/r2.json >/dev/null
+
+          echo "d1_id=$D1_ID" >> "$GITHUB_OUTPUT"
+          echo "kv_id=$KV_ID" >> "$GITHUB_OUTPUT"
+          echo "r2_bucket=$R2_BUCKET" >> "$GITHUB_OUTPUT"
+
+      - name: Generate production Wrangler configs
+        run: node scripts/prepare-production-config.mjs "${{ steps.infra.outputs.d1_id }}" "${{ steps.infra.outputs.kv_id }}" "${{ steps.infra.outputs.r2_bucket }}"
+
+      - name: Validate TypeScript and production builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx tsc --noEmit
+          npm run build
+          npm run cf:build
+          npx wrangler deploy -c .generated/portal.jsonc --dry-run --outdir .generated/dry-portal
+          npx wrangler deploy -c .generated/assets.jsonc --dry-run --outdir .generated/dry-assets
+          npx wrangler deploy -c .generated/maintenance.jsonc --dry-run --outdir .generated/dry-maintenance
+
+      - name: Apply D1 schema
+        run: npx wrangler d1 execute "$D1_NAME" --remote --file=schema.d1.sql --config .generated/portal.jsonc --yes
+
+      - name: Deploy public assets Worker
+        run: npx wrangler deploy -c .generated/assets.jsonc
+
+      - name: Deploy maintenance Worker
+        run: npx wrangler deploy -c .generated/maintenance.jsonc
+
+      - name: Configure maintenance analytics credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -n             --arg account "$CLOUDFLARE_ACCOUNT_ID"             --arg token "$CLOUDFLARE_API_TOKEN"             '{CLOUDFLARE_ACCOUNT_ID:$account,CLOUDFLARE_API_TOKEN:$token}' >/tmp/media-maintenance-secrets.json
+          npx wrangler secret bulk /tmp/media-maintenance-secrets.json --name "$MAINTENANCE_WORKER"
+          rm -f /tmp/media-maintenance-secrets.json
+
+      - name: Deploy portal Worker
+        run: npx wrangler deploy -c .generated/portal.jsonc
+
+      - name: Configure portal runtime secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          TELEGRAM_WEBHOOK_SECRET=""
+          if [ -n "${MEDIA_TELEGRAM_BOT_TOKEN:-}" ]; then
+            TELEGRAM_WEBHOOK_SECRET=$(printf '%s' "$MEDIA_OPERATOR_SESSION_SECRET|mkety-media-telegram" | sha256sum | cut -d' ' -f1)
+            echo "::add-mask::$TELEGRAM_WEBHOOK_SECRET"
+          fi
+
+          jq -n             --arg operatorKey "$MEDIA_OPERATOR_ACCESS_KEY"             --arg operatorSession "$MEDIA_OPERATOR_SESSION_SECRET"             --arg npApi "$NOWPAYMENTS_API_KEY"             --arg npIpn "$NOWPAYMENTS_IPN_SECRET"             --arg tgToken "${MEDIA_TELEGRAM_BOT_TOKEN:-}"             --arg tgChat "${MEDIA_TELEGRAM_CHAT_ID:-}"             --arg tgOps "${MEDIA_TELEGRAM_OPERATOR_IDS:-}"             --arg tgWebhook "$TELEGRAM_WEBHOOK_SECRET"             '{
+              MEDIA_OPERATOR_ACCESS_KEY:$operatorKey,
+              MEDIA_OPERATOR_SESSION_SECRET:$operatorSession,
+              NOWPAYMENTS_API_KEY:$npApi,
+              NOWPAYMENTS_IPN_SECRET:$npIpn
+            }
+            + (if $tgToken=="" then {} else {MEDIA_TELEGRAM_BOT_TOKEN:$tgToken} end)
+            + (if $tgChat=="" then {} else {MEDIA_TELEGRAM_CHAT_ID:$tgChat} end)
+            + (if $tgOps=="" then {} else {MEDIA_TELEGRAM_OPERATOR_IDS:$tgOps} end)
+            + (if $tgWebhook=="" then {} else {MEDIA_TELEGRAM_WEBHOOK_SECRET:$tgWebhook} end)'             >/tmp/media-portal-secrets.json
+          npx wrangler secret bulk /tmp/media-portal-secrets.json --name "$PORTAL_WORKER"
+          rm -f /tmp/media-portal-secrets.json
+
+          if [ -n "${MEDIA_TELEGRAM_BOT_TOKEN:-}" ] && [ -n "$TELEGRAM_WEBHOOK_SECRET" ]; then
+            curl --silent --show-error --fail-with-body               "https://api.telegram.org/bot$MEDIA_TELEGRAM_BOT_TOKEN/setWebhook"               -H "Content-Type: application/json"               --data "$(jq -nc --arg url 'https://media.mkety.com/api/telegram/webhook' --arg secret "$TELEGRAM_WEBHOOK_SECRET" '{url:$url,secret_token:$secret,drop_pending_updates:false}')"               >/tmp/tg-webhook.json
+            jq -e '.ok == true' /tmp/tg-webhook.json >/dev/null
+          fi
+
+      - name: Smoke test production domains
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in             "https://media.mkety.com/"             "https://media.mkety.com/login"             "https://media.mkety.com/enterprise"; do
+            curl --silent --show-error --fail --retry 8 --retry-delay 5 "$url" >/dev/null
+          done
+          status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "https://assets.mkety.app/not-a-tenant/not-a-bucket/not-a-file")
+          test "$status" = "404"
+          echo "Mkety Media production smoke checks passed."
