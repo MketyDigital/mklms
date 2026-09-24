@@ -176,3 +176,49 @@ CREATE INDEX IF NOT EXISTS media_invoices_tenant_status_idx
   ON media_invoices(tenant_id, status);
 CREATE INDEX IF NOT EXISTS media_audit_log_tenant_created_idx
   ON media_audit_log(tenant_id, created_at DESC);
+
+ALTER TABLE media_users
+  ADD COLUMN IF NOT EXISTS username text,
+  ADD COLUMN IF NOT EXISTS password_hash text,
+  ADD COLUMN IF NOT EXISTS activated_at timestamptz;
+
+CREATE UNIQUE INDEX IF NOT EXISTS media_users_username_lower_idx
+  ON media_users (lower(username))
+  WHERE username IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS media_sessions (
+  token_hash text PRIMARY KEY,
+  user_id uuid NOT NULL REFERENCES media_users(id) ON DELETE CASCADE,
+  expires_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  last_seen_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS media_tenant_commercial_terms (
+  tenant_id uuid PRIMARY KEY REFERENCES media_tenants(id) ON DELETE CASCADE,
+  base_plan_code text NOT NULL,
+  display_name text,
+  monthly_usd numeric(12,2),
+  storage_bytes bigint,
+  delivery_bytes bigint,
+  delivery_requests bigint,
+  logical_buckets integer,
+  team_seats integer,
+  max_object_bytes bigint,
+  overage_mode text CHECK (overage_mode IN ('hard-cap','prepaid-wallet')),
+  enterprise_features boolean NOT NULL DEFAULT false,
+  infrastructure_mode text NOT NULL DEFAULT 'automatic'
+    CHECK (infrastructure_mode IN ('automatic','regional','dedicated')),
+  billing_term_months integer NOT NULL DEFAULT 1 CHECK (billing_term_months IN (1,3,6,12)),
+  custom_discount_percent numeric(5,2),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS media_manual_payment_nonces (
+  nonce text PRIMARY KEY,
+  invoice_id uuid NOT NULL REFERENCES media_invoices(id) ON DELETE CASCADE,
+  expires_at timestamptz NOT NULL,
+  consumed_at timestamptz
+);
+
+CREATE INDEX IF NOT EXISTS media_sessions_user_idx ON media_sessions(user_id);
