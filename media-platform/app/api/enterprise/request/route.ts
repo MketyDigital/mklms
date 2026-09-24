@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getMediaDb } from "../../../../src/lib/postgres";
-import { telegram,telegramConfig } from "../../../../src/billing/telegram";
+import { telegram,telegramConfig,telegramOperatorChatId } from "../../../../src/billing/telegram";
 import { allowAuthAttempt } from "../../../../src/lib/rate-limit";
 
 export async function POST(request:Request){
@@ -19,9 +19,10 @@ export async function POST(request:Request){
   ).bind(id,companyName,contactName,telegramContact,requirements||null).run();
 
   const cfg=telegramConfig();
-  if(cfg.token&&cfg.chatId){
+  const operatorChatId=await telegramOperatorChatId();
+  if(cfg.token&&operatorChatId){
     await telegram("sendMessage",{
-      chat_id:cfg.chatId,
+      chat_id:operatorChatId,
       text:"New Mkety Media Enterprise request\n\nCompany: "+companyName+"\nContact: "+contactName+"\nTelegram: "+telegramContact+"\n\nNeeds:\n"+(requirements||"Not specified"),
     }).catch((error)=>console.error(error));
   }
