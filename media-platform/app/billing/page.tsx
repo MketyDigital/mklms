@@ -3,7 +3,7 @@ import Link from "next/link";
 import { getCurrentUser } from "../../src/lib/current-user";
 import { getTenantState } from "../../src/lib/tenant-state";
 import { getMediaDb, getMediaEnv } from "../../src/lib/postgres";
-import { getSetting } from "../../src/lib/operator-settings";
+import { getSetting,getBillingTerms } from "../../src/lib/operator-settings";
 
 export const dynamic = "force-dynamic";
 
@@ -16,12 +16,13 @@ export default async function BillingPage({searchParams}:{searchParams:Promise<R
 
   const state=await getTenantState(user.tenantId);
   const db=getMediaDb();
-  const [invoice,plansResult,addonsResult,activeAddonsResult,bank]=await Promise.all([
+  const [invoice,plansResult,addonsResult,activeAddonsResult,bank,billingTerms]=await Promise.all([
     db.prepare("SELECT id,reference,amount_usd,amount_local,local_currency,status,payment_method,due_at FROM media_invoices WHERE tenant_id=? ORDER BY created_at DESC LIMIT 1").bind(user.tenantId).first<any>(),
-    db.prepare("SELECT code,name,monthly_usd,storage_bytes,delivery_bytes,delivery_requests,logical_buckets,team_seats FROM media_plans WHERE active=1 ORDER BY monthly_usd").all<any>(),
+    db.prepare("SELECT code,name,monthly_usd,storage_bytes,delivery_bytes,delivery_requests,logical_buckets,team_seats FROM media_plans WHERE active=1 AND code<>'enterprise' ORDER BY monthly_usd").all<any>(),
     db.prepare("SELECT code,name,price_usd,storage_bytes,delivery_bytes,delivery_requests FROM media_addon_products WHERE active=1 ORDER BY display_order,price_usd").all<any>(),
     db.prepare("SELECT a.product_code,p.name,a.storage_bytes,a.delivery_bytes,a.delivery_requests,a.ends_at FROM media_tenant_addons a JOIN media_addon_products p ON p.code=a.product_code WHERE a.tenant_id=? AND a.starts_at<=datetime('now') AND a.ends_at>datetime('now') ORDER BY a.created_at DESC").bind(user.tenantId).all<any>(),
     getSetting<any>("bank_transfer",{enabled:false,bankName:"",accountName:"",accountNumber:"",instructions:""}),
+    getBillingTerms(),
   ]);
 
   const hasPending=Boolean(invoice&&invoice.status==="pending");
@@ -68,6 +69,15 @@ export default async function BillingPage({searchParams}:{searchParams:Promise<R
             </div>
           )}
           <p className="muted">No quota or plan increase is applied before payment verification.</p>
+          {state.status==="pending"&&<details style={{marginTop:18}}>
+            <summary><strong>Choose a different plan or billing term</strong></summary>
+            <form method="post" action="/api/billing/change-plan" className="form" style={{marginTop:12}}>
+              <label>Plan<select name="plan" defaultValue={currentPlan?.plan_code||"starter"}>{(plansResult.results||[]).map((p:any)=><option key={p.code} value={p.code}>{p.name} — {"$"}{Number(p.monthly_usd).toFixed(0)}/mo</option>)}</select></label>
+              <label>Billing term<select name="term" defaultValue={String(state.billingTermMonths)}>{(billingTerms as any[]).map((t:any)=><option key={t.months} value={t.months}>{t.label}{Number(t.discountPercent||0)>0?" — "+Number(t.discountPercent)+"% off":""}</option>)}</select></label>
+              <button className="btn secondary">Replace unpaid invoice</button>
+              <p className="muted">Your current unpaid invoice is cancelled and replaced. Your account and username stay the same.</p>
+            </form>
+          </details>}
         </div>
       )}
 
