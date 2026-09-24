@@ -224,3 +224,5 @@ VALUES
 
 ALTER TABLE media_invoices ADD COLUMN amount_local REAL;
 ALTER TABLE media_invoices ADD COLUMN local_currency TEXT;
+
+ALTER TABLE media_tenant_commercial_terms ADD COLUMN preferred_pool_key TEXT;
