@@ -4,14 +4,17 @@ import { getTenantState } from "../../../../src/lib/tenant-state";
 import { getMediaDb } from "../../../../src/lib/postgres";
 import { getProviderEnv } from "../../../../src/lib/provider-env";
 import { createProvider } from "../../../../src/providers/factory";
+import { allowRequest } from "../../../../src/auth/rate-limit";
 
 function safeName(name:string){
   return name.replace(/[^A-Za-z0-9._-]+/g,"-").replace(/^-+|-+$/g,"").slice(-180) || "file";
 }
 
 export async function POST(request:Request){
+  if(!(await allowRequest(request,"MEDIA_MUTATION_RATE_LIMITER","upload-sign"))) return NextResponse.json({error:"Too many requests"},{status:429});
   const user=await getCurrentUser();
   if(!user) return NextResponse.json({error:"Unauthorized"},{status:401});
+  if(user.role==="billing") return NextResponse.json({error:"Forbidden"},{status:403});
 
   const state=await getTenantState(user.tenantId);
   if(state.status!=="active" || state.subscriptionStatus!=="active") return NextResponse.json({error:"Account inactive or payment due"},{status:403});
