@@ -37,7 +37,7 @@ export async function POST(request:Request){
       form.get("buckets")?Number(form.get("buckets")):null,
       form.get("seats")?Number(form.get("seats")):null,
       gb(form.get("maxObjectGb")),
-      String(form.get("overage")||"hard-cap"),
+      "hard-cap",
       enterprise,
       infrastructure,
       String(form.get("preferredPoolKey")||"r2-global"),
