@@ -25,5 +25,17 @@
       "binding": "MEDIA_R2_BUCKET",
       "bucket_name": "REPLACE_WITH_MEDIA_R2_BUCKET"
     }
+  ],
+  "ratelimits": [
+    {
+      "name": "MEDIA_AUTH_RATE_LIMITER",
+      "namespace_id": "26092401",
+      "simple": { "limit": 10, "period": 60 }
+    },
+    {
+      "name": "MEDIA_MUTATION_RATE_LIMITER",
+      "namespace_id": "26092402",
+      "simple": { "limit": 120, "period": 60 }
+    }
   ]
 }
