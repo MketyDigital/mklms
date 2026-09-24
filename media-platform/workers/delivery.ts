@@ -82,8 +82,8 @@ export default {
       const headers=objectHeaders(object);
       headers.set("Cache-Control",route.cacheControl||"public, max-age=86400, s-maxage=31536000, stale-while-revalidate=86400");
       if(range && object.range && "offset" in object.range && "length" in object.range){
-        const offset=object.range.offset;
-        const length=object.range.length;
+        const offset=Number(object.range.offset ?? 0);
+        const length=Number(object.range.length ?? 0);
         headers.set("content-range","bytes "+offset+"-"+(offset+length-1)+"/"+object.size);
         headers.set("content-length",String(length));
         response=new Response(request.method==="HEAD"?null:object.body,{status:206,headers});
