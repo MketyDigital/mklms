@@ -43,6 +43,7 @@ export default async function Dashboard() {
         <div>
           <Link href="/buckets">Buckets</Link>
           <Link href="/billing">Billing</Link>
+          {["owner","admin"].includes(user.role) && <Link href="/team">Team</Link>}
           <form style={{display:"inline"}} method="post" action="/api/auth/logout">
             <button className="btn secondary">Logout</button>
           </form>
