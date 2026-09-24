@@ -96,6 +96,9 @@ jobs:
 
           code=$(curl -sS -o /dev/null -b /tmp/op.cookies -c /tmp/op.cookies -w '%{http_code}' -X POST "$BASE_URL/api/operator/enterprise"             --data-urlencode "requestId=$REQUEST_ID"             --data-urlencode "username=$USERNAME"             --data-urlencode "password=$PASSWORD"             --data-urlencode "slug=$SLUG"             --data-urlencode "monthlyUsd=1"             --data-urlencode "term=1"             --data-urlencode "storageGb=1"             --data-urlencode "deliveryGb=1"             --data-urlencode "requests=10000"             --data-urlencode "buckets=2"             --data-urlencode "seats=1"             --data-urlencode "maxObjectGb=1"             --data-urlencode "infrastructure=automatic"             --data-urlencode "preferredPoolKey=r2-global")
           test "$code" = "303"
+          PROVISION_LOCATION=$(awk 'BEGIN{IGNORECASE=1} /^location:/{print $2}' /tmp/provision.headers | tr -d '\r' | tail -n1)
+          echo "Enterprise provision redirect: $PROVISION_LOCATION"
+          echo "$PROVISION_LOCATION" | grep -q '/operator?provisioned=1'
 
           row=$(d1_query "SELECT t.id AS tenant_id,m.user_id AS user_id,i.id AS invoice_id FROM media_tenants t JOIN media_memberships m ON m.tenant_id=t.id AND m.role='owner' JOIN media_invoices i ON i.tenant_id=t.id AND i.status='pending' WHERE t.slug=? ORDER BY i.created_at DESC LIMIT 1" "$SLUG")
           TENANT_ID=$(jq -r '.result[0].results[0].tenant_id // empty' <<<"$row")
