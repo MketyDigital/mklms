@@ -1,0 +1,31 @@
+{
+  "name": "mkety-media-platform",
+  "version": "0.1.0",
+  "private": true,
+  "engines": { "node": "24.x" },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "lint": "eslint",
+    "cf:build": "opennextjs-cloudflare build",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.879.0",
+    "@aws-sdk/s3-request-presigner": "^3.879.0",
+    "next": "16.3.3",
+    "pg": "^8.16.3",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@opennextjs/cloudflare": "1.20.4",
+    "@types/node": "^24",
+    "@types/pg": "^8.15.5",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5",
+    "wrangler": "4.127.1"
+  }
+}
