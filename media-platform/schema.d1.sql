@@ -346,11 +346,12 @@ CREATE TABLE IF NOT EXISTS media_custom_domains (
   status TEXT NOT NULL DEFAULT 'requested'
     CHECK (status IN ('requested','provisioning','pending_dns','active','failed','removed')),
   cf_hostname_id TEXT,
+  cf_route_id TEXT,
   ssl_status TEXT,
   ownership_name TEXT,
   ownership_type TEXT,
   ownership_value TEXT,
-  cname_target TEXT NOT NULL DEFAULT 'assets.mkety.app',
+  cname_target TEXT NOT NULL DEFAULT 'media-fallback.mkety.app',
   last_error TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
