@@ -243,9 +243,9 @@ jobs:
                 -H "Content-Type: application/json" \
                 --data "$(jq -nc --arg chat "$MEDIA_TELEGRAM_CHAT_ID" --arg username "$TELEGRAM_BOT_USERNAME" '{chat_id:$chat,text:("✅ Mkety Media bot connected\n\nBot: @"+$username+"\nWebhook: active\nOperator authorization: configured\n\nCustomers can now use support, Enterprise chat and payment-proof submission.")}')")
               if [ "$TG_GROUP_STATUS" != "200" ] || ! jq -e '.ok == true' /tmp/tg-operator-test.json >/dev/null; then
-                echo "Telegram operator-group test failed:"
+                echo "Telegram operator group is not reachable yet. The bot/webhook remain active."
                 jq '{ok,description,error_code}' /tmp/tg-operator-test.json
-                exit 1
+                echo "Add the bot to the private operator group and send /bindgroup or /groupid from an authorized operator to bind it automatically."
               fi
             fi
           fi
