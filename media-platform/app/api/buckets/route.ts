@@ -37,7 +37,7 @@ export async function POST(request:Request){
     if(pool?.available_to_customers && provider?.status==="active") poolKey=requested;
   }
   const prefix="tenants/"+user.tenantId+"/buckets/"+id+"/";
-  const cacheControl="public, max-age=86400, s-maxage=31536000, stale-while-revalidate=86400";
+  const cacheControl="public, max-age=86400, s-maxage=86400, stale-while-revalidate=3600";
 
   try{
     await db.prepare("INSERT INTO media_buckets (id,tenant_id,slug,pool_key,prefix,cache_control) VALUES (?,?,?,?,?,?)")
