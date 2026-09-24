@@ -20,6 +20,6 @@ export async function POST(request:Request){
   const db=getMediaDb();
   const exists=await db.prepare("SELECT id FROM media_custom_domains WHERE hostname=? AND status<>'removed' LIMIT 1").bind(hostname).first();
   if(exists) return NextResponse.redirect(new URL("/domains?error=exists",request.url),303);
-  await db.prepare("INSERT INTO media_custom_domains (id,tenant_id,hostname,status,cname_target) VALUES (?,? ,?,'requested','assets.mkety.app')").bind(crypto.randomUUID(),user.tenantId,hostname).run();
+  await db.prepare("INSERT INTO media_custom_domains (id,tenant_id,hostname,status,cname_target) VALUES (?,? ,?,'requested','media-fallback.mkety.app')").bind(crypto.randomUUID(),user.tenantId,hostname).run();
   return NextResponse.redirect(new URL("/domains?requested=1",request.url),303);
 }
