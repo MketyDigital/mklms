@@ -4,6 +4,8 @@ import { getCurrentUser } from "../../../src/lib/current-user";
 import { getMediaDb } from "../../../src/lib/postgres";
 import UploadClient from "./UploadClient";
 
+export const dynamic = "force-dynamic";
+
 export default async function BucketPage({params}:{params:Promise<{id:string}>}){
   const user=await getCurrentUser(); if(!user) redirect("/login");
   if(user.role==="billing") redirect("/dashboard");
