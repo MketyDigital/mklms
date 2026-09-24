@@ -2,6 +2,8 @@ import { getPublicPlans } from "../../src/lib/plans-db";
 import { getBillingTerms,getSetting } from "../../src/lib/operator-settings";
 import Link from "next/link";
 
+export const dynamic = "force-dynamic";
+
 export default async function SignupPage({searchParams}:{searchParams:Promise<Record<string,string|undefined>>}){
   const params=await searchParams;
   const [plans,terms,portal]=await Promise.all([getPublicPlans(),getBillingTerms(),getSetting<any>("portal_content",{signupEnabled:true})]);
