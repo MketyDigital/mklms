@@ -5,6 +5,8 @@ import { getTenantState } from "../../src/lib/tenant-state";
 import { getMediaDb, getMediaEnv } from "../../src/lib/postgres";
 import { getSetting } from "../../src/lib/operator-settings";
 
+export const dynamic = "force-dynamic";
+
 function gb(bytes:any){return Number(bytes||0)/1024**3;}
 
 export default async function BillingPage({searchParams}:{searchParams:Promise<Record<string,string|undefined>>}) {
