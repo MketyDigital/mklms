@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS media_buckets (
   pool_key TEXT NOT NULL DEFAULT 'r2-global',
   prefix TEXT NOT NULL,
   public_read INTEGER NOT NULL DEFAULT 1,
-  cache_control TEXT NOT NULL DEFAULT 'public, max-age=86400, s-maxage=31536000, stale-while-revalidate=86400',
+  cache_control TEXT NOT NULL DEFAULT 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=3600',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (tenant_id,slug),
   UNIQUE (pool_key,prefix)
