@@ -100,7 +100,7 @@ export default {
       const object=await env.MEDIA_R2_BUCKET.get(storageKey,rangeOption?{range:rangeOption}:undefined);
       if(!object) return new Response("Not Found",{status:404});
       const headers=objectHeaders(object);
-      headers.set("Cache-Control",route.cacheControl||"public, max-age=86400, s-maxage=31536000, stale-while-revalidate=86400");
+      headers.set("Cache-Control",route.cacheControl||"public, max-age=86400, s-maxage=86400, stale-while-revalidate=3600");
       if(range && object.range && "offset" in object.range && "length" in object.range){
         const offset=Number(object.range.offset ?? 0);
         const length=Number(object.range.length ?? 0);
@@ -119,7 +119,7 @@ export default {
       const upstream=await fetch(signed,{method:request.method,headers});
       if(!upstream.ok) return new Response("Not Found",{status:upstream.status});
       response=new Response(upstream.body,upstream);
-      response.headers.set("Cache-Control",route.cacheControl||"public, max-age=86400, s-maxage=31536000, stale-while-revalidate=86400");
+      response.headers.set("Cache-Control",route.cacheControl||"public, max-age=86400, s-maxage=86400, stale-while-revalidate=3600");
     }
 
     response.headers.set("X-Content-Type-Options","nosniff");
