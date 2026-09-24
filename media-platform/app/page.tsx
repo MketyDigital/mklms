@@ -49,7 +49,7 @@ export default async function Home() {
                 <li>Cached Mkety delivery links</li>
                 <li>Usage and limit dashboard</li>
                 <li>Secure direct uploads</li>
-                <li>Preview, rename, move and delete</li>
+                <li>Preview, copy links and delete</li>
                 <li>Payment and renewal controls</li>
                 {plan.dedicated_storage_eligible && <li>Regional or dedicated infrastructure eligibility</li>}
               </ul>
