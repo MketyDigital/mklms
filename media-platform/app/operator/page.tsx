@@ -13,13 +13,14 @@ function gb(bytes:any){return bytes==null?"":(Number(bytes)/1024**3).toFixed(0);
 export default async function OperatorPage(){
   if(!(await isOperator())) redirect("/operator/login");
   const db=getMediaDb();
-  const [plansResult,addonsResult,tenantsResult,poolsResult,pendingInvoices,enterpriseRequests,terms,bank,enforcement,portal]=await Promise.all([
+  const [plansResult,addonsResult,tenantsResult,poolsResult,pendingInvoices,enterpriseRequests,customDomains,terms,bank,enforcement,portal]=await Promise.all([
     db.prepare("SELECT * FROM media_plans ORDER BY display_order").all<any>(),
     db.prepare("SELECT * FROM media_addon_products ORDER BY display_order,price_usd").all<any>(),
     db.prepare("SELECT t.id,t.slug,t.name,t.status,t.plan_code,c.* FROM media_tenants t LEFT JOIN media_tenant_commercial_terms c ON c.tenant_id=t.id ORDER BY t.created_at DESC LIMIT 200").all<any>(),
     db.prepare("SELECT * FROM media_provider_pools ORDER BY priority").all<any>(),
     db.prepare("SELECT i.id,i.reference,i.amount_usd,i.amount_local,i.local_currency,i.payment_method,i.created_at,t.name AS tenant_name FROM media_invoices i JOIN media_tenants t ON t.id=i.tenant_id WHERE i.status='pending' ORDER BY i.created_at DESC LIMIT 100").all<any>(),
     db.prepare("SELECT * FROM media_enterprise_requests WHERE status IN ('new','contacted') ORDER BY created_at DESC LIMIT 100").all<any>(),
+    db.prepare("SELECT d.*,t.name AS tenant_name,t.slug AS tenant_slug FROM media_custom_domains d JOIN media_tenants t ON t.id=d.tenant_id WHERE d.status<>'removed' ORDER BY d.created_at DESC LIMIT 100").all<any>(),
     getBillingTerms(),
     getSetting<any>("bank_transfer",{enabled:false,currency:"NGN",usdToLocalRate:0,roundTo:100,bankName:"",accountName:"",accountNumber:"",instructions:""}),
     getSetting<any>("enforcement",{graceDays:3,suspendDeliveryAfterGrace:true}),
@@ -86,6 +87,11 @@ export default async function OperatorPage(){
       <label>Account number<input name="accountNumber" defaultValue={bank.accountNumber||""}/></label>
       <label>Instructions<input name="instructions" defaultValue={bank.instructions||""}/></label>
       <button className="btn">Save bank details</button></form>
+      <div className="notice" style={{marginTop:14}}>
+        <strong>When does manual payment appear?</strong>
+        <p>Enable bank transfer, set the local currency/FX rate, bank name, account name and account number, then save. Customers with a pending invoice will immediately see <em>Pay by bank transfer</em> beside automatic payment.</p>
+        <p>After they choose it, the invoice locks the exact local amount. They can submit proof through the Telegram bot; an authorized operator must verify the actual bank credit before approval.</p>
+      </div>
     </section>
 
     <section className="card" style={{marginTop:18}}><h2>Enforcement</h2>
@@ -118,6 +124,22 @@ export default async function OperatorPage(){
       <p className="muted">After provisioning, send the agreed username/password privately. Access remains pending until the invoice is paid.</p>
     </form>)}
     {!enterpriseRequests.results?.length&&<div className="notice">No pending Enterprise requests.</div>}</div>
+
+    <h2 style={{marginTop:30}}>Custom-domain requests</h2>
+    <div className="grid">{(customDomains.results||[]).map((d:any)=><form className="card" method="post" action="/api/operator/domains" key={d.id}>
+      <input type="hidden" name="id" value={d.id}/>
+      <h3>{d.hostname}</h3>
+      <p className="muted">{d.tenant_name} · {d.tenant_slug}</p>
+      <p>Status: <strong>{d.status}</strong>{d.ssl_status?" · TLS "+d.ssl_status:""}</p>
+      <p>CNAME target: <strong>{d.cname_target}</strong></p>
+      {d.ownership_name&&d.ownership_value&&<p className="muted">Validation: {d.ownership_type||"TXT"} {d.ownership_name} → {d.ownership_value}</p>}
+      {d.last_error&&<p className="notice danger">{d.last_error}</p>}
+      <div className="toolbar">
+        {!d.cf_hostname_id&&<button className="btn" name="action" value="provision">Provision hostname</button>}
+        {d.cf_hostname_id&&<button className="btn" name="action" value="refresh">Refresh DNS/TLS status</button>}
+      </div>
+    </form>)}
+    {!customDomains.results?.length&&<div className="notice">No custom-domain requests.</div>}</div>
 
     <h2 style={{marginTop:30}}>Pending payments</h2>
     <div className="card"><table className="table"><thead><tr><th>Customer</th><th>Invoice</th><th>Amount</th><th>Method</th><th></th></tr></thead><tbody>
