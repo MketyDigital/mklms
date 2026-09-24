@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "../../../src/lib/current-user";
 import { getTenantState } from "../../../src/lib/tenant-state";
-import { getMediaDb, getMediaEnv } from "../../../src/lib/postgres";\nimport { configuredProviders } from "../../../src/config/providers";\nimport { getProviderEnv } from "../../../src/lib/provider-env";
+import { getMediaDb, getMediaEnv } from "../../../src/lib/postgres";
+import { configuredProviders } from "../../../src/config/providers";
+import { getProviderEnv } from "../../../src/lib/provider-env";
 
 function slugify(input:string){
   return input.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,50);
