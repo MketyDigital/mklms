@@ -4,6 +4,8 @@ import { getCurrentUser } from "../../src/lib/current-user";
 import { getTenantState } from "../../src/lib/tenant-state";
 import { usageView } from "../../src/usage/view-model";
 
+export const dynamic = "force-dynamic";
+
 function formatBytes(value:number) {
   if (value >= 1024 ** 3) return (value / 1024 ** 3).toFixed(1) + " GB";
   if (value >= 1024 ** 2) return (value / 1024 ** 2).toFixed(1) + " MB";
