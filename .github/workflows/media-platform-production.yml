@@ -133,6 +133,16 @@ jobs:
       - name: Deploy public assets Worker
         run: npx wrangler deploy -c wrangler.delivery.production.jsonc
 
+      - name: Configure assets cache-purge secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          PURGE_SECRET=$(printf '%s' "$MEDIA_OPERATOR_SESSION_SECRET|mkety-media-assets-purge" | sha256sum | cut -d' ' -f1)
+          echo "::add-mask::$PURGE_SECRET"
+          jq -n --arg value "$PURGE_SECRET" '{MEDIA_ASSET_PURGE_SECRET:$value}' >/tmp/media-assets-secrets.json
+          npx wrangler secret bulk /tmp/media-assets-secrets.json --name "$ASSETS_WORKER"
+          rm -f /tmp/media-assets-secrets.json
+
       - name: Deploy maintenance Worker
         run: npx wrangler deploy -c wrangler.maintenance.production.jsonc
 
@@ -152,14 +162,18 @@ jobs:
         run: |
           set -euo pipefail
           TELEGRAM_WEBHOOK_SECRET=""
+          PURGE_SECRET=$(printf '%s' "$MEDIA_OPERATOR_SESSION_SECRET|mkety-media-assets-purge" | sha256sum | cut -d' ' -f1)
+          echo "::add-mask::$PURGE_SECRET"
           if [ -n "${MEDIA_TELEGRAM_BOT_TOKEN:-}" ]; then
             TELEGRAM_WEBHOOK_SECRET=$(printf '%s' "$MEDIA_OPERATOR_SESSION_SECRET|mkety-media-telegram" | sha256sum | cut -d' ' -f1)
             echo "::add-mask::$TELEGRAM_WEBHOOK_SECRET"
           fi
 
-          jq -n             --arg operatorKey "$MEDIA_OPERATOR_ACCESS_KEY"             --arg operatorSession "$MEDIA_OPERATOR_SESSION_SECRET"             --arg npApi "$NOWPAYMENTS_API_KEY"             --arg npIpn "$NOWPAYMENTS_IPN_SECRET"             --arg tgToken "${MEDIA_TELEGRAM_BOT_TOKEN:-}"             --arg tgChat "${MEDIA_TELEGRAM_CHAT_ID:-}"             --arg tgOps "${MEDIA_TELEGRAM_OPERATOR_IDS:-}"             --arg tgWebhook "$TELEGRAM_WEBHOOK_SECRET"             '{
+          jq -n             --arg operatorKey "$MEDIA_OPERATOR_ACCESS_KEY"             --arg operatorSession "$MEDIA_OPERATOR_SESSION_SECRET"             --arg npApi "$NOWPAYMENTS_API_KEY"             --arg npIpn "$NOWPAYMENTS_IPN_SECRET"             --arg tgToken "${MEDIA_TELEGRAM_BOT_TOKEN:-}"             --arg tgChat "${MEDIA_TELEGRAM_CHAT_ID:-}"             --arg tgOps "${MEDIA_TELEGRAM_OPERATOR_IDS:-}"             --arg tgWebhook "$TELEGRAM_WEBHOOK_SECRET" \
+            --arg purgeSecret "$PURGE_SECRET"             '{
               MEDIA_OPERATOR_ACCESS_KEY:$operatorKey,
-              MEDIA_OPERATOR_SESSION_SECRET:$operatorSession
+              MEDIA_OPERATOR_SESSION_SECRET:$operatorSession,
+              MEDIA_ASSET_PURGE_SECRET:$purgeSecret
             }
             + (if ($npApi!="" and $npIpn!="") then {NOWPAYMENTS_API_KEY:$npApi,NOWPAYMENTS_IPN_SECRET:$npIpn} else {} end)
             + (if $tgToken=="" then {} else {MEDIA_TELEGRAM_BOT_TOKEN:$tgToken} end)
