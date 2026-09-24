@@ -215,13 +215,15 @@ jobs:
             --arg purgeSecret "$PURGE_SECRET" \
             --arg cfToken "$CLOUDFLARE_API_TOKEN" \
             --arg saasZone "$SAAS_ZONE_ID" \
-            --arg saasTarget "assets.mkety.app" \
+            --arg saasTarget "media-fallback.mkety.app" \
+            --arg assetsWorker "mkety-media-assets" \
             '{
               MEDIA_OPERATOR_ACCESS_KEY:$operatorKey,
               MEDIA_OPERATOR_SESSION_SECRET:$operatorSession,
               MEDIA_ASSET_PURGE_SECRET:$purgeSecret,
               MEDIA_CF_API_TOKEN:$cfToken,
-              MEDIA_SAAS_CNAME_TARGET:$saasTarget
+              MEDIA_SAAS_CNAME_TARGET:$saasTarget,
+              MEDIA_ASSETS_WORKER_NAME:$assetsWorker
             }
             + (if $saasZone=="" then {} else {MEDIA_SAAS_ZONE_ID:$saasZone} end)
             + (if ($npApi!="" and $npIpn!="") then {NOWPAYMENTS_API_KEY:$npApi,NOWPAYMENTS_IPN_SECRET:$npIpn} else {} end)
@@ -294,10 +296,22 @@ jobs:
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" >/tmp/media-saas-zone.json
           SAAS_ZONE_ID=$(jq -r '.result[0].id // empty' /tmp/media-saas-zone.json)
           if [ -n "$SAAS_ZONE_ID" ]; then
+            curl --silent --show-error --fail-with-body \
+              "https://api.cloudflare.com/client/v4/zones/$SAAS_ZONE_ID/dns_records?type=AAAA&name=media-fallback.mkety.app&per_page=10" \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" >/tmp/media-fallback-dns.json
+            FALLBACK_DNS_ID=$(jq -r '.result[0].id // empty' /tmp/media-fallback-dns.json)
+            if [ -z "$FALLBACK_DNS_ID" ]; then
+              curl --silent --show-error --fail-with-body --request POST \
+                "https://api.cloudflare.com/client/v4/zones/$SAAS_ZONE_ID/dns_records" \
+                -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" \
+                --data '{"type":"AAAA","name":"media-fallback.mkety.app","content":"100::","proxied":true,"ttl":1}' \
+                >/tmp/media-fallback-created.json
+            fi
+
             SAAS_FALLBACK_STATUS=$(curl --silent --show-error --output /tmp/saas-fallback.json --write-out '%{http_code}' \
               --request PUT "https://api.cloudflare.com/client/v4/zones/$SAAS_ZONE_ID/custom_hostnames/fallback_origin" \
               -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" \
-              --data '{"origin":"assets.mkety.app"}')
+              --data '{"origin":"media-fallback.mkety.app"}')
             if [ "$SAAS_FALLBACK_STATUS" != "200" ] || ! jq -e '.success == true' /tmp/saas-fallback.json >/dev/null 2>&1; then
               echo "Custom-domain fallback origin is not active yet; core Mkety Media remains available."
               jq '{success,errors,messages}' /tmp/saas-fallback.json 2>/dev/null || true
