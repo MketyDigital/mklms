@@ -38,6 +38,6 @@ export default async function Home(){
         <div style={{marginTop:14}} className="muted">{(terms as any[]).filter((term)=>Number(term.months)>1).map((term)=><div key={term.months}>{term.label}: {"$"}{termPrice(Number(plan.monthly_usd),Number(term.months),Number(term.discountPercent||0)).toFixed(2)} ({Number(term.discountPercent||0)}% off)</div>)}</div>
       </article>)}</div>
     </section>
-    <section className="card"><h2>{String(portal.enterpriseTitle)}</h2><p>{String(portal.enterpriseText)}</p></section>
+    <section className="card"><h2>{String(portal.enterpriseTitle)}</h2><p>{String(portal.enterpriseText)}</p><Link className="btn" href="/enterprise">Request Enterprise setup</Link></section>
   </main>;
 }
