@@ -287,3 +287,10 @@ CREATE TABLE IF NOT EXISTS media_enterprise_requests (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+
+
+INSERT OR IGNORE INTO media_operator_settings (key,value_json)
+VALUES (
+  'portal_content',
+  '{"heroTitle":"Upload once. Get fast links. Keep your media simple.","heroSubtitle":"Managed image, video and file storage with cached delivery, straightforward limits and one clean dashboard.","enterpriseTitle":"Need custom limits?","enterpriseText":"Tell us what you need and Mkety will prepare a private Enterprise offer.","maintenanceNotice":"Private launch: self-service signup opens after final platform verification.","signupEnabled":false,"planBenefits":["Images, video and files","Cached Mkety delivery links","Usage and limit dashboard","Secure direct uploads","Preview, copy links and delete","Payment and renewal controls"]}'
+);
