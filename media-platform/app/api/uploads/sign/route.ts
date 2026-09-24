@@ -4,6 +4,7 @@ import { getTenantState } from "../../../../src/lib/tenant-state";
 import { getMediaDb } from "../../../../src/lib/postgres";
 import { getProviderEnv } from "../../../../src/lib/provider-env";
 import { createProvider } from "../../../../src/providers/factory";
+import { allowMutation } from "../../../../src/lib/rate-limit";
 import { allowRequest } from "../../../../src/auth/rate-limit";
 
 function safeName(name:string){
@@ -14,6 +15,7 @@ export async function POST(request:Request){
   if(!(await allowRequest(request,"MEDIA_MUTATION_RATE_LIMITER","upload-sign"))) return NextResponse.json({error:"Too many requests"},{status:429});
   const user=await getCurrentUser();
   if(!user) return NextResponse.json({error:"Unauthorized"},{status:401});
+  if(!(await allowMutation(user.userId))) return NextResponse.json({error:"Too many requests"},{status:429});
   if(user.role==="billing") return NextResponse.json({error:"Forbidden"},{status:403});
 
   const state=await getTenantState(user.tenantId);
