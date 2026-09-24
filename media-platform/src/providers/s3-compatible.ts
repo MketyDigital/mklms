@@ -1,6 +1,7 @@
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -59,6 +60,16 @@ export class S3CompatibleProvider implements StorageProvider {
       new GetObjectCommand({ Bucket: this.bucket, Key: input.key }),
       { expiresIn: input.expiresInSeconds ?? 300 },
     );
+  }
+
+  async headObject(key: string) {
+    try {
+      const result = await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
+      return { size: Number(result.ContentLength ?? 0), etag: result.ETag, contentType: result.ContentType };
+    } catch (error: any) {
+      if (error?.$metadata?.httpStatusCode === 404 || error?.name === "NotFound") return null;
+      throw error;
+    }
   }
 
   async deleteObject(key: string) {
