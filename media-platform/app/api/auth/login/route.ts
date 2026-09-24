@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getMediaDb } from "../../../../src/lib/postgres";
 import { verifyPassword } from "../../../../src/auth/password";
 import { newSessionToken, sessionCookie, sessionTokenHash } from "../../../../src/auth/session";
+import { allowAuthAttempt } from "../../../../src/lib/rate-limit";
 import { allowRequest } from "../../../../src/auth/rate-limit";
 
 export async function POST(request: Request) {
@@ -9,6 +10,7 @@ export async function POST(request: Request) {
   const form=await request.formData();
   const username=String(form.get("username")||"").trim();
   const password=String(form.get("password")||"");
+  if(!(await allowAuthAttempt(username||"unknown"))) return NextResponse.redirect(new URL("/login?error=rate",request.url),303);
   const db=getMediaDb();
   const user=await db.prepare("SELECT id,password_hash FROM media_users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first<any>();
 
