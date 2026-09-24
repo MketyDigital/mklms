@@ -3,10 +3,13 @@ import { getCurrentUser } from "../../../../src/lib/current-user";
 import { getMediaDb } from "../../../../src/lib/postgres";
 import { createProvider } from "../../../../src/providers/factory";
 import { getProviderEnv } from "../../../../src/lib/provider-env";
+import { allowRequest } from "../../../../src/auth/rate-limit";
 
 export async function POST(request:Request){
+  if(!(await allowRequest(request,"MEDIA_MUTATION_RATE_LIMITER","object-delete"))) return new Response("Too many requests",{status:429});
   const user=await getCurrentUser();
   if(!user) return NextResponse.redirect(new URL("/login",request.url),303);
+  if(user.role==="billing") return new Response("Forbidden",{status:403});
   const form=await request.formData();
   const objectId=String(form.get("objectId")||"");
   const db=getMediaDb();
