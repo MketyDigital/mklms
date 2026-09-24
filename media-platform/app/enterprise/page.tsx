@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { getSetting } from "../../src/lib/operator-settings";
 
+export const dynamic = "force-dynamic";
+
 export default async function EnterprisePage(){
   const portal=await getSetting<any>("portal_content",{
     enterpriseTitle:"Need custom limits?",
