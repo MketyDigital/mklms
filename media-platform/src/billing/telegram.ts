@@ -1,4 +1,4 @@
-import { getMediaEnv } from "../lib/postgres";
+import { getMediaDb, getMediaEnv } from "../lib/postgres";
 
 export function telegramConfig(){
   const env=getMediaEnv() as any;
@@ -9,6 +9,26 @@ export function telegramConfig(){
     webhookSecret:String(env.MEDIA_TELEGRAM_WEBHOOK_SECRET||""),
     operatorIds:String(env.MEDIA_TELEGRAM_OPERATOR_IDS||"").split(",").map((v:string)=>v.trim()).filter(Boolean),
   };
+}
+
+export async function telegramOperatorChatId(){
+  try{
+    const row=await getMediaDb().prepare(
+      "SELECT value_json FROM media_operator_settings WHERE key='telegram_operator_chat' LIMIT 1"
+    ).first<any>();
+    if(row?.value_json){
+      const parsed=JSON.parse(String(row.value_json));
+      if(parsed?.chatId) return String(parsed.chatId);
+    }
+  }catch{}
+  return telegramConfig().chatId;
+}
+
+export async function bindTelegramOperatorChat(chatId:string,actorId:string){
+  const value=JSON.stringify({chatId,boundBy:actorId,boundAt:new Date().toISOString()});
+  await getMediaDb().prepare(
+    "INSERT INTO media_operator_settings (key,value_json,updated_at,updated_by) VALUES ('telegram_operator_chat',?,datetime('now'),?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,updated_at=datetime('now'),updated_by=excluded.updated_by"
+  ).bind(value,"telegram:"+actorId).run();
 }
 
 export async function telegram(method:string,payload:Record<string,unknown>){
