@@ -4,6 +4,8 @@ import { getCurrentUser } from "../../src/lib/current-user";
 import { getTenantState } from "../../src/lib/tenant-state";
 import { getMediaDb } from "../../src/lib/postgres";
 
+export const dynamic = "force-dynamic";
+
 export default async function TeamPage(){
   const user=await getCurrentUser();
   if(!user) redirect("/login");
