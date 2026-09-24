@@ -38,7 +38,7 @@ export const DEFAULT_MEDIA_PLANS: MediaPlan[] = [
     logicalBuckets: 10,
     teamSeats: 3,
     maxObjectGb: 10,
-    overageMode: "prepaid-wallet",
+    overageMode: "hard-cap",
     dedicatedStorageEligible: false,
   },
   {
@@ -51,7 +51,7 @@ export const DEFAULT_MEDIA_PLANS: MediaPlan[] = [
     logicalBuckets: 50,
     teamSeats: 10,
     maxObjectGb: 25,
-    overageMode: "prepaid-wallet",
+    overageMode: "hard-cap",
     dedicatedStorageEligible: true,
   },
   {
@@ -64,7 +64,7 @@ export const DEFAULT_MEDIA_PLANS: MediaPlan[] = [
     logicalBuckets: 250,
     teamSeats: 25,
     maxObjectGb: 50,
-    overageMode: "prepaid-wallet",
+    overageMode: "hard-cap",
     dedicatedStorageEligible: true,
   },
 ];
