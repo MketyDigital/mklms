@@ -2,7 +2,9 @@
   "name": "mkety-media-platform",
   "version": "0.1.0",
   "private": true,
-  "engines": { "node": "24.x" },
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -17,7 +19,8 @@
     "pg": "^8.16.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "@azure/storage-blob": "^12.28.0"
   },
   "devDependencies": {
     "@opennextjs/cloudflare": "1.20.4",
