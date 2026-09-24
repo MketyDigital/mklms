@@ -6,6 +6,7 @@ import UploadClient from "./UploadClient";
 
 export default async function BucketPage({params}:{params:Promise<{id:string}>}){
   const user=await getCurrentUser(); if(!user) redirect("/login");
+  if(user.role==="billing") redirect("/dashboard");
   const {id}=await params;
   const db=getMediaDb();
   const bucket=await db.prepare("SELECT id,slug FROM media_buckets WHERE id=? AND tenant_id=? LIMIT 1").bind(id,user.tenantId).first<any>();
