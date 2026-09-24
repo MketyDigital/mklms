@@ -1,4 +1,4 @@
-# deploy enterprise provisioning diagnostic sanitized
+# deploy Cloudflare-compatible password KDF
 name: Deploy Mkety Media production
 
 on:
