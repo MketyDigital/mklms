@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser } from "../../src/lib/current-user";
 import { getTenantState } from "../../src/lib/tenant-state";
-import { getMediaDb } from "../../src/lib/postgres";
+import { getMediaDb, getMediaEnv } from "../../src/lib/postgres";
 import { getSetting } from "../../src/lib/operator-settings";
 
 function gb(bytes:any){return Number(bytes||0)/1024**3;}
@@ -23,6 +23,7 @@ export default async function BillingPage({searchParams}:{searchParams:Promise<R
   ]);
 
   const hasPending=Boolean(invoice&&invoice.status==="pending");
+  const nowPaymentsConfigured=Boolean((getMediaEnv() as any).NOWPAYMENTS_API_KEY && (getMediaEnv() as any).NOWPAYMENTS_IPN_SECRET);
   const currentPlan=await db.prepare("SELECT plan_code FROM media_tenants WHERE id=? LIMIT 1").bind(user.tenantId).first<any>();
   const currentPublicPlan=(plansResult.results||[]).find((p:any)=>p.code===currentPlan?.plan_code);
 
@@ -56,7 +57,7 @@ export default async function BillingPage({searchParams}:{searchParams:Promise<R
             </div>
           ):(
             <div className="toolbar" style={{marginTop:18}}>
-              <form method="post" action="/api/billing/nowpayments"><input type="hidden" name="invoiceId" value={String(invoice.id)}/><button className="btn">Pay automatically</button></form>
+              {nowPaymentsConfigured&&<form method="post" action="/api/billing/nowpayments"><input type="hidden" name="invoiceId" value={String(invoice.id)}/><button className="btn">Pay automatically</button></form>}
               {bank.enabled&&<form method="post" action="/api/billing/bank-transfer"><input type="hidden" name="invoiceId" value={String(invoice.id)}/><button className="btn secondary">Pay by bank transfer</button></form>}
             </div>
           )}
