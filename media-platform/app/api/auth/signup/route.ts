@@ -3,12 +3,14 @@ import { getMediaDb } from "../../../../src/lib/postgres";
 import { hashPassword } from "../../../../src/auth/password";
 import { newSessionToken, sessionCookie, sessionTokenHash } from "../../../../src/auth/session";
 import { getBillingTerms, calculateTermPrice, getSetting } from "../../../../src/lib/operator-settings";
+import { allowRequest } from "../../../../src/auth/rate-limit";
 
 function slugify(input: string) {
   return input.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,50);
 }
 
 export async function POST(request: Request) {
+  if(!(await allowRequest(request,"MEDIA_AUTH_RATE_LIMITER","signup"))) return new Response("Too many requests",{status:429});
   const portal=await getSetting<any>("portal_content",{signupEnabled:true});
   if(portal.signupEnabled===false) return NextResponse.redirect(new URL("/signup?error=paused",request.url),303);
   const form=await request.formData();
