@@ -44,18 +44,26 @@ export async function POST(request:Request){
   const amount=await calculateTermPrice(monthlyUsd,term);
   const dueAt=new Date(Date.now()+72*60*60*1000).toISOString();
 
-  await db.batch([
-    db.prepare("INSERT INTO media_tenants (id,slug,name,status,plan_code) VALUES (?,?,?,'pending','starter')").bind(tenantId,slug,String(req.company_name)),
-    db.prepare("INSERT INTO media_users (id,username,password_hash,status) VALUES (?,?,?,'active')").bind(userId,username,passwordHash),
-    db.prepare("INSERT INTO media_memberships (tenant_id,user_id,role) VALUES (?,?,'owner')").bind(tenantId,userId),
-    db.prepare("INSERT INTO media_subscriptions (tenant_id,status) VALUES (?,'pending')").bind(tenantId),
-    db.prepare("INSERT INTO media_tenant_commercial_terms (tenant_id,base_plan_code,display_name,monthly_usd,storage_bytes,delivery_bytes,delivery_requests,logical_buckets,team_seats,max_object_bytes,overage_mode,enterprise_features,infrastructure_mode,preferred_pool_key,billing_term_months) VALUES (?,'starter',?,?,?,?,?,?,?,?, 'hard-cap',1,?,?,?)")
-      .bind(tenantId,"Enterprise",monthlyUsd,Math.round(storageGb*1024**3),Math.round(deliveryGb*1024**3),Math.round(requests),Math.round(buckets),Math.round(seats),Math.round(maxObjectGb*1024**3),infrastructure,preferredPoolKey,term),
-    db.prepare("INSERT INTO media_invoices (id,tenant_id,reference,amount_usd,payment_method,status,due_at) VALUES (?,?,?,?,'invoice','pending',?)").bind(invoiceId,tenantId,reference,amount,dueAt),
-    db.prepare("INSERT INTO media_purchases (invoice_id,tenant_id,purchase_type) VALUES (?,?,'subscription')").bind(invoiceId,tenantId),
-    db.prepare("UPDATE media_enterprise_requests SET status='provisioned',tenant_id=?,updated_at=datetime('now') WHERE id=?").bind(tenantId,requestId),
-    db.prepare("INSERT INTO media_audit_log (id,tenant_id,actor_type,actor_id,action,target_type,target_id) VALUES (?,?,'operator','operator','enterprise.provisioned','tenant',?)").bind(crypto.randomUUID(),tenantId,tenantId),
-  ]);
+  try{
+    await db.batch([
+      db.prepare("INSERT INTO media_tenants (id,slug,name,status,plan_code) VALUES (?,?,?,'pending','starter')").bind(tenantId,slug,String(req.company_name)),
+      db.prepare("INSERT INTO media_users (id,username,password_hash,status) VALUES (?,?,?,'active')").bind(userId,username,passwordHash),
+      db.prepare("INSERT INTO media_memberships (tenant_id,user_id,role) VALUES (?,?,'owner')").bind(tenantId,userId),
+      db.prepare("INSERT INTO media_subscriptions (tenant_id,status) VALUES (?,'pending')").bind(tenantId),
+      db.prepare("INSERT INTO media_tenant_commercial_terms (tenant_id,base_plan_code,display_name,monthly_usd,storage_bytes,delivery_bytes,delivery_requests,logical_buckets,team_seats,max_object_bytes,overage_mode,enterprise_features,infrastructure_mode,preferred_pool_key,billing_term_months) VALUES (?,'starter',?,?,?,?,?,?,?,?, 'hard-cap',1,?,?,?)")
+        .bind(tenantId,"Enterprise",monthlyUsd,Math.round(storageGb*1024**3),Math.round(deliveryGb*1024**3),Math.round(requests),Math.round(buckets),Math.round(seats),Math.round(maxObjectGb*1024**3),infrastructure,preferredPoolKey,term),
+      db.prepare("INSERT INTO media_invoices (id,tenant_id,reference,amount_usd,payment_method,status,due_at) VALUES (?,?,?,?,'invoice','pending',?)").bind(invoiceId,tenantId,reference,amount,dueAt),
+      db.prepare("INSERT INTO media_purchases (invoice_id,tenant_id,purchase_type) VALUES (?,?,'subscription')").bind(invoiceId,tenantId),
+      db.prepare("UPDATE media_enterprise_requests SET status='provisioned',tenant_id=?,updated_at=datetime('now') WHERE id=?").bind(tenantId,requestId),
+      db.prepare("INSERT INTO media_audit_log (id,tenant_id,actor_type,actor_id,action,target_type,target_id) VALUES (?,?,'operator','operator','enterprise.provisioned','tenant',?)").bind(crypto.randomUUID(),tenantId,tenantId),
+    ]);
+  }catch(error:any){
+    console.error("Enterprise provisioning failed",error);
+    return NextResponse.json({
+      error:"Enterprise provisioning failed",
+      diagnostic:String(error?.message||error||"unknown").slice(0,800),
+    },{status:500});
+  }
 
   return NextResponse.redirect(new URL("/operator?provisioned=1&username="+encodeURIComponent(username)+"&invoice="+encodeURIComponent(reference),request.url),303);
 }
