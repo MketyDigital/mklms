@@ -93,7 +93,7 @@ export class AzureBlobProvider implements StorageProvider {
 
     const value = page.value;
     return {
-      objects: (value?.segment.blobItems ?? []).map((blob) => ({
+      objects: (value?.segment.blobItems ?? []).map((blob:any) => ({
         key: blob.name,
         size: blob.properties.contentLength,
         etag: blob.properties.etag,
