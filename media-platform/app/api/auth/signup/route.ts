@@ -55,6 +55,7 @@ export async function POST(request: Request) {
     db.prepare("INSERT INTO media_subscriptions (tenant_id,status) VALUES (?,'pending')").bind(tenantId),
     db.prepare("INSERT INTO media_tenant_commercial_terms (tenant_id,base_plan_code,billing_term_months) VALUES (?,?,?)").bind(tenantId,planCode,termMonths),
     db.prepare("INSERT INTO media_invoices (id,tenant_id,reference,amount_usd,payment_method,status,due_at) VALUES (?,?,?,?,'invoice','pending',?)").bind(invoiceId,tenantId,reference,amount,dueAt),
+    db.prepare("INSERT INTO media_purchases (invoice_id,tenant_id,purchase_type) VALUES (?,?,'subscription')").bind(invoiceId,tenantId),
     db.prepare("INSERT INTO media_sessions (token_hash,user_id,expires_at) VALUES (?,?,?)").bind(tokenHash,userId,expiresAt),
     db.prepare("INSERT INTO media_audit_log (id,tenant_id,actor_type,actor_id,action,target_type,target_id) VALUES (?,?,'customer',?,'account.created','tenant',?)").bind(crypto.randomUUID(),tenantId,userId,tenantId),
   ]);
