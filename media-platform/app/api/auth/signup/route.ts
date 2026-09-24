@@ -9,7 +9,9 @@ function slugify(input: string) {
 }
 
 export async function POST(request: Request) {
-  const portal=await getSetting<any>("portal_content",{signupEnabled:true});\n  if(portal.signupEnabled===false) return NextResponse.redirect(new URL("/signup?error=paused",request.url),303);\n  const form=await request.formData();
+  const portal=await getSetting<any>("portal_content",{signupEnabled:true});
+  if(portal.signupEnabled===false) return NextResponse.redirect(new URL("/signup?error=paused",request.url),303);
+  const form=await request.formData();
   const name=String(form.get("name")||"").trim();
   const username=String(form.get("username")||"").trim();
   const password=String(form.get("password")||"");
@@ -19,7 +21,8 @@ export async function POST(request: Request) {
   if(!name || !/^[A-Za-z0-9_-]{3,40}$/.test(username) || password.length<10) {
     return NextResponse.redirect(new URL("/signup?error=invalid",request.url),303);
   }
-  const billingTerms=await getBillingTerms();\n  if(!(billingTerms as any[]).some((term)=>Number(term.months)===termMonths)) {
+  const billingTerms=await getBillingTerms();
+  if(!(billingTerms as any[]).some((term)=>Number(term.months)===termMonths)) {
     return NextResponse.redirect(new URL("/signup?error=term",request.url),303);
   }
 
