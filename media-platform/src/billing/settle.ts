@@ -1,4 +1,4 @@
-import { getMediaDb } from "../lib/postgres";
+import { getMediaDb, getMediaEnv } from "../lib/postgres";
 
 function addMonths(date:Date,months:number){
   const next=new Date(date);
@@ -70,5 +70,24 @@ export async function settleInvoice(input:{
   );
 
   await db.batch(statements);
+
+  const env=getMediaEnv();
+  if(env.BUCKET_DIRECTORY){
+    const tenant=await db.prepare("SELECT slug FROM media_tenants WHERE id=? LIMIT 1").bind(String(invoice.tenant_id)).first<any>();
+    const buckets=await db.prepare("SELECT id,slug,pool_key,prefix,cache_control FROM media_buckets WHERE tenant_id=?").bind(String(invoice.tenant_id)).all<any>();
+    if(tenant){
+      for(const bucket of buckets.results||[]){
+        await env.BUCKET_DIRECTORY.put(String(tenant.slug)+"/"+String(bucket.slug),JSON.stringify({
+          tenantId:String(invoice.tenant_id),
+          bucketId:String(bucket.id),
+          poolKey:String(bucket.pool_key),
+          prefix:String(bucket.prefix),
+          cacheControl:String(bucket.cache_control),
+          deliveryBlocked:false,
+        }));
+      }
+    }
+  }
+
   return {ok:true,alreadyPaid:false,tenantId:String(invoice.tenant_id),periodEnd,purchaseType};
 }
