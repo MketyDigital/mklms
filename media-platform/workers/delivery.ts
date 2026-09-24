@@ -48,7 +48,7 @@ export default {
 
     const range=request.headers.get("range");
     const canCache=request.method==="GET" && !range;
-    const cache=caches.default;
+    const cache=(caches as CacheStorage & { default: Cache }).default;
     const cacheKey=new Request(url.toString(),{method:"GET"});
 
     if(canCache){
@@ -81,9 +81,11 @@ export default {
       if(!object) return new Response("Not Found",{status:404});
       const headers=objectHeaders(object);
       headers.set("Cache-Control",route.cacheControl||"public, max-age=86400, s-maxage=31536000, stale-while-revalidate=86400");
-      if(range && object.range){
-        headers.set("content-range","bytes "+object.range.offset+"-"+(object.range.offset+object.range.length-1)+"/"+object.size);
-        headers.set("content-length",String(object.range.length));
+      if(range && object.range && "offset" in object.range && "length" in object.range){
+        const offset=object.range.offset;
+        const length=object.range.length;
+        headers.set("content-range","bytes "+offset+"-"+(offset+length-1)+"/"+object.size);
+        headers.set("content-length",String(length));
         response=new Response(request.method==="HEAD"?null:object.body,{status:206,headers});
       }else{
         headers.set("content-length",String(object.size));
