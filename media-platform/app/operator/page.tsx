@@ -36,7 +36,10 @@ export default async function OperatorPage(){
   const runtime=getMediaEnv() as any;
   const integrationStatus={
     nowpayments:Boolean(runtime.NOWPAYMENTS_API_KEY&&runtime.NOWPAYMENTS_IPN_SECRET),
-    telegram:Boolean(runtime.MEDIA_TELEGRAM_BOT_TOKEN&&runtime.MEDIA_TELEGRAM_CHAT_ID),
+    telegramToken:Boolean(runtime.MEDIA_TELEGRAM_BOT_TOKEN),
+    telegramUsername:String(runtime.MEDIA_TELEGRAM_BOT_USERNAME||""),
+    telegramGroup:Boolean(runtime.MEDIA_TELEGRAM_CHAT_ID),
+    telegramOperators:String(runtime.MEDIA_TELEGRAM_OPERATOR_IDS||"").split(",").filter(Boolean).length,
   };
 
   return <main className="wrap">
@@ -44,8 +47,12 @@ export default async function OperatorPage(){
 
     <section className="card"><h2>Integrations</h2>
       <p>NOWPayments: <strong>{integrationStatus.nowpayments?"Configured":"Not configured"}</strong></p>
-      <p>Telegram operator bot: <strong>{integrationStatus.telegram?"Configured":"Not configured"}</strong></p>
-      <p className="muted">Missing integrations stay disabled; manual operator payment approval remains available.</p>
+      <p>Telegram bot token: <strong>{integrationStatus.telegramToken?"Configured":"Not configured"}</strong></p>
+      <p>Telegram bot username: <strong>{integrationStatus.telegramUsername?("@"+integrationStatus.telegramUsername):"Not discovered yet"}</strong></p>
+      <p>Telegram operator group: <strong>{integrationStatus.telegramGroup?"Configured":"Not configured"}</strong></p>
+      <p>Authorized Telegram operators: <strong>{integrationStatus.telegramOperators}</strong></p>
+      <p className="muted">Setup order: add bot token → deploy → DM /whoami and send /groupid in your private operator group → save those IDs as GitHub secrets → deploy again.</p>
+      <p className="muted">Missing Telegram integration does not block NOWPayments or manual web approval.</p>
     </section>
 
     <section className="card" style={{marginTop:18}}><h2>Portal content</h2>
