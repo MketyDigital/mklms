@@ -88,7 +88,7 @@ export function configuredProviders(env: MediaProviderEnv): ProviderDefinition[]
       id: "r2-global",
       label: "R2 Global",
       kind: r2Binding ? "r2-binding" : "s3-compatible",
-      status: on(env.MEDIA_R2_ENABLED) && (r2Binding || r2S3) ? "active" : "unconfigured",
+      status: on(env.MEDIA_R2_ENABLED) && r2S3 ? "active" : "unconfigured",
       platformManaged: true,
     },
     {
