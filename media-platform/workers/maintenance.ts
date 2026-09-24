@@ -77,9 +77,14 @@ async function ensureRenewalInvoice(env:Env,tenant:any,terms:any[]){
   const monthly=Number(tenant.custom_monthly_usd??tenant.monthly_usd);
   const amount=Math.round(monthly*months*(1-Number(term.discountPercent||0)/100)*100)/100;
   const reference="MKM-"+uid().replace(/-/g,"").slice(0,10).toUpperCase();
-  await env.MEDIA_DB.prepare(
-    "INSERT INTO media_invoices (id,tenant_id,reference,amount_usd,payment_method,status,due_at) VALUES (?,?,?,?,'invoice','pending',?)"
-  ).bind(uid(),String(tenant.id),reference,amount,String(tenant.current_period_end)).run();
+  const invoiceId=uid();
+  await env.MEDIA_DB.batch([
+    env.MEDIA_DB.prepare(
+      "INSERT INTO media_invoices (id,tenant_id,reference,amount_usd,payment_method,status,due_at) VALUES (?,?,?,?,'invoice','pending',?)"
+    ).bind(invoiceId,String(tenant.id),reference,amount,String(tenant.current_period_end)),
+    env.MEDIA_DB.prepare("INSERT INTO media_purchases (invoice_id,tenant_id,purchase_type) VALUES (?,?,'subscription')")
+      .bind(invoiceId,String(tenant.id)),
+  ]);
 }
 
 async function syncTenantRouteBlock(env:Env,tenantId:string,blocked:boolean){
