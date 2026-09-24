@@ -10,20 +10,41 @@ function gb(bytes:any){return bytes==null?"":(Number(bytes)/1024**3).toFixed(0);
 export default async function OperatorPage(){
   if(!(await isOperator())) redirect("/operator/login");
   const db=getMediaDb();
-  const [plansResult,tenantsResult,poolsResult,terms,bank,enforcement]=await Promise.all([
+  const [plansResult,tenantsResult,poolsResult,terms,bank,enforcement,portal]=await Promise.all([
     db.prepare("SELECT * FROM media_plans ORDER BY display_order").all<any>(),
     db.prepare("SELECT t.id,t.slug,t.name,t.status,t.plan_code,c.* FROM media_tenants t LEFT JOIN media_tenant_commercial_terms c ON c.tenant_id=t.id ORDER BY t.created_at DESC LIMIT 200").all<any>(),
     db.prepare("SELECT * FROM media_provider_pools ORDER BY priority").all<any>(),
     getBillingTerms(),
     getSetting<any>("bank_transfer",{enabled:false,currency:"NGN",usdToLocalRate:0,roundTo:100,bankName:"",accountName:"",accountNumber:"",instructions:""}),
     getSetting<any>("enforcement",{graceDays:3,suspendDeliveryAfterGrace:true}),
+    getSetting<any>("portal_content",{
+      heroTitle:"Upload once. Get fast links. Keep your media simple.",
+      heroSubtitle:"Managed image, video and file storage with cached delivery, straightforward limits and one clean dashboard.",
+      enterpriseTitle:"Need custom limits?",
+      enterpriseText:"Enterprise accounts can use any exact limits, billing terms, regional placement or dedicated infrastructure while keeping the same simple Mkety Media dashboard.",
+      maintenanceNotice:"",
+      signupEnabled:true,
+      planBenefits:["Images, video and files","Cached Mkety delivery links","Usage and limit dashboard","Secure direct uploads","Preview, copy links and delete","Payment and renewal controls"],
+    }),
   ]);
   const configured=new Map(configuredProviders(getProviderEnv()).map((p)=>[p.id,p.status]));
 
   return <main className="wrap">
     <nav className="nav"><div className="brand">Mkety Media Operator</div><form method="post" action="/api/operator/logout"><button className="btn secondary">Logout</button></form></nav>
 
-    <section className="card"><h2>Billing terms</h2>
+    <section className="card"><h2>Portal content</h2>
+      <form method="post" action="/api/operator/settings"><input type="hidden" name="kind" value="portal"/>
+      <label>Hero title<input name="heroTitle" defaultValue={portal.heroTitle||""}/></label>
+      <label>Hero subtitle<input name="heroSubtitle" defaultValue={portal.heroSubtitle||""}/></label>
+      <label>Enterprise title<input name="enterpriseTitle" defaultValue={portal.enterpriseTitle||""}/></label>
+      <label>Enterprise text<input name="enterpriseText" defaultValue={portal.enterpriseText||""}/></label>
+      <label>Maintenance notice<input name="maintenanceNotice" defaultValue={portal.maintenanceNotice||""}/></label>
+      <label><input type="checkbox" name="signupEnabled" defaultChecked={portal.signupEnabled!==false}/> Public signup enabled</label>
+      <label>Benefits shown on every plan<textarea name="planBenefits" rows={8} defaultValue={(portal.planBenefits||[]).join("\n")} style={{width:"100%",padding:12}}/></label>
+      <button className="btn">Save portal content</button></form>
+    </section>
+
+    <section className="card" style={{marginTop:18}}><h2>Billing terms</h2>
       <form method="post" action="/api/operator/settings"><input type="hidden" name="kind" value="billing_terms"/><div className="grid stats">
       {[3,6,12].map((m)=>{const t=(terms as any[]).find((x)=>Number(x.months)===m);return <label key={m}>{m} months discount %<input name={"discount"+m} type="number" step="0.1" min="0" max="20" defaultValue={Number(t?.discountPercent||0)}/></label>})}
       </div><button className="btn">Save discounts</button></form>
