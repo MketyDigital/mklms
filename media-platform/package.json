@@ -32,6 +32,6 @@
     "@types/react-dom": "^19",
     "typescript": "^5",
     "wrangler": "4.127.1",
-    "@cloudflare/workers-types": "^4.20260924.0"
+    "@cloudflare/workers-types": "5.20260924.1"
   }
 }
