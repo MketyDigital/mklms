@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "../../../src/lib/current-user";
 import { getTenantState } from "../../../src/lib/tenant-state";
-import { getMediaDb, getMediaEnv } from "../../../src/lib/postgres";
+import { getMediaDb, getMediaEnv } from "../../../src/lib/postgres";\nimport { configuredProviders } from "../../../src/config/providers";\nimport { getProviderEnv } from "../../../src/lib/provider-env";
 
 function slugify(input:string){
   return input.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,50);
@@ -22,7 +22,13 @@ export async function POST(request:Request){
 
   const db=getMediaDb();
   const id=crypto.randomUUID();
-  const poolKey=String((getMediaEnv() as any).MEDIA_DEFAULT_POOL_KEY || "r2-global");
+  let poolKey="r2-global";
+  if(state.enterpriseFeatures && state.preferredPoolKey){
+    const requested=String(state.preferredPoolKey);
+    const pool=await db.prepare("SELECT available_to_customers FROM media_provider_pools WHERE pool_key=? LIMIT 1").bind(requested).first<any>();
+    const provider=configuredProviders(getProviderEnv()).find((item)=>item.id===requested);
+    if(pool?.available_to_customers && provider?.status==="active") poolKey=requested;
+  }
   const prefix="tenants/"+user.tenantId+"/buckets/"+id+"/";
   const cacheControl="public, max-age=86400, s-maxage=31536000, stale-while-revalidate=86400";
 
