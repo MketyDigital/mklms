@@ -2,6 +2,8 @@ import Link from "next/link";
 import { getPublicPlans } from "../src/lib/plans-db";
 import { getBillingTerms,getSetting } from "../src/lib/operator-settings";
 
+export const dynamic = "force-dynamic";
+
 function gb(bytes:number){return Math.round(Number(bytes)/1024**3);}
 function termPrice(monthlyUsd:number,months:number,discountPercent:number){return Math.round(monthlyUsd*months*(1-discountPercent/100)*100)/100;}
 
