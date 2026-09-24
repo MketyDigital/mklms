@@ -271,3 +271,19 @@ VALUES
 ('delivery-100','Extra 100 GB Delivery',3,0,107374182400,0,1,20),
 ('requests-1m','Extra 1 Million Requests',2,0,0,1000000,1,30),
 ('boost-pack','Extra Capacity Pack',6,10737418240,107374182400,1000000,1,40);
+
+CREATE TABLE IF NOT EXISTS media_enterprise_requests (
+  id TEXT PRIMARY KEY,
+  company_name TEXT NOT NULL,
+  contact_name TEXT NOT NULL,
+  telegram_contact TEXT NOT NULL,
+  requirements TEXT,
+  status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','contacted','provisioned','declined')),
+  tenant_id TEXT REFERENCES media_tenants(id),
+  operator_notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE media_quota_reservations ADD COLUMN provider_upload_id TEXT;
+ALTER TABLE media_quota_reservations ADD COLUMN storage_key TEXT;
