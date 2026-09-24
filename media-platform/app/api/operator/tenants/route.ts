@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { isOperator } from "../../../../src/auth/operator";
-import { getMediaDb } from "../../../../src/lib/postgres";
+import { getMediaDb, getMediaEnv } from "../../../../src/lib/postgres";
 
 function gb(value:FormDataEntryValue|null){
   const n=Number(value||0);
@@ -15,7 +15,7 @@ export async function POST(request:Request){
   const requestedSlug=String(form.get("slug")||"").toLowerCase().trim();
   if(!/^[a-z0-9][a-z0-9-]{1,62}$/.test(requestedSlug)) return NextResponse.redirect(new URL("/operator?error=slug",request.url),303);
   const db=getMediaDb();
-  const current=await db.prepare("SELECT plan_code FROM media_tenants WHERE id=? LIMIT 1").bind(tenantId).first<any>();
+  const current=await db.prepare("SELECT plan_code,slug FROM media_tenants WHERE id=? LIMIT 1").bind(tenantId).first<any>();
   if(!current) return NextResponse.redirect(new URL("/operator?error=tenant",request.url),303);
 
   const customPriceRaw=String(form.get("monthlyUsd")||"").trim();
@@ -23,6 +23,8 @@ export async function POST(request:Request){
   const term=Number(form.get("term")||1);
   const infrastructure=String(form.get("infrastructure")||"automatic");
   const enterprise=form.get("enterprise")==="on"?1:0;
+
+  const buckets=await db.prepare("SELECT id,slug,pool_key,prefix,cache_control FROM media_buckets WHERE tenant_id=?").bind(tenantId).all<any>();
 
   await db.batch([
     db.prepare("UPDATE media_tenants SET status=?,slug=? WHERE id=?").bind(status,requestedSlug,tenantId),
@@ -48,5 +50,22 @@ export async function POST(request:Request){
     db.prepare("INSERT INTO media_audit_log (id,tenant_id,actor_type,actor_id,action,target_type,target_id) VALUES (?,?,'operator','operator','tenant.commercial.updated','tenant',?)")
       .bind(crypto.randomUUID(),tenantId,tenantId),
   ]);
+  const directory=getMediaEnv().BUCKET_DIRECTORY;
+  if(directory && String(current.slug)!==requestedSlug){
+    for(const bucket of buckets.results||[]){
+      const oldKey=String(current.slug)+"/"+String(bucket.slug);
+      const newKey=requestedSlug+"/"+String(bucket.slug);
+      await directory.put(newKey,JSON.stringify({
+        tenantId,
+        bucketId:String(bucket.id),
+        poolKey:String(bucket.pool_key),
+        prefix:String(bucket.prefix),
+        cacheControl:String(bucket.cache_control),
+        deliveryBlocked:status==="suspended"||status==="closed",
+      }));
+      await directory.delete(oldKey);
+    }
+  }
+
   return NextResponse.redirect(new URL("/operator?saved=tenant",request.url),303);
 }
