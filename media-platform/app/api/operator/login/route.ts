@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createOperatorCookie } from "../../../../src/auth/operator";
 import { getMediaEnv } from "../../../../src/lib/postgres";
+import { allowRequest } from "../../../../src/auth/rate-limit";
 
 function equal(a:string,b:string){
   if(a.length!==b.length) return false;
@@ -8,6 +9,7 @@ function equal(a:string,b:string){
 }
 
 export async function POST(request:Request){
+  if(!(await allowRequest(request,"MEDIA_AUTH_RATE_LIMITER","operator-login"))) return new Response("Too many requests",{status:429});
   const form=await request.formData();
   const supplied=String(form.get("accessKey")||"");
   const expected=String((getMediaEnv() as any).MEDIA_OPERATOR_ACCESS_KEY||"");
