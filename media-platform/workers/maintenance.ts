@@ -134,9 +134,13 @@ async function enforce(env:Env){
       "SELECT COALESCE((SELECT SUM(size_bytes) FROM media_objects o JOIN media_buckets b ON b.id=o.bucket_id WHERE b.tenant_id=? AND o.status='ready'),0) AS storage_bytes,COALESCE((SELECT SUM(delivered_bytes) FROM media_usage_daily WHERE tenant_id=? AND usage_date>=date('now','start of month')),0) AS delivery_bytes,COALESCE((SELECT SUM(delivery_requests) FROM media_usage_daily WHERE tenant_id=? AND usage_date>=date('now','start of month')),0) AS delivery_requests"
     ).bind(String(tenant.id),String(tenant.id),String(tenant.id)).first<any>();
 
-    const storageLimit=Number(tenant.custom_storage_bytes??tenant.storage_bytes);
-    const deliveryLimit=Number(tenant.custom_delivery_bytes??tenant.delivery_bytes);
-    const requestLimit=Number(tenant.custom_delivery_requests??tenant.delivery_requests);
+    const addons=await env.MEDIA_DB.prepare(
+      "SELECT COALESCE(SUM(storage_bytes),0) AS storage_bytes,COALESCE(SUM(delivery_bytes),0) AS delivery_bytes,COALESCE(SUM(delivery_requests),0) AS delivery_requests FROM media_tenant_addons WHERE tenant_id=? AND starts_at<=datetime('now') AND ends_at>datetime('now')"
+    ).bind(String(tenant.id)).first<any>();
+
+    const storageLimit=Number(tenant.custom_storage_bytes??tenant.storage_bytes)+Number(addons?.storage_bytes??0);
+    const deliveryLimit=Number(tenant.custom_delivery_bytes??tenant.delivery_bytes)+Number(addons?.delivery_bytes??0);
+    const requestLimit=Number(tenant.custom_delivery_requests??tenant.delivery_requests)+Number(addons?.delivery_requests??0);
     const usageBlocked=Number(usage?.storage_bytes||0)>=storageLimit || Number(usage?.delivery_bytes||0)>=deliveryLimit || Number(usage?.delivery_requests||0)>=requestLimit;
 
     const deliveryBlocked=usageBlocked || paymentBlocked || accountStatus==="suspended";
