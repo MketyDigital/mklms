@@ -386,6 +386,15 @@ async function handleMessage(message:any){
       const invoice=await invoiceByReference(proofMatch[1]);
       if(await beginProofForInvoice(chatId,invoice)) return;
     }
+    if(payload==="enterprise"){
+      await setContactState(chatId,"support",null,"enterprise");
+      await telegram("sendMessage",{
+        chat_id:chatId,
+        text:"Tell us what you need for your Enterprise setup. Your message will go directly to the Mkety operator team.",
+        reply_markup:{force_reply:true,input_field_placeholder:"Describe your Enterprise requirements"},
+      });
+      return;
+    }
     await sendWelcome(chatId);
     return;
   }
