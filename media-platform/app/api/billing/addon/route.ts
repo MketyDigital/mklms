@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "../../../../src/lib/current-user";
 import { getTenantState } from "../../../../src/lib/tenant-state";
 import { getMediaDb } from "../../../../src/lib/postgres";
+import { allowMutation } from "../../../../src/lib/rate-limit";
 
 export async function POST(request:Request){
   const user=await getCurrentUser();
   if(!user) return NextResponse.redirect(new URL("/login",request.url),303);
+  if(!(await allowMutation(user.userId))) return NextResponse.redirect(new URL("/billing?error=rate",request.url),303);
 
   const state=await getTenantState(user.tenantId);
   if(state.status!=="active" || state.subscriptionStatus!=="active" || !state.renewalAt || new Date(state.renewalAt).getTime()<=Date.now()){
