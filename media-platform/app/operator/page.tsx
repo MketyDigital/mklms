@@ -10,10 +10,11 @@ function gb(bytes:any){return bytes==null?"":(Number(bytes)/1024**3).toFixed(0);
 export default async function OperatorPage(){
   if(!(await isOperator())) redirect("/operator/login");
   const db=getMediaDb();
-  const [plansResult,tenantsResult,poolsResult,terms,bank,enforcement,portal]=await Promise.all([
+  const [plansResult,tenantsResult,poolsResult,pendingInvoices,terms,bank,enforcement,portal]=await Promise.all([
     db.prepare("SELECT * FROM media_plans ORDER BY display_order").all<any>(),
     db.prepare("SELECT t.id,t.slug,t.name,t.status,t.plan_code,c.* FROM media_tenants t LEFT JOIN media_tenant_commercial_terms c ON c.tenant_id=t.id ORDER BY t.created_at DESC LIMIT 200").all<any>(),
     db.prepare("SELECT * FROM media_provider_pools ORDER BY priority").all<any>(),
+    db.prepare("SELECT i.id,i.reference,i.amount_usd,i.amount_local,i.local_currency,i.payment_method,i.created_at,t.name AS tenant_name FROM media_invoices i JOIN media_tenants t ON t.id=i.tenant_id WHERE i.status='pending' ORDER BY i.created_at DESC LIMIT 100").all<any>(),
     getBillingTerms(),
     getSetting<any>("bank_transfer",{enabled:false,currency:"NGN",usdToLocalRate:0,roundTo:100,bankName:"",accountName:"",accountNumber:"",instructions:""}),
     getSetting<any>("enforcement",{graceDays:3,suspendDeliveryAfterGrace:true}),
@@ -66,6 +67,11 @@ export default async function OperatorPage(){
       <label><input type="checkbox" name="suspendDelivery" defaultChecked={Boolean(enforcement.suspendDeliveryAfterGrace)}/> Suspend public delivery after grace</label>
       <button className="btn">Save enforcement</button></form>
     </section>
+
+    <h2 style={{marginTop:30}}>Pending payments</h2>
+    <div className="card"><table className="table"><thead><tr><th>Customer</th><th>Invoice</th><th>Amount</th><th>Method</th><th></th></tr></thead><tbody>
+      {(pendingInvoices.results||[]).map((i:any)=><tr key={i.id}><td>{i.tenant_name}</td><td>{i.reference}</td><td>{i.amount_local!=null?String(i.local_currency||"")+" "+Number(i.amount_local).toLocaleString():"$"+Number(i.amount_usd).toFixed(2)}</td><td>{i.payment_method}</td><td><div className="toolbar"><form method="post" action="/api/operator/invoices"><input type="hidden" name="invoiceId" value={i.id}/><input type="hidden" name="action" value="approve"/><button className="btn">Approve</button></form><form method="post" action="/api/operator/invoices"><input type="hidden" name="invoiceId" value={i.id}/><input type="hidden" name="action" value="reject"/><button className="btn secondary">Reject</button></form></div></td></tr>)}
+    </tbody></table></div>
 
     <h2 style={{marginTop:30}}>Public plans</h2>
     <div className="grid">{(plansResult.results||[]).map((p:any)=><form className="card" method="post" action="/api/operator/plans" key={p.code}>
