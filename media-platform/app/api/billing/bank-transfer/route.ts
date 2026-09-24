@@ -27,15 +27,11 @@ export async function POST(request:Request){
     .bind(localAmount,currency,invoiceId).run();
 
   const cfg=telegramConfig();
-  if(cfg.token && cfg.chatId){
+  if(cfg.token&&cfg.chatId){
     const amountText=localAmount!=null?currency+" "+Number(localAmount).toLocaleString():"USD $"+Number(invoice.amount_usd).toFixed(2);
     await telegram("sendMessage",{
       chat_id:cfg.chatId,
-      text:"Mkety Media payment waiting\n\nCustomer: "+user.tenantName+"\nInvoice: "+String(invoice.reference)+"\nAmount: "+amountText+"\n\nVerify the bank credit before approving.",
-      reply_markup:{inline_keyboard:[
-        [{text:"✅ Approve",callback_data:"approve:"+invoiceId}],
-        [{text:"❌ Reject",callback_data:"reject:"+invoiceId}],
-      ]},
+      text:"🏦 Bank transfer initiated\n\nCustomer: "+user.tenantName+"\nInvoice: "+String(invoice.reference)+"\nAmount: "+amountText+"\n\nNo action is required yet. Approve/Reject controls will appear only after the customer submits payment proof through the Mkety Media bot.",
     }).catch((error)=>console.error(error));
   }
 
