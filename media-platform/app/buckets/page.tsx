@@ -7,6 +7,7 @@ import { getMediaDb } from "../../src/lib/postgres";
 export default async function BucketsPage(){
   const user=await getCurrentUser();
   if(!user) redirect("/login");
+  if(user.role==="billing") redirect("/dashboard");
   const state=await getTenantState(user.tenantId);
   if(state.status!=="active") redirect("/billing");
 
