@@ -463,6 +463,22 @@ Verified against current provider documentation:
 
 Still live-test each provider before marking that provider Healthy/Available in production.
 
+## Rate limiting
+
+Portal bindings:
+- `MEDIA_AUTH_RATE_LIMITER` — 10 calls/minute per identity key.
+- `MEDIA_MUTATION_RATE_LIMITER` — 120 calls/minute per authenticated user ID.
+
+Applied to:
+- login;
+- signup;
+- bucket creation;
+- upload signing;
+- plan-upgrade purchase creation;
+- add-on purchase creation.
+
+Cloudflare's Rate Limiting binding is permissive/eventually consistent, so it is abuse protection, not billing accounting.
+
 ## Important remaining launch work
 
 1. Obtain green CI/build.
@@ -504,10 +520,14 @@ Keep these rules:
 - do not offer free public storage;
 - require payment before uploads;
 - hard caps at launch;
+- self-service plan upgrades are prepaid and prorated for the remaining paid period;
+- self-service extra-capacity packs are prepaid, stackable, and expire at the current paid-period end;
+- successful upgrade/add-on settlement immediately restores delivery if the customer was blocked;
 - no provider-level credentials to customers;
 - no automatic non-R2 placement for normal accounts;
 - no unverified bank-payment activation;
 - quota reservation before upload;
+- identity-based Cloudflare rate limiting on login/signup and high-value mutations;
 - non-R2 pools only when economics are understood;
 - keep small multi-month discounts;
 - use operator-editable add-on packs instead of unbilled overage;
