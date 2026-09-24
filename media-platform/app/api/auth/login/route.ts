@@ -4,28 +4,22 @@ import { verifyPassword } from "../../../../src/auth/password";
 import { newSessionToken, sessionCookie, sessionTokenHash } from "../../../../src/auth/session";
 
 export async function POST(request: Request) {
-  const form = await request.formData();
-  const username = String(form.get("username") || "").trim();
-  const password = String(form.get("password") || "");
+  const form=await request.formData();
+  const username=String(form.get("username")||"").trim();
+  const password=String(form.get("password")||"");
+  const db=getMediaDb();
+  const user=await db.prepare("SELECT id,password_hash FROM media_users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first<any>();
 
-  const db = getMediaDb();
-  const result = await db.query(
-    "SELECT id,password_hash FROM media_users WHERE lower(username)=lower($1) AND status='active' LIMIT 1",
-    [username],
-  );
-  const user = result.rows[0];
-  if (!user || !user.password_hash || !(await verifyPassword(password, user.password_hash))) {
-    return NextResponse.redirect(new URL("/login?error=1", request.url), 303);
+  if(!user || !(await verifyPassword(password,String(user.password_hash)))) {
+    return NextResponse.redirect(new URL("/login?error=1",request.url),303);
   }
 
-  const token = newSessionToken();
-  const tokenHash = await sessionTokenHash(token);
-  await db.query(
-    "INSERT INTO media_sessions (token_hash,user_id,expires_at) VALUES ($1,$2,now()+interval '30 days')",
-    [tokenHash, user.id],
-  );
+  const token=newSessionToken();
+  const tokenHash=await sessionTokenHash(token);
+  const expiresAt=new Date(Date.now()+30*24*60*60*1000).toISOString();
+  await db.prepare("INSERT INTO media_sessions (token_hash,user_id,expires_at) VALUES (?,?,?)").bind(tokenHash,String(user.id),expiresAt).run();
 
-  const response = NextResponse.redirect(new URL("/dashboard", request.url), 303);
-  response.headers.set("Set-Cookie", sessionCookie(token));
+  const response=NextResponse.redirect(new URL("/dashboard",request.url),303);
+  response.headers.set("Set-Cookie",sessionCookie(token));
   return response;
 }
