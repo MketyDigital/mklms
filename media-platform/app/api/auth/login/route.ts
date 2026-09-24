@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import { getMediaDb } from "../../../../src/lib/postgres";
 import { verifyPassword } from "../../../../src/auth/password";
 import { newSessionToken, sessionCookie, sessionTokenHash } from "../../../../src/auth/session";
+import { allowRequest } from "../../../../src/auth/rate-limit";
 
 export async function POST(request: Request) {
+  if(!(await allowRequest(request,"MEDIA_AUTH_RATE_LIMITER","login"))) return new Response("Too many requests",{status:429});
   const form=await request.formData();
   const username=String(form.get("username")||"").trim();
   const password=String(form.get("password")||"");
