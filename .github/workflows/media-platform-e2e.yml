@@ -91,11 +91,12 @@ jobs:
           test -n "$REQUEST_ID"
 
           echo "3. Operator login and provision"
-          code=$(curl -sS -o /dev/null -c /tmp/op.cookies -w '%{http_code}' -X POST "$BASE_URL/api/operator/login"             --data-urlencode "accessKey=$MEDIA_OPERATOR_ACCESS_KEY")
-          test "$code" = "303"
+          curl -sS -D /tmp/op-login.headers -o /dev/null -c /tmp/op.cookies -X POST "$BASE_URL/api/operator/login"             --data-urlencode "accessKey=$MEDIA_OPERATOR_ACCESS_KEY"
+          OP_LOGIN_LOCATION=$(awk 'BEGIN{IGNORECASE=1} /^location:/{print $2}' /tmp/op-login.headers | tr -d '\r' | tail -n1)
+          echo "Operator login redirect: $OP_LOGIN_LOCATION"
+          test "$OP_LOGIN_LOCATION" = "$BASE_URL/operator"
 
-          code=$(curl -sS -D /tmp/provision.headers -o /dev/null -b /tmp/op.cookies -c /tmp/op.cookies -w '%{http_code}' -X POST "$BASE_URL/api/operator/enterprise"             --data-urlencode "requestId=$REQUEST_ID"             --data-urlencode "username=$USERNAME"             --data-urlencode "password=$PASSWORD"             --data-urlencode "slug=$SLUG"             --data-urlencode "monthlyUsd=1"             --data-urlencode "term=1"             --data-urlencode "storageGb=1"             --data-urlencode "deliveryGb=1"             --data-urlencode "requests=10000"             --data-urlencode "buckets=2"             --data-urlencode "seats=1"             --data-urlencode "maxObjectGb=1"             --data-urlencode "infrastructure=automatic"             --data-urlencode "preferredPoolKey=r2-global")
-          test "$code" = "303"
+          curl -sS -D /tmp/provision.headers -o /dev/null -b /tmp/op.cookies -c /tmp/op.cookies -X POST "$BASE_URL/api/operator/enterprise"             --data-urlencode "requestId=$REQUEST_ID"             --data-urlencode "username=$USERNAME"             --data-urlencode "password=$PASSWORD"             --data-urlencode "slug=$SLUG"             --data-urlencode "monthlyUsd=1"             --data-urlencode "term=1"             --data-urlencode "storageGb=1"             --data-urlencode "deliveryGb=1"             --data-urlencode "requests=10000"             --data-urlencode "buckets=2"             --data-urlencode "seats=1"             --data-urlencode "maxObjectGb=1"             --data-urlencode "infrastructure=automatic"             --data-urlencode "preferredPoolKey=r2-global")
           PROVISION_LOCATION=$(awk 'BEGIN{IGNORECASE=1} /^location:/{print $2}' /tmp/provision.headers | tr -d '\r' | tail -n1)
           echo "Enterprise provision redirect: $PROVISION_LOCATION"
           echo "$PROVISION_LOCATION" | grep -q '/operator?provisioned=1'
