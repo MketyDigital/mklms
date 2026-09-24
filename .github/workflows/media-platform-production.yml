@@ -220,10 +220,14 @@ jobs:
               exit 1
             fi
 
-            curl --silent --show-error --fail-with-body \
-              "https://api.telegram.org/bot$MEDIA_TELEGRAM_BOT_TOKEN/getWebhookInfo" \
-              >/tmp/tg-webhook-info.json
-            jq -e '.ok == true and .result.url == "https://media.mkety.com/api/telegram/webhook"' /tmp/tg-webhook-info.json >/dev/null
+            TG_INFO_STATUS=$(curl --silent --show-error \
+              --output /tmp/tg-webhook-info.json --write-out '%{http_code}' \
+              "https://api.telegram.org/bot$MEDIA_TELEGRAM_BOT_TOKEN/getWebhookInfo")
+            if [ "$TG_INFO_STATUS" != "200" ] || ! jq -e '.ok == true and .result.url == "https://media.mkety.com/api/telegram/webhook"' /tmp/tg-webhook-info.json >/dev/null; then
+              echo "Telegram getWebhookInfo verification failed:"
+              jq '{ok,description,error_code,result:{url:.result.url,last_error_message:.result.last_error_message,last_error_date:.result.last_error_date}}' /tmp/tg-webhook-info.json
+              exit 1
+            fi
 
             if [ -n "${MEDIA_TELEGRAM_CHAT_ID:-}" ]; then
               printf '%s' "$MEDIA_TELEGRAM_CHAT_ID" | grep -Eq '^-?[0-9]+$'
@@ -233,12 +237,16 @@ jobs:
             fi
 
             if [ -n "${MEDIA_TELEGRAM_CHAT_ID:-}" ] && [ -n "${MEDIA_TELEGRAM_OPERATOR_IDS:-}" ]; then
-              curl --silent --show-error --fail-with-body \
+              TG_GROUP_STATUS=$(curl --silent --show-error \
+                --output /tmp/tg-operator-test.json --write-out '%{http_code}' \
                 "https://api.telegram.org/bot$MEDIA_TELEGRAM_BOT_TOKEN/sendMessage" \
                 -H "Content-Type: application/json" \
-                --data "$(jq -nc --arg chat "$MEDIA_TELEGRAM_CHAT_ID" --arg username "$TELEGRAM_BOT_USERNAME" '{chat_id:$chat,text:("✅ Mkety Media bot connected\n\nBot: @"+$username+"\nWebhook: active\nOperator authorization: configured\n\nCustomers can now use support, Enterprise chat and payment-proof submission.")}')" \
-                >/tmp/tg-operator-test.json
-              jq -e '.ok == true' /tmp/tg-operator-test.json >/dev/null
+                --data "$(jq -nc --arg chat "$MEDIA_TELEGRAM_CHAT_ID" --arg username "$TELEGRAM_BOT_USERNAME" '{chat_id:$chat,text:("✅ Mkety Media bot connected\n\nBot: @"+$username+"\nWebhook: active\nOperator authorization: configured\n\nCustomers can now use support, Enterprise chat and payment-proof submission.")}')")
+              if [ "$TG_GROUP_STATUS" != "200" ] || ! jq -e '.ok == true' /tmp/tg-operator-test.json >/dev/null; then
+                echo "Telegram operator-group test failed:"
+                jq '{ok,description,error_code}' /tmp/tg-operator-test.json
+                exit 1
+              fi
             fi
           fi
 
