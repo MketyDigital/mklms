@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "../../../../src/lib/current-user";
 import { getMediaDb } from "../../../../src/lib/postgres";
 import { getSetting } from "../../../../src/lib/operator-settings";
-import { telegram,telegramConfig } from "../../../../src/billing/telegram";
+import { telegram,telegramConfig,telegramOperatorChatId } from "../../../../src/billing/telegram";
 
 export async function POST(request:Request){
   const user=await getCurrentUser();
@@ -27,10 +27,11 @@ export async function POST(request:Request){
     .bind(localAmount,currency,invoiceId).run();
 
   const cfg=telegramConfig();
-  if(cfg.token&&cfg.chatId){
+  const operatorChatId=await telegramOperatorChatId();
+  if(cfg.token&&operatorChatId){
     const amountText=localAmount!=null?currency+" "+Number(localAmount).toLocaleString():"USD $"+Number(invoice.amount_usd).toFixed(2);
     await telegram("sendMessage",{
-      chat_id:cfg.chatId,
+      chat_id:operatorChatId,
       text:"🏦 Bank transfer initiated\n\nCustomer: "+user.tenantName+"\nInvoice: "+String(invoice.reference)+"\nAmount: "+amountText+"\n\nNo action is required yet. Approve/Reject controls will appear only after the customer submits payment proof through the Mkety Media bot.",
     }).catch((error)=>console.error(error));
   }
