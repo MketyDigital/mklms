@@ -209,12 +209,16 @@ jobs:
           rm -f /tmp/media-portal-secrets.json
 
           if [ -n "${MEDIA_TELEGRAM_BOT_TOKEN:-}" ] && [ -n "$TELEGRAM_WEBHOOK_SECRET" ]; then
-            curl --silent --show-error --fail-with-body \
+            TG_WEBHOOK_STATUS=$(curl --silent --show-error \
+              --output /tmp/tg-webhook.json --write-out '%{http_code}' \
               "https://api.telegram.org/bot$MEDIA_TELEGRAM_BOT_TOKEN/setWebhook" \
               -H "Content-Type: application/json" \
-              --data "$(jq -nc --arg url 'https://media.mkety.com/api/telegram/webhook' --arg secret "$TELEGRAM_WEBHOOK_SECRET" '{url:$url,secret_token:$secret,drop_pending_updates:false,allowed_updates:["message","callback_query"]}')" \
-              >/tmp/tg-webhook.json
-            jq -e '.ok == true' /tmp/tg-webhook.json >/dev/null
+              --data "$(jq -nc --arg url 'https://media.mkety.com/api/telegram/webhook' --arg secret "$TELEGRAM_WEBHOOK_SECRET" '{url:$url,secret_token:$secret,drop_pending_updates:false,allowed_updates:["message","callback_query"]}')")
+            if [ "$TG_WEBHOOK_STATUS" != "200" ] || ! jq -e '.ok == true' /tmp/tg-webhook.json >/dev/null; then
+              echo "Telegram setWebhook failed:"
+              jq '{ok,description,error_code}' /tmp/tg-webhook.json
+              exit 1
+            fi
 
             curl --silent --show-error --fail-with-body \
               "https://api.telegram.org/bot$MEDIA_TELEGRAM_BOT_TOKEN/getWebhookInfo" \
