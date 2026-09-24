@@ -1,6 +1,7 @@
 interface Env {
   MEDIA_DB:D1Database;
   BUCKET_DIRECTORY:KVNamespace;
+  MEDIA_R2_BUCKET?:R2Bucket;
   CLOUDFLARE_ACCOUNT_ID?:string;
   CLOUDFLARE_API_TOKEN?:string;
 }
@@ -152,7 +153,20 @@ async function enforce(env:Env){
     }
   }
 
-  await env.MEDIA_DB.prepare("DELETE FROM media_quota_reservations WHERE committed_at IS NULL AND expires_at<datetime('now','-1 day')").run();
+  const expired=await env.MEDIA_DB.prepare(
+    "SELECT id,reservation_key,provider_upload_id,storage_key FROM media_quota_reservations WHERE committed_at IS NULL AND expires_at<datetime('now') LIMIT 200"
+  ).all<any>();
+  for(const row of expired.results||[]){
+    if(row.provider_upload_id&&row.storage_key&&env.MEDIA_R2_BUCKET){
+      try{
+        await env.MEDIA_R2_BUCKET.resumeMultipartUpload(String(row.storage_key),String(row.provider_upload_id)).abort();
+      }catch{}
+    }
+    await env.MEDIA_DB.batch([
+      env.MEDIA_DB.prepare("DELETE FROM media_objects WHERE id=? AND status='pending'").bind(String(row.reservation_key)),
+      env.MEDIA_DB.prepare("DELETE FROM media_quota_reservations WHERE id=? AND committed_at IS NULL").bind(String(row.id)),
+    ]);
+  }
   await env.MEDIA_DB.prepare("DELETE FROM media_sessions WHERE expires_at<datetime('now','-7 days')").run();
 }
 
