@@ -12,7 +12,7 @@ export async function POST(request:Request){
   if(!user) return NextResponse.redirect(new URL("/login",request.url),303);
 
   const state=await getTenantState(user.tenantId);
-  if(state.status!=="active") return NextResponse.redirect(new URL("/billing",request.url),303);
+  if(state.status!=="active" || state.subscriptionStatus!=="active") return NextResponse.redirect(new URL("/billing",request.url),303);
   if(state.bucketsUsed>=state.bucketLimit) return NextResponse.redirect(new URL("/buckets?error=limit",request.url),303);
 
   const form=await request.formData();
