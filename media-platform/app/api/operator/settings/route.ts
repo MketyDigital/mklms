@@ -20,6 +20,9 @@ export async function POST(request:Request){
   if(kind==="bank"){
     await setSetting("bank_transfer",{
       enabled:form.get("enabled")==="on",
+      currency:String(form.get("currency")||"NGN").toUpperCase(),
+      usdToLocalRate:Math.max(0,Number(form.get("usdToLocalRate")||0)),
+      roundTo:Math.max(1,Number(form.get("roundTo")||1)),
       bankName:String(form.get("bankName")||""),
       accountName:String(form.get("accountName")||""),
       accountNumber:String(form.get("accountNumber")||""),
