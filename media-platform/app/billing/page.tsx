@@ -62,7 +62,10 @@ export default async function BillingPage({searchParams}:{searchParams:Promise<R
         </div>
       )}
 
-      {invoice?.status==="rejected" && <div className="notice danger" style={{marginTop:18}}>That payment request was rejected. Contact Mkety support or start a new payment.</div>}
+      {invoice && ["rejected","expired","cancelled"].includes(String(invoice.status)) && <div className="notice danger" style={{marginTop:18}}>
+        <p>That payment request is no longer payable.</p>
+        <form method="post" action="/api/billing/retry"><button className="btn">Create a new payment</button></form>
+      </div>}
       {state.status==="active" && <div className="notice success" style={{marginTop:18}}>Your account is active.</div>}
     </main>
   );
