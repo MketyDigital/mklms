@@ -1,0 +1,47 @@
+name: Mkety Media one-time public launch
+
+on:
+  push:
+    branches:
+      - media-platform
+    paths:
+      - ".github/workflows/media-platform-launch.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  launch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      BASE_URL: https://media.mkety.com
+    steps:
+      - name: Enable public signup without overwriting portal content
+        shell: bash
+        run: |
+          set -euo pipefail
+          AUTH=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json")
+
+          curl -fsS             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database?per_page=100"             "${AUTH[@]}" >/tmp/d1-list.json
+          D1_ID=$(jq -r '.result[] | select(.name=="mkety-media") | (.uuid // .id)' /tmp/d1-list.json | head -n1)
+          test -n "$D1_ID" && test "$D1_ID" != "null"
+
+          SQL="UPDATE media_operator_settings SET value_json=json_set(value_json,'$.signupEnabled',json('true'),'$.maintenanceNotice',''),updated_at=datetime('now'),updated_by='launch-workflow' WHERE key='portal_content';"
+          jq -nc --arg sql "$SQL" '{sql:$sql}' >/tmp/query.json
+
+          curl -fsS --request POST             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database/$D1_ID/query"             "${AUTH[@]}" --data @/tmp/query.json >/tmp/result.json
+
+          jq -e '.success == true' /tmp/result.json >/dev/null
+
+      - name: Verify signup is live
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS "$BASE_URL/signup" >/tmp/signup.html
+          ! grep -q "Signups are currently paused" /tmp/signup.html
+          grep -q "Create your account" /tmp/signup.html
+          echo "Mkety Media public signup is live."
