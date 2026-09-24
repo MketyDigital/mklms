@@ -4,14 +4,17 @@ import { getTenantState } from "../../../src/lib/tenant-state";
 import { getMediaDb, getMediaEnv } from "../../../src/lib/postgres";
 import { configuredProviders } from "../../../src/config/providers";
 import { getProviderEnv } from "../../../src/lib/provider-env";
+import { allowRequest } from "../../../src/auth/rate-limit";
 
 function slugify(input:string){
   return input.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,50);
 }
 
 export async function POST(request:Request){
+  if(!(await allowRequest(request,"MEDIA_MUTATION_RATE_LIMITER","bucket-create"))) return new Response("Too many requests",{status:429});
   const user=await getCurrentUser();
   if(!user) return NextResponse.redirect(new URL("/login",request.url),303);
+  if(user.role==="billing") return new Response("Forbidden",{status:403});
 
   const state=await getTenantState(user.tenantId);
   if(state.status!=="active" || state.subscriptionStatus!=="active") return NextResponse.redirect(new URL("/billing",request.url),303);
