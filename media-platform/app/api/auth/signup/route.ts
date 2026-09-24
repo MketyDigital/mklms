@@ -2,14 +2,14 @@ import { NextResponse } from "next/server";
 import { getMediaDb } from "../../../../src/lib/postgres";
 import { hashPassword } from "../../../../src/auth/password";
 import { newSessionToken, sessionCookie, sessionTokenHash } from "../../../../src/auth/session";
-import { getBillingTerms, calculateTermPrice } from "../../../../src/lib/operator-settings";
+import { getBillingTerms, calculateTermPrice, getSetting } from "../../../../src/lib/operator-settings";
 
 function slugify(input: string) {
   return input.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,50);
 }
 
 export async function POST(request: Request) {
-  const form=await request.formData();
+  const portal=await getSetting<any>("portal_content",{signupEnabled:true});\n  if(portal.signupEnabled===false) return NextResponse.redirect(new URL("/signup?error=paused",request.url),303);\n  const form=await request.formData();
   const name=String(form.get("name")||"").trim();
   const username=String(form.get("username")||"").trim();
   const password=String(form.get("password")||"");
