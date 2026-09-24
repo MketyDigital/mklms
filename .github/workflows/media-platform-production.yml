@@ -120,19 +120,21 @@ jobs:
           set -euo pipefail
           npx tsc --noEmit
           npm run build
+          cp wrangler.jsonc wrangler.source.jsonc
+          cp wrangler.production.jsonc wrangler.jsonc
           npm run cf:build
-          npx wrangler deploy -c .generated/portal.jsonc --dry-run --outdir .generated/dry-portal
-          npx wrangler deploy -c .generated/assets.jsonc --dry-run --outdir .generated/dry-assets
-          npx wrangler deploy -c .generated/maintenance.jsonc --dry-run --outdir .generated/dry-maintenance
+          npx wrangler deploy -c wrangler.production.jsonc --dry-run --outdir .generated/dry-portal
+          npx wrangler deploy -c wrangler.delivery.production.jsonc --dry-run --outdir .generated/dry-assets
+          npx wrangler deploy -c wrangler.maintenance.production.jsonc --dry-run --outdir .generated/dry-maintenance
 
       - name: Apply D1 schema
-        run: npx wrangler d1 execute "$D1_NAME" --remote --file=schema.d1.sql --config .generated/portal.jsonc --yes
+        run: npx wrangler d1 execute "$D1_NAME" --remote --file=schema.d1.sql --config wrangler.production.jsonc --yes
 
       - name: Deploy public assets Worker
-        run: npx wrangler deploy -c .generated/assets.jsonc
+        run: npx wrangler deploy -c wrangler.delivery.production.jsonc
 
       - name: Deploy maintenance Worker
-        run: npx wrangler deploy -c .generated/maintenance.jsonc
+        run: npx wrangler deploy -c wrangler.maintenance.production.jsonc
 
       - name: Configure maintenance analytics credentials
         shell: bash
@@ -143,7 +145,7 @@ jobs:
           rm -f /tmp/media-maintenance-secrets.json
 
       - name: Deploy portal Worker
-        run: npx wrangler deploy -c .generated/portal.jsonc
+        run: npx wrangler deploy -c wrangler.production.jsonc
 
       - name: Configure portal runtime secrets
         shell: bash
