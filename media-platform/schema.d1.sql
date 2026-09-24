@@ -337,3 +337,23 @@ CREATE TABLE IF NOT EXISTS media_telegram_payment_proofs (
 );
 CREATE INDEX IF NOT EXISTS media_telegram_payment_proofs_invoice_idx
   ON media_telegram_payment_proofs(invoice_id, status, created_at);
+
+
+CREATE TABLE IF NOT EXISTS media_custom_domains (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES media_tenants(id) ON DELETE CASCADE,
+  hostname TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'requested'
+    CHECK (status IN ('requested','provisioning','pending_dns','active','failed','removed')),
+  cf_hostname_id TEXT,
+  ssl_status TEXT,
+  ownership_name TEXT,
+  ownership_type TEXT,
+  ownership_value TEXT,
+  cname_target TEXT NOT NULL DEFAULT 'assets.mkety.app',
+  last_error TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS media_custom_domains_tenant_idx
+  ON media_custom_domains(tenant_id,status,created_at);
