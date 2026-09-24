@@ -1,5 +1,6 @@
 const encoder = new TextEncoder();
-const ITERATIONS = 310_000;
+const PBKDF2_ITERATIONS = 10_000;
+const CHAIN_ROUNDS = 12;
 
 function toBase64(bytes: ArrayBuffer | Uint8Array) {
   const input = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
@@ -13,45 +14,81 @@ function fromBase64(value: string) {
   return Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
 }
 
-export async function hashPassword(password: string) {
-  if (password.length < 10) throw new Error("Password must be at least 10 characters.");
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const material = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(password),
-    "PBKDF2",
-    false,
-    ["deriveBits"],
-  );
-  const derived = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", hash: "SHA-256", salt, iterations: ITERATIONS },
-    material,
-    256,
-  );
-  return `pbkdf2-sha256$${ITERATIONS}$${toBase64(salt)}$${toBase64(derived)}`;
+function roundSalt(base:Uint8Array,round:number){
+  const suffix=new Uint8Array(4);
+  new DataView(suffix.buffer).setUint32(0,round,false);
+  const combined=new Uint8Array(base.length+suffix.length);
+  combined.set(base,0);
+  combined.set(suffix,base.length);
+  return combined;
 }
 
-export async function verifyPassword(password: string, stored: string) {
-  const [scheme, iterationText, saltText, hashText] = stored.split("$");
-  if (scheme !== "pbkdf2-sha256") return false;
-  const iterations = Number(iterationText);
-  if (!Number.isInteger(iterations) || iterations < 100_000) return false;
-  const salt = fromBase64(saltText);
-  const material = await crypto.subtle.importKey(
+async function deriveRound(materialBytes:Uint8Array,salt:Uint8Array){
+  const material=await crypto.subtle.importKey(
     "raw",
-    encoder.encode(password),
+    materialBytes,
     "PBKDF2",
     false,
     ["deriveBits"],
   );
-  const derived = new Uint8Array(await crypto.subtle.deriveBits(
-    { name: "PBKDF2", hash: "SHA-256", salt, iterations },
+  return new Uint8Array(await crypto.subtle.deriveBits(
+    {name:"PBKDF2",hash:"SHA-256",salt,iterations:PBKDF2_ITERATIONS},
     material,
     256,
   ));
-  const expected = fromBase64(hashText);
-  if (derived.length !== expected.length) return false;
-  let diff = 0;
-  for (let i = 0; i < derived.length; i += 1) diff |= derived[i] ^ expected[i];
-  return diff === 0;
+}
+
+async function deriveChained(password:string,salt:Uint8Array,rounds:number){
+  let material=encoder.encode(password);
+  for(let round=0;round<rounds;round+=1){
+    material=await deriveRound(material,roundSalt(salt,round));
+  }
+  return material;
+}
+
+function constantTimeEqual(a:Uint8Array,b:Uint8Array){
+  if(a.length!==b.length) return false;
+  let diff=0;
+  for(let i=0;i<a.length;i+=1) diff|=a[i]^b[i];
+  return diff===0;
+}
+
+export async function hashPassword(password:string){
+  if(password.length<10) throw new Error("Password must be at least 10 characters.");
+  const salt=crypto.getRandomValues(new Uint8Array(16));
+  const derived=await deriveChained(password,salt,CHAIN_ROUNDS);
+  return `pbkdf2-chain-sha256$${CHAIN_ROUNDS}$${PBKDF2_ITERATIONS}$${toBase64(salt)}$${toBase64(derived)}`;
+}
+
+export async function verifyPassword(password:string,stored:string){
+  const parts=stored.split("$");
+
+  if(parts[0]==="pbkdf2-chain-sha256"){
+    const rounds=Number(parts[1]);
+    const iterations=Number(parts[2]);
+    if(!Number.isInteger(rounds)||rounds<1||rounds>64) return false;
+    if(iterations!==PBKDF2_ITERATIONS) return false;
+    const salt=fromBase64(parts[3]||"");
+    const expected=fromBase64(parts[4]||"");
+    const derived=await deriveChained(password,salt,rounds);
+    return constantTimeEqual(derived,expected);
+  }
+
+  // Backward compatibility for any early hashes created with a Worker-supported
+  // single PBKDF2 round. Values above the Workers runtime limit are rejected.
+  if(parts[0]==="pbkdf2-sha256"){
+    const iterations=Number(parts[1]);
+    if(!Number.isInteger(iterations)||iterations<1||iterations>PBKDF2_ITERATIONS) return false;
+    const salt=fromBase64(parts[2]||"");
+    const expected=fromBase64(parts[3]||"");
+    const material=await crypto.subtle.importKey("raw",encoder.encode(password),"PBKDF2",false,["deriveBits"]);
+    const derived=new Uint8Array(await crypto.subtle.deriveBits(
+      {name:"PBKDF2",hash:"SHA-256",salt,iterations},
+      material,
+      256,
+    ));
+    return constantTimeEqual(derived,expected);
+  }
+
+  return false;
 }
