@@ -222,7 +222,8 @@ jobs:
               MEDIA_ASSET_PURGE_SECRET:$purgeSecret,
               MEDIA_CF_API_TOKEN:$cfToken,
               MEDIA_SAAS_CNAME_TARGET:$saasTarget
-            }\n            + (if $saasZone=="" then {} else {MEDIA_SAAS_ZONE_ID:$saasZone} end)
+            }
+            + (if $saasZone=="" then {} else {MEDIA_SAAS_ZONE_ID:$saasZone} end)
             + (if ($npApi!="" and $npIpn!="") then {NOWPAYMENTS_API_KEY:$npApi,NOWPAYMENTS_IPN_SECRET:$npIpn} else {} end)
             + (if $tgToken=="" then {} else {MEDIA_TELEGRAM_BOT_TOKEN:$tgToken} end)
             + (if $tgChat=="" then {} else {MEDIA_TELEGRAM_CHAT_ID:$tgChat} end)
