@@ -7,6 +7,10 @@ export async function getTenantState(tenantId: string) {
   ).bind(tenantId).first<any>();
   if (!row) throw new Error("Tenant not found");
 
+  const addons = await db.prepare(
+    "SELECT COALESCE(SUM(storage_bytes),0) AS storage_bytes,COALESCE(SUM(delivery_bytes),0) AS delivery_bytes,COALESCE(SUM(delivery_requests),0) AS delivery_requests FROM media_tenant_addons WHERE tenant_id=? AND starts_at<=datetime('now') AND ends_at>datetime('now')"
+  ).bind(tenantId).first<any>();
+
   const usage = await db.prepare(
     "SELECT COALESCE((SELECT SUM(size_bytes) FROM media_objects o JOIN media_buckets b ON b.id=o.bucket_id WHERE b.tenant_id=? AND o.status='ready'),0) AS storage_bytes,COALESCE((SELECT SUM(delivered_bytes) FROM media_usage_daily WHERE tenant_id=? AND usage_date>=date('now','start of month')),0) AS delivery_bytes,COALESCE((SELECT SUM(delivery_requests) FROM media_usage_daily WHERE tenant_id=? AND usage_date>=date('now','start of month')),0) AS delivery_requests,COALESCE((SELECT COUNT(*) FROM media_buckets WHERE tenant_id=?),0) AS bucket_count"
   ).bind(tenantId,tenantId,tenantId,tenantId).first<any>();
@@ -19,9 +23,12 @@ export async function getTenantState(tenantId: string) {
     subscriptionStatus:String(row.subscription_status ?? "pending"),
     planName:String(row.display_name || row.plan_name),
     monthlyUsd:Number(row.custom_monthly_usd ?? row.monthly_usd),
-    storageLimitBytes:Number(row.custom_storage_bytes ?? row.storage_bytes),
-    deliveryLimitBytes:Number(row.custom_delivery_bytes ?? row.delivery_bytes),
-    requestLimit:Number(row.custom_delivery_requests ?? row.delivery_requests),
+    storageLimitBytes:Number(row.custom_storage_bytes ?? row.storage_bytes)+Number(addons?.storage_bytes??0),
+    deliveryLimitBytes:Number(row.custom_delivery_bytes ?? row.delivery_bytes)+Number(addons?.delivery_bytes??0),
+    requestLimit:Number(row.custom_delivery_requests ?? row.delivery_requests)+Number(addons?.delivery_requests??0),
+    addonStorageBytes:Number(addons?.storage_bytes??0),
+    addonDeliveryBytes:Number(addons?.delivery_bytes??0),
+    addonDeliveryRequests:Number(addons?.delivery_requests??0),
     bucketLimit:Number(row.custom_logical_buckets ?? row.logical_buckets),
     teamSeats:Number(row.custom_team_seats ?? row.team_seats),
     maxObjectBytes:Number(row.custom_max_object_bytes ?? row.max_object_bytes),
