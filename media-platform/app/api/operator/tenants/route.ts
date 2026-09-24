@@ -22,6 +22,8 @@ export async function POST(request:Request){
 
   const customPriceRaw=String(form.get("monthlyUsd")||"").trim();
   const displayName=String(form.get("displayName")||"").trim();
+  const customMonthly=customPriceRaw===""?null:Number(customPriceRaw);
+  const maxObjectBytes=gb(form.get("maxObjectGb"));
   const term=Number(form.get("term")||1);
   const infrastructure=String(form.get("infrastructure")||"automatic");
   const enterprise=form.get("enterprise")==="on"?1:0;
