@@ -14,7 +14,7 @@ export async function POST(request:Request){
   if(!user) return NextResponse.json({error:"Unauthorized"},{status:401});
 
   const state=await getTenantState(user.tenantId);
-  if(state.status!=="active") return NextResponse.json({error:"Account inactive"},{status:403});
+  if(state.status!=="active" || state.subscriptionStatus!=="active") return NextResponse.json({error:"Account inactive or payment due"},{status:403});
 
   const body=await request.json().catch(()=>null) as any;
   const bucketId=String(body?.bucketId||"");
