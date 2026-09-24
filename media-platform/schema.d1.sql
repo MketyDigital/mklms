@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS media_tenant_commercial_terms (
   overage_mode TEXT CHECK (overage_mode IN ('hard-cap','prepaid-wallet')),
   enterprise_features INTEGER NOT NULL DEFAULT 0,
   infrastructure_mode TEXT NOT NULL DEFAULT 'automatic' CHECK (infrastructure_mode IN ('automatic','regional','dedicated')),
+  preferred_pool_key TEXT,
   billing_term_months INTEGER NOT NULL DEFAULT 1 CHECK (billing_term_months IN (1,3,6,12)),
   custom_discount_percent REAL,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -124,6 +125,8 @@ CREATE TABLE IF NOT EXISTS media_invoices (
   tenant_id TEXT NOT NULL REFERENCES media_tenants(id) ON DELETE CASCADE,
   reference TEXT UNIQUE NOT NULL,
   amount_usd REAL NOT NULL,
+  amount_local REAL,
+  local_currency TEXT,
   payment_method TEXT NOT NULL CHECK (payment_method IN ('nowpayments','bank_transfer','invoice')),
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','paid','expired','rejected','cancelled')),
   provider_invoice_id TEXT,
@@ -222,7 +225,4 @@ VALUES
 ('wasabi','Mkety Storage','wasabi',NULL,0,60,'unknown'),
 ('digitalocean-spaces','Mkety Storage','digitalocean',NULL,0,60,'unknown');
 
-ALTER TABLE media_invoices ADD COLUMN amount_local REAL;
-ALTER TABLE media_invoices ADD COLUMN local_currency TEXT;
 
-ALTER TABLE media_tenant_commercial_terms ADD COLUMN preferred_pool_key TEXT;
