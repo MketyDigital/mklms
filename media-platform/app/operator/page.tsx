@@ -85,7 +85,7 @@ export default async function OperatorPage(){
       <label>Seats<input name="seats" type="number" defaultValue={t.team_seats??""} placeholder="blank = base"/></label>
       <label>Max object GB<input name="maxObjectGb" type="number" defaultValue={gb(t.max_object_bytes)} placeholder="blank = base"/></label>
       <label>Billing term<select name="term" defaultValue={t.billing_term_months||1}><option value="1">Monthly</option><option value="3">3 months</option><option value="6">6 months</option><option value="12">12 months</option></select></label>
-      <label>Infrastructure<select name="infrastructure" defaultValue={t.infrastructure_mode||"automatic"}><option value="automatic">Automatic</option><option value="regional">Regional</option><option value="dedicated">Dedicated</option></select></label>
+      <label>Infrastructure<select name="infrastructure" defaultValue={t.infrastructure_mode||"automatic"}><option value="automatic">Automatic</option><option value="regional">Regional</option><option value="dedicated">Dedicated</option></select></label>\n      <label>Internal storage pool<select name="preferredPoolKey" defaultValue={t.preferred_pool_key||"r2-global"}>{(poolsResult.results||[]).map((p:any)=><option key={p.pool_key} value={p.pool_key}>{p.label}</option>)}</select></label>
       <label>Overage<select name="overage" defaultValue={t.overage_mode||"hard-cap"}><option value="hard-cap">Hard cap</option><option value="prepaid-wallet">Prepaid wallet</option></select></label>
       <label><input type="checkbox" name="enterprise" defaultChecked={Boolean(t.enterprise_features)}/> Enterprise capabilities</label>
       <button className="btn">Save customer</button>
