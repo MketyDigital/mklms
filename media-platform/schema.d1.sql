@@ -164,6 +164,8 @@ CREATE TABLE IF NOT EXISTS media_quota_reservations (
   reserved_bytes INTEGER NOT NULL,
   expires_at TEXT NOT NULL,
   committed_at TEXT,
+  provider_upload_id TEXT,
+  storage_key TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -285,5 +287,3 @@ CREATE TABLE IF NOT EXISTS media_enterprise_requests (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-ALTER TABLE media_quota_reservations ADD COLUMN provider_upload_id TEXT;
-ALTER TABLE media_quota_reservations ADD COLUMN storage_key TEXT;
