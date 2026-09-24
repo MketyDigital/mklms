@@ -71,6 +71,16 @@ export class AzureBlobProvider implements StorageProvider {
     );
   }
 
+  async headObject(key: string) {
+    try {
+      const props = await this.container.getBlobClient(key).getProperties();
+      return { size: Number(props.contentLength ?? 0), etag: props.etag, contentType: props.contentType };
+    } catch (error: any) {
+      if (error?.statusCode === 404) return null;
+      throw error;
+    }
+  }
+
   async deleteObject(key: string) {
     await this.container.getBlockBlobClient(key).deleteIfExists();
   }
