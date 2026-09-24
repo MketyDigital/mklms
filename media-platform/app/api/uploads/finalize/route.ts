@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "../../../../src/lib/current-user";
 import { getMediaDb } from "../../../../src/lib/postgres";
+import { allowRequest } from "../../../../src/auth/rate-limit";
 
 export async function POST(request:Request){
+  if(!(await allowRequest(request,"MEDIA_MUTATION_RATE_LIMITER","upload-finalize"))) return NextResponse.json({error:"Too many requests"},{status:429});
   const user=await getCurrentUser();
   if(!user) return NextResponse.json({error:"Unauthorized"},{status:401});
+  if(user.role==="billing") return NextResponse.json({error:"Forbidden"},{status:403});
   const body=await request.json().catch(()=>null) as any;
   const reservationId=String(body?.reservationId||"");
   const objectId=String(body?.objectId||"");
