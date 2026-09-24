@@ -4,6 +4,7 @@ import { getMediaDb, getMediaEnv } from "../../src/lib/postgres";
 import { getBillingTerms,getSetting } from "../../src/lib/operator-settings";
 import { configuredProviders } from "../../src/config/providers";
 import { getProviderEnv } from "../../src/lib/provider-env";
+import { telegramOperatorChatId } from "../../src/billing/telegram";
 
 export const dynamic = "force-dynamic";
 
@@ -33,12 +34,13 @@ export default async function OperatorPage(){
     }),
   ]);
   const configured=new Map(configuredProviders(getProviderEnv()).map((p)=>[p.id,p.status]));
+  const boundTelegramChatId=await telegramOperatorChatId();
   const runtime=getMediaEnv() as any;
   const integrationStatus={
     nowpayments:Boolean(runtime.NOWPAYMENTS_API_KEY&&runtime.NOWPAYMENTS_IPN_SECRET),
     telegramToken:Boolean(runtime.MEDIA_TELEGRAM_BOT_TOKEN),
     telegramUsername:String(runtime.MEDIA_TELEGRAM_BOT_USERNAME||""),
-    telegramGroup:Boolean(runtime.MEDIA_TELEGRAM_CHAT_ID),
+    telegramGroup:Boolean(boundTelegramChatId),
     telegramOperators:String(runtime.MEDIA_TELEGRAM_OPERATOR_IDS||"").split(",").filter(Boolean).length,
   };
 
@@ -51,7 +53,7 @@ export default async function OperatorPage(){
       <p>Telegram bot username: <strong>{integrationStatus.telegramUsername?("@"+integrationStatus.telegramUsername):"Not discovered yet"}</strong></p>
       <p>Telegram operator group: <strong>{integrationStatus.telegramGroup?"Configured":"Not configured"}</strong></p>
       <p>Authorized Telegram operators: <strong>{integrationStatus.telegramOperators}</strong></p>
-      <p className="muted">Setup order: add bot token → deploy → DM /whoami and send /groupid in your private operator group → save those IDs as GitHub secrets → deploy again.</p>
+      <p className="muted">If the operator group is not connected, add the bot to the private group and send /bindgroup or /groupid from an authorized operator. The bot saves the real group ID automatically.</p>
       <p className="muted">Missing Telegram integration does not block NOWPayments or manual web approval.</p>
     </section>
 
