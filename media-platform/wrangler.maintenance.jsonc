@@ -1,0 +1,22 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "mkety-media-maintenance",
+  "main": "workers/maintenance.ts",
+  "compatibility_date": "2026-09-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "triggers": { "crons": ["*/10 * * * *"] },
+  "d1_databases": [
+    {
+      "binding": "MEDIA_DB",
+      "database_name": "mkety-media",
+      "database_id": "REPLACE_WITH_MEDIA_D1_ID"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "BUCKET_DIRECTORY",
+      "id": "REPLACE_WITH_MEDIA_BUCKET_DIRECTORY_KV_ID"
+    }
+  ]
+}
