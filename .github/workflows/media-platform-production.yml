@@ -180,6 +180,20 @@ jobs:
             jq -e '.ok == true' /tmp/tg-getme.json >/dev/null
             TELEGRAM_BOT_USERNAME=$(jq -r '.result.username // empty' /tmp/tg-getme.json)
             test -n "$TELEGRAM_BOT_USERNAME"
+
+            curl --silent --show-error --fail-with-body \
+              "https://api.telegram.org/bot$MEDIA_TELEGRAM_BOT_TOKEN/setMyCommands" \
+              -H "Content-Type: application/json" \
+              --data '{"commands":[{"command":"start","description":"Open Mkety Media support"},{"command":"pay","description":"Submit payment proof using an invoice reference"},{"command":"whoami","description":"Show your Telegram user ID"},{"command":"bindgroup","description":"Bind this group as the Mkety operator inbox"},{"command":"groupid","description":"Show or bind this operator group"}]}' \
+              >/tmp/tg-commands.json
+            jq -e '.ok == true' /tmp/tg-commands.json >/dev/null
+
+            curl --silent --show-error --fail-with-body \
+              "https://api.telegram.org/bot$MEDIA_TELEGRAM_BOT_TOKEN/setMyDescription" \
+              -H "Content-Type: application/json" \
+              --data '{"description":"Mkety Media Support — customer help, Enterprise enquiries and secure payment-proof submission."}' \
+              >/tmp/tg-description.json
+            jq -e '.ok == true' /tmp/tg-description.json >/dev/null
           fi
 
           jq -n \
