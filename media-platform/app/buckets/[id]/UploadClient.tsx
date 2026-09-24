@@ -8,7 +8,7 @@ export default function UploadClient({bucketId}:{bucketId:string}){
   async function upload(file:File){
     setStatus("Preparing upload...");
     const sign=await fetch("/api/uploads/sign",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({bucketId,name:file.name,size:file.size,contentType:file.type||"application/octet-stream"})});
-    const signed=await sign.json();
+    const signed:any=await sign.json();
     if(!sign.ok){setStatus(signed.error||"Upload could not start");return;}
 
     try{
@@ -20,14 +20,14 @@ export default function UploadClient({bucketId}:{bucketId:string}){
           const chunk=file.slice(offset,Math.min(file.size,offset+chunkSize));
           setStatus("Uploading "+file.name+" — part "+partNumber+"...");
           const part=await fetch("/api/uploads/r2/part?reservationId="+encodeURIComponent(signed.reservationId)+"&partNumber="+partNumber,{method:"PUT",body:chunk});
-          const payload=await part.json();
+          const payload:any=await part.json();
           if(!part.ok) throw new Error(payload.error||"Part upload failed");
           parts.push({partNumber:payload.partNumber,etag:payload.etag});
           partNumber+=1;
         }
 
         const complete=await fetch("/api/uploads/r2/complete",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({reservationId:signed.reservationId,objectId:signed.objectId,parts})});
-        const payload=await complete.json();
+        const payload:any=await complete.json();
         if(!complete.ok) throw new Error(payload.error||"Completion failed");
       }else{
         setStatus("Uploading "+file.name+"...");
