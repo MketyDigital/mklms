@@ -59,9 +59,22 @@ export default {
 
     if(request.method!=="GET" && request.method!=="HEAD") return new Response("Method Not Allowed",{status:405});
     const parts=url.pathname.split("/").filter(Boolean);
-    if(parts.length<3) return new Response("Not Found",{status:404});
+    const hostname=url.hostname.toLowerCase();
+    let tenantSlug:string;
+    let bucketSlug:string;
+    let keyParts:string[];
 
-    const [tenantSlug,bucketSlug,...keyParts]=parts;
+    if(hostname==="assets.mkety.app"){
+      if(parts.length<3) return new Response("Not Found",{status:404});
+      [tenantSlug,bucketSlug,...keyParts]=parts;
+    }else{
+      if(parts.length<2) return new Response("Not Found",{status:404});
+      const mapped=await env.BUCKET_DIRECTORY.get<{tenantSlug:string}>("domain/"+hostname,"json");
+      if(!mapped?.tenantSlug) return new Response("Not Found",{status:404});
+      tenantSlug=String(mapped.tenantSlug);
+      [bucketSlug,...keyParts]=parts;
+    }
+
     const objectKey=keyParts.join("/");
     const route=await env.BUCKET_DIRECTORY.get<BucketRoute>(tenantSlug+"/"+bucketSlug,"json");
     if(!route || route.deliveryBlocked) return new Response("Not Found",{status:404});
