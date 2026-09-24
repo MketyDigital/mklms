@@ -3,6 +3,7 @@ import { getMediaDb } from "../../../../src/lib/postgres";
 import { hashPassword } from "../../../../src/auth/password";
 import { newSessionToken, sessionCookie, sessionTokenHash } from "../../../../src/auth/session";
 import { getBillingTerms, calculateTermPrice, getSetting } from "../../../../src/lib/operator-settings";
+import { allowAuthAttempt } from "../../../../src/lib/rate-limit";
 import { allowRequest } from "../../../../src/auth/rate-limit";
 
 function slugify(input: string) {
@@ -17,6 +18,7 @@ export async function POST(request: Request) {
   const name=String(form.get("name")||"").trim();
   const username=String(form.get("username")||"").trim();
   const password=String(form.get("password")||"");
+  if(!(await allowAuthAttempt(username||"unknown"))) return NextResponse.redirect(new URL("/signup?error=rate",request.url),303);
   const planCode=String(form.get("plan")||"starter");
   const termMonths=Number(form.get("term")||1);
 
