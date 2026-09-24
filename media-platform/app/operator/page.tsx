@@ -10,8 +10,9 @@ function gb(bytes:any){return bytes==null?"":(Number(bytes)/1024**3).toFixed(0);
 export default async function OperatorPage(){
   if(!(await isOperator())) redirect("/operator/login");
   const db=getMediaDb();
-  const [plansResult,tenantsResult,poolsResult,pendingInvoices,terms,bank,enforcement,portal]=await Promise.all([
+  const [plansResult,addonsResult,tenantsResult,poolsResult,pendingInvoices,terms,bank,enforcement,portal]=await Promise.all([
     db.prepare("SELECT * FROM media_plans ORDER BY display_order").all<any>(),
+    db.prepare("SELECT * FROM media_addon_products ORDER BY display_order,price_usd").all<any>(),
     db.prepare("SELECT t.id,t.slug,t.name,t.status,t.plan_code,c.* FROM media_tenants t LEFT JOIN media_tenant_commercial_terms c ON c.tenant_id=t.id ORDER BY t.created_at DESC LIMIT 200").all<any>(),
     db.prepare("SELECT * FROM media_provider_pools ORDER BY priority").all<any>(),
     db.prepare("SELECT i.id,i.reference,i.amount_usd,i.amount_local,i.local_currency,i.payment_method,i.created_at,t.name AS tenant_name FROM media_invoices i JOIN media_tenants t ON t.id=i.tenant_id WHERE i.status='pending' ORDER BY i.created_at DESC LIMIT 100").all<any>(),
@@ -91,6 +92,18 @@ export default async function OperatorPage(){
       <label><input type="checkbox" name="dedicated" defaultChecked={Boolean(p.dedicated_storage_eligible)}/> Dedicated eligible</label>
       <label><input type="checkbox" name="active" defaultChecked={Boolean(p.active)}/> Public</label>
       <button className="btn">Save plan</button>
+    </form>)}</div>
+
+    <h2 style={{marginTop:30}}>Extra capacity packs</h2>
+    <div className="grid">{(addonsResult.results||[]).map((a:any)=><form className="card" method="post" action="/api/operator/addons" key={a.code}>
+      <input type="hidden" name="code" value={a.code}/><h3>{a.code}</h3>
+      <label>Name<input name="name" defaultValue={a.name}/></label>
+      <label>Price USD<input name="priceUsd" type="number" step="0.01" defaultValue={a.price_usd}/></label>
+      <label>Extra storage GB<input name="storageGb" type="number" step="1" defaultValue={gb(a.storage_bytes)}/></label>
+      <label>Extra delivery GB<input name="deliveryGb" type="number" step="1" defaultValue={gb(a.delivery_bytes)}/></label>
+      <label>Extra requests<input name="requests" type="number" step="1" defaultValue={a.delivery_requests}/></label>
+      <label><input type="checkbox" name="active" defaultChecked={Boolean(a.active)}/> Available to customers</label>
+      <button className="btn">Save pack</button>
     </form>)}</div>
 
     <h2 style={{marginTop:30}}>Storage pools</h2>
