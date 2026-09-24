@@ -222,3 +222,12 @@ CREATE TABLE IF NOT EXISTS media_manual_payment_nonces (
 );
 
 CREATE INDEX IF NOT EXISTS media_sessions_user_idx ON media_sessions(user_id);
+
+-- Permit pre-payment tenants and subscriptions.
+ALTER TABLE media_tenants DROP CONSTRAINT IF EXISTS media_tenants_status_check;
+ALTER TABLE media_tenants ADD CONSTRAINT media_tenants_status_check
+  CHECK (status IN ('pending','active','suspended','closed'));
+
+ALTER TABLE media_subscriptions DROP CONSTRAINT IF EXISTS media_subscriptions_status_check;
+ALTER TABLE media_subscriptions ADD CONSTRAINT media_subscriptions_status_check
+  CHECK (status IN ('pending','trial','active','past_due','manual','cancelled'));
