@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isOperator } from "../../../../src/auth/operator";
 import { getMediaDb,getMediaEnv } from "../../../../src/lib/postgres";
-import { createCustomHostname,getCustomHostname,customDomainTarget } from "../../../../src/domains/cloudflare-saas";
+import { createCustomHostname,getCustomHostname,customDomainTarget,ensureCustomHostnameWorkerRoute } from "../../../../src/domains/cloudflare-saas";
 
 function verification(result:any){
   const ownership=result?.ownership_verification||{};
@@ -33,8 +33,12 @@ export async function POST(request:Request){
       result=await getCustomHostname(String(row.cf_hostname_id));
       const v=verification(result);
       const active=String(result.status)==="active"&&String(result.ssl?.status)==="active";
-      await db.prepare("UPDATE media_custom_domains SET status=?,ssl_status=?,ownership_name=?,ownership_type=?,ownership_value=?,last_error=NULL,updated_at=datetime('now') WHERE id=?")
-        .bind(active?"active":"pending_dns",String(result.ssl?.status||"pending"),v.name,v.type,v.value,id).run();
+      let routeId=row.cf_route_id?String(row.cf_route_id):null;
+      if(active){
+        routeId=await ensureCustomHostnameWorkerRoute(String(row.hostname));
+      }
+      await db.prepare("UPDATE media_custom_domains SET status=?,ssl_status=?,ownership_name=?,ownership_type=?,ownership_value=?,cf_route_id=?,last_error=NULL,updated_at=datetime('now') WHERE id=?")
+        .bind(active?"active":"pending_dns",String(result.ssl?.status||"pending"),v.name,v.type,v.value,routeId,id).run();
       if(active&&getMediaEnv().BUCKET_DIRECTORY){
         await getMediaEnv().BUCKET_DIRECTORY!.put("domain/"+String(row.hostname).toLowerCase(),JSON.stringify({tenantSlug:String(row.tenant_slug),tenantId:String(row.tenant_id)}));
       }
