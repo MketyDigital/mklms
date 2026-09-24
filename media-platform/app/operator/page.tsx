@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { isOperator } from "../../src/auth/operator";
-import { getMediaDb } from "../../src/lib/postgres";
+import { getMediaDb, getMediaEnv } from "../../src/lib/postgres";
 import { getBillingTerms,getSetting } from "../../src/lib/operator-settings";
 import { configuredProviders } from "../../src/config/providers";
 import { getProviderEnv } from "../../src/lib/provider-env";
@@ -31,11 +31,22 @@ export default async function OperatorPage(){
     }),
   ]);
   const configured=new Map(configuredProviders(getProviderEnv()).map((p)=>[p.id,p.status]));
+  const runtime=getMediaEnv() as any;
+  const integrationStatus={
+    nowpayments:Boolean(runtime.NOWPAYMENTS_API_KEY&&runtime.NOWPAYMENTS_IPN_SECRET),
+    telegram:Boolean(runtime.MEDIA_TELEGRAM_BOT_TOKEN&&runtime.MEDIA_TELEGRAM_CHAT_ID),
+  };
 
   return <main className="wrap">
     <nav className="nav"><div className="brand">Mkety Media Operator</div><form method="post" action="/api/operator/logout"><button className="btn secondary">Logout</button></form></nav>
 
-    <section className="card"><h2>Portal content</h2>
+    <section className="card"><h2>Integrations</h2>
+      <p>NOWPayments: <strong>{integrationStatus.nowpayments?"Configured":"Not configured"}</strong></p>
+      <p>Telegram operator bot: <strong>{integrationStatus.telegram?"Configured":"Not configured"}</strong></p>
+      <p className="muted">Missing integrations stay disabled; manual operator payment approval remains available.</p>
+    </section>
+
+    <section className="card" style={{marginTop:18}}><h2>Portal content</h2>
       <form method="post" action="/api/operator/settings"><input type="hidden" name="kind" value="portal"/>
       <label>Hero title<input name="heroTitle" defaultValue={portal.heroTitle||""}/></label>
       <label>Hero subtitle<input name="heroSubtitle" defaultValue={portal.heroSubtitle||""}/></label>
