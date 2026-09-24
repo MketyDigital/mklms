@@ -15,7 +15,11 @@ export async function POST(request:Request){
   const amount=await calculateTermPrice(state.monthlyUsd,state.billingTermMonths);
   const reference="MKM-"+crypto.randomUUID().replace(/-/g,"").slice(0,10).toUpperCase();
   const dueAt=new Date(Date.now()+24*60*60*1000).toISOString();
-  await db.prepare("INSERT INTO media_invoices (id,tenant_id,reference,amount_usd,payment_method,status,due_at) VALUES (?,?,?,?,'invoice','pending',?)")
-    .bind(crypto.randomUUID(),user.tenantId,reference,amount,dueAt).run();
+  const invoiceId=crypto.randomUUID();
+  await db.batch([
+    db.prepare("INSERT INTO media_invoices (id,tenant_id,reference,amount_usd,payment_method,status,due_at) VALUES (?,?,?,?,'invoice','pending',?)")
+      .bind(invoiceId,user.tenantId,reference,amount,dueAt),
+    db.prepare("INSERT INTO media_purchases (invoice_id,tenant_id,purchase_type) VALUES (?,?,'subscription')").bind(invoiceId,user.tenantId),
+  ]);
   return NextResponse.redirect(new URL("/billing",request.url),303);
 }
