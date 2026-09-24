@@ -55,7 +55,8 @@ export async function POST(request:Request){
     const provider=createProvider(String(bucket.pool_key),getProviderEnv());
     const uploadUrl=await provider.createUploadUrl({key:storageKey,contentType,expiresInSeconds:900});
     const publicUrl="https://assets.mkety.app/"+encodeURIComponent(user.tenantSlug)+"/"+encodeURIComponent(String(bucket.slug))+"/"+objectKey;
-    const uploadHeaders=String(bucket.pool_key)==="azure-blob" ? {"x-ms-blob-type":"BlockBlob"} : {};\n    return NextResponse.json({uploadUrl,uploadHeaders,reservationId,objectId,objectKey,publicUrl});
+    const uploadHeaders=String(bucket.pool_key)==="azure-blob" ? {"x-ms-blob-type":"BlockBlob"} : {};
+    return NextResponse.json({uploadUrl,uploadHeaders,reservationId,objectId,objectKey,publicUrl});
   }catch(error){
     await db.batch([
       db.prepare("DELETE FROM media_quota_reservations WHERE id=?").bind(reservationId),
