@@ -6,6 +6,7 @@ export type MediaCloudflareEnv = {
   MEDIA_R2_BUCKET?: R2Bucket;
   MEDIA_AUTH_RATE_LIMITER?: RateLimit;
   MEDIA_MUTATION_RATE_LIMITER?: RateLimit;
+  MEDIA_ASSET_PURGE_SECRET?: string;
   [key: string]: unknown;
 };
 
