@@ -32,7 +32,7 @@ export default async function BillingPage({searchParams}:{searchParams:Promise<R
   const paymentStarted=Boolean(invoice&&(invoice.checkout_provider||String(invoice.payment_method||"invoice")!=="invoice"));
   const runtime=getMediaEnv() as any;
   const nowPaymentsConfigured=Boolean(runtime.NOWPAYMENTS_API_KEY&&runtime.NOWPAYMENTS_IPN_SECRET);
-  const flutterwaveConfigured=Boolean(runtime.FLUTTERWAVE_SECRET_KEY&&runtime.FLUTTERWAVE_SECRET_HASH);
+  const flutterwaveConfigured=Boolean((runtime.FLUTTERWAVE_CHECKOUT_BROKER_URL&&runtime.FLUTTERWAVE_CHECKOUT_BROKER_SECRET)||(runtime.FLUTTERWAVE_V3_SECRET_KEY&&runtime.FLUTTERWAVE_V3_SECRET_HASH));
   const koraConfigured=Boolean(runtime.KORA_SECRET_KEY);
   const telegramBotUsername=String(runtime.MEDIA_TELEGRAM_BOT_USERNAME||"");
   const currentPlan=await db.prepare("SELECT plan_code FROM media_tenants WHERE id=? LIMIT 1").bind(user.tenantId).first<any>();
