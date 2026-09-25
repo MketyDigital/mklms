@@ -1,4 +1,4 @@
-# deploy Cloudflare-compatible password KDF buffer fix
+# branding production polish deploy
 name: Deploy Mkety Media production
 
 on:
