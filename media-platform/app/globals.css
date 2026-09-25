@@ -27,6 +27,7 @@ a{color:var(--primary)}
 .nav>div:last-child{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .brand{display:inline-flex;align-items:center;gap:11px;font-size:20px;font-weight:700;letter-spacing:-.02em;color:var(--text);white-space:nowrap}
 .brand::before{content:"";width:116px;height:34px;display:block;background:url("https://mkety.com/mkety-logo.png") center/contain no-repeat;flex:none}
+.auth-brand{width:142px;height:42px;margin:0 auto 24px;background:url("https://mkety.com/mkety-logo.png") center/contain no-repeat}
 .nav a{color:var(--muted);text-decoration:none;margin-left:10px;font-weight:500}
 .nav a:hover{color:var(--primary)}
 .nav a.btn{color:#fff}
