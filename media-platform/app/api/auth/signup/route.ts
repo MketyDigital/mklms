@@ -16,13 +16,14 @@ export async function POST(request: Request) {
   if(portal.signupEnabled===false) return NextResponse.redirect(new URL("/signup?error=paused",request.url),303);
   const form=await request.formData();
   const name=String(form.get("name")||"").trim();
+  const email=String(form.get("email")||"").trim().toLowerCase();
   const username=String(form.get("username")||"").trim();
   const password=String(form.get("password")||"");
   if(!(await allowAuthAttempt(username||"unknown"))) return NextResponse.redirect(new URL("/signup?error=rate",request.url),303);
   const planCode=String(form.get("plan")||"starter");
   const termMonths=Number(form.get("term")||1);
 
-  if(!name || !/^[A-Za-z0-9_-]{3,40}$/.test(username) || password.length<10) {
+  if(!name || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || !/^[A-Za-z0-9_-]{3,40}$/.test(username) || password.length<10) {
     return NextResponse.redirect(new URL("/signup?error=invalid",request.url),303);
   }
   const billingTerms=await getBillingTerms();
@@ -52,7 +53,7 @@ export async function POST(request: Request) {
 
   await db.batch([
     db.prepare("INSERT INTO media_tenants (id,slug,name,status,plan_code) VALUES (?,?,?,'pending',?)").bind(tenantId,slug,name,planCode),
-    db.prepare("INSERT INTO media_users (id,username,password_hash,status) VALUES (?,?,?,'active')").bind(userId,username,passwordHash),
+    db.prepare("INSERT INTO media_users (id,username,email,password_hash,status) VALUES (?,?,?,?,'active')").bind(userId,username,email,passwordHash),
     db.prepare("INSERT INTO media_memberships (tenant_id,user_id,role) VALUES (?,?,'owner')").bind(tenantId,userId),
     db.prepare("INSERT INTO media_subscriptions (tenant_id,status) VALUES (?,'pending')").bind(tenantId),
     db.prepare("INSERT INTO media_tenant_commercial_terms (tenant_id,base_plan_code,billing_term_months) VALUES (?,?,?)").bind(tenantId,planCode,termMonths),
