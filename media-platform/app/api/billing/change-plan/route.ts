@@ -12,12 +12,12 @@ export async function POST(request:Request){
   const db=getMediaDb();
 
   const tenant=await db.prepare("SELECT status FROM media_tenants WHERE id=? LIMIT 1").bind(user.tenantId).first<any>();
-  const pendingInvoice=await db.prepare("SELECT id,payment_method FROM media_invoices WHERE tenant_id=? AND status='pending' ORDER BY created_at DESC LIMIT 1").bind(user.tenantId).first<any>();
+  const pendingInvoice=await db.prepare("SELECT id,payment_method,checkout_provider FROM media_invoices WHERE tenant_id=? AND status='pending' ORDER BY created_at DESC LIMIT 1").bind(user.tenantId).first<any>();
   const subscription=await db.prepare("SELECT status,current_period_end FROM media_subscriptions WHERE tenant_id=? LIMIT 1").bind(user.tenantId).first<any>();
   if(!tenant||String(tenant.status)!=="pending"||String(subscription?.status||"pending")!=="pending"){
     return NextResponse.redirect(new URL("/billing?error=already-active",request.url),303);
   }
-  if(pendingInvoice&&String(pendingInvoice.payment_method||"invoice")!=="invoice"){
+  if(pendingInvoice&&(pendingInvoice.checkout_provider||String(pendingInvoice.payment_method||"invoice")!=="invoice")){
     return NextResponse.redirect(new URL("/billing?error=payment-started",request.url),303);
   }
   const terms=await getBillingTerms();
