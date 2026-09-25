@@ -62,3 +62,14 @@ export async function verifyFlutterwaveV3Transaction(secretKey:string,transactio
   if(!response.ok||payload?.status!=="success"||!payload?.data) return null;
   return payload.data;
 }
+
+
+export async function verifyMketyPaymentAttestation(rawBody:string,signature:string,secret:string){
+  if(!signature||!secret) return false;
+  const key=await crypto.subtle.importKey("raw",encoder.encode(secret),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
+  const expected=base64(await crypto.subtle.sign("HMAC",key,encoder.encode(rawBody)));
+  if(expected.length!==signature.length) return false;
+  let diff=0;
+  for(let i=0;i<expected.length;i++) diff|=expected.charCodeAt(i)^signature.charCodeAt(i);
+  return diff===0;
+}
