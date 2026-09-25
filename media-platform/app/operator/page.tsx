@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { isOperator } from "../../src/auth/operator";
 import { getMediaDb, getMediaEnv } from "../../src/lib/postgres";
@@ -7,6 +8,8 @@ import { getProviderEnv } from "../../src/lib/provider-env";
 import { telegramOperatorChatId } from "../../src/billing/telegram";
 
 export const dynamic = "force-dynamic";
+
+export const metadata:Metadata={robots:{index:false,follow:false,nocache:true}};
 
 function gb(bytes:any){return bytes==null?"":(Number(bytes)/1024**3).toFixed(0);}
 
