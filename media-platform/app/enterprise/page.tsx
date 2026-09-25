@@ -1,8 +1,16 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { getSetting } from "../../src/lib/operator-settings";
 import { getMediaEnv } from "../../src/lib/postgres";
 
 export const dynamic = "force-dynamic";
+
+export const metadata:Metadata={
+  title:"Custom Plans & Enterprise Media Storage",
+  description:"Custom Mkety Media plans for businesses that need tailored storage, delivery, team access, branded domains, regional requirements or service commitments.",
+  alternates:{canonical:"/enterprise"},
+  openGraph:{url:"/enterprise",title:"Custom Plans & Enterprise | Mkety Media"},
+};
 
 export default async function EnterprisePage(){
   const portal=await getSetting<any>("portal_content",{
