@@ -25,13 +25,13 @@ export default async function OperatorPage(){
     getSetting<any>("bank_transfer",{enabled:false,currency:"NGN",usdToLocalRate:0,roundTo:100,bankName:"",accountName:"",accountNumber:"",instructions:""}),
     getSetting<any>("enforcement",{graceDays:3,suspendDeliveryAfterGrace:true}),
     getSetting<any>("portal_content",{
-      heroTitle:"Upload once. Get fast links. Keep your media simple.",
-      heroSubtitle:"Managed image, video and file storage with cached delivery, straightforward limits and one clean dashboard.",
-      enterpriseTitle:"Need custom limits?",
-      enterpriseText:"Enterprise accounts can use any exact limits, billing terms, regional placement or dedicated infrastructure while keeping the same simple Mkety Media dashboard.",
+      heroTitle:"Store your media. Use it anywhere.",
+      heroSubtitle:"Upload images, videos and files, organize them in one place, and use fast media links across your websites, apps and campaigns.",
+      enterpriseTitle:"Need a custom plan?",
+      enterpriseText:"Get a plan tailored to your storage, delivery, team, branding and business requirements.",
       maintenanceNotice:"",
       signupEnabled:true,
-      planBenefits:["Images, video and files","Cached Mkety delivery links","Usage and limit dashboard","Secure direct uploads","Preview, copy links and delete","Payment and renewal controls"],
+      planBenefits:["Images, videos and files","Fast media delivery","Usage dashboard","Large-file uploads","File previews and management","Flexible billing and renewals"],
     }),
   ]);
   const configured=new Map(configuredProviders(getProviderEnv()).map((p)=>[p.id,p.status]));
