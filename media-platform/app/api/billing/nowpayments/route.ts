@@ -32,7 +32,7 @@ export async function POST(request:Request){
   const payload=await response.json().catch(()=>null) as any;
   if(!response.ok || !payload?.invoice_url) return NextResponse.redirect(new URL("/billing?error=payments",request.url),303);
 
-  await db.prepare("UPDATE media_invoices SET payment_method='nowpayments',provider_invoice_id=?,updated_at=datetime('now') WHERE id=?")
+  await db.prepare("UPDATE media_invoices SET payment_method='nowpayments',checkout_provider='nowpayments',provider_invoice_id=?,updated_at=datetime('now') WHERE id=?")
     .bind(String(payload.id||payload.invoice_id||""),invoiceId).run();
   return NextResponse.redirect(String(payload.invoice_url),303);
 }
