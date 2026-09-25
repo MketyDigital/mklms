@@ -1,6 +1,14 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
 export const dynamic="force-dynamic";
+
+export const metadata:Metadata={
+  title:"Security, Reliability & Service Information",
+  description:"Review Mkety Media storage durability, encryption, availability, portability, custom-domain, retention and service information.",
+  alternates:{canonical:"/trust"},
+  openGraph:{url:"/trust",title:"Security & Reliability | Mkety Media"},
+};
 
 export default function TrustPage(){
   const rows=[
