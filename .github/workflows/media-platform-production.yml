@@ -9,6 +9,7 @@ on:
     branches:
       - media-platform
     paths:
+      - "media-platform/**"
       - ".github/workflows/media-platform-production.yml"
   workflow_dispatch:
 
@@ -33,6 +34,9 @@ jobs:
       MEDIA_OPERATOR_SESSION_SECRET: ${{ secrets.MKETY_ADMIN_SESSION_SECRET }}
       NOWPAYMENTS_API_KEY: ${{ secrets.NOWPAYMENTS_API_KEY }}
       NOWPAYMENTS_IPN_SECRET: ${{ secrets.NOWPAYMENTS_IPN_SECRET }}
+      FLUTTERWAVE_SECRET_KEY: ${{ secrets.FLUTTERWAVE_SECRET_KEY }}
+      FLUTTERWAVE_SECRET_HASH: ${{ secrets.FLUTTERWAVE_SECRET_HASH }}
+      KORA_SECRET_KEY: ${{ secrets.KORA_SECRET_KEY }}
       MEDIA_TELEGRAM_BOT_TOKEN: ${{ secrets.MEDIA_TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
       MEDIA_TELEGRAM_CHAT_ID: ${{ secrets.MEDIA_TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID }}
       MEDIA_TELEGRAM_OPERATOR_IDS: ${{ secrets.MEDIA_TELEGRAM_OPERATOR_IDS }}
@@ -140,6 +144,15 @@ jobs:
           if ! npx wrangler d1 execute "$D1_NAME" --remote --config wrangler.production.jsonc --command "SELECT cf_route_id FROM media_custom_domains LIMIT 0;" >/dev/null 2>&1; then
             npx wrangler d1 execute "$D1_NAME" --remote --config wrangler.production.jsonc --command "ALTER TABLE media_custom_domains ADD COLUMN cf_route_id TEXT;" --yes
           fi
+          if ! npx wrangler d1 execute "$D1_NAME" --remote --config wrangler.production.jsonc --command "SELECT email FROM media_users LIMIT 0;" >/dev/null 2>&1; then
+            npx wrangler d1 execute "$D1_NAME" --remote --config wrangler.production.jsonc --command "ALTER TABLE media_users ADD COLUMN email TEXT;" --yes
+          fi
+          if ! npx wrangler d1 execute "$D1_NAME" --remote --config wrangler.production.jsonc --command "SELECT checkout_provider FROM media_invoices LIMIT 0;" >/dev/null 2>&1; then
+            npx wrangler d1 execute "$D1_NAME" --remote --config wrangler.production.jsonc --command "ALTER TABLE media_invoices ADD COLUMN checkout_provider TEXT;" --yes
+          fi
+          if ! npx wrangler d1 execute "$D1_NAME" --remote --config wrangler.production.jsonc --command "SELECT checkout_provider FROM media_subscriptions LIMIT 0;" >/dev/null 2>&1; then
+            npx wrangler d1 execute "$D1_NAME" --remote --config wrangler.production.jsonc --command "ALTER TABLE media_subscriptions ADD COLUMN checkout_provider TEXT;" --yes
+          fi
           npx wrangler d1 execute "$D1_NAME" --remote --config wrangler.production.jsonc --command "UPDATE media_custom_domains SET cname_target='media-fallback.mkety.app' WHERE cname_target='assets.mkety.app';" --yes
 
       - name: Deploy public assets Worker
@@ -215,6 +228,9 @@ jobs:
             --arg operatorSession "$MEDIA_OPERATOR_SESSION_SECRET" \
             --arg npApi "${NOWPAYMENTS_API_KEY:-}" \
             --arg npIpn "${NOWPAYMENTS_IPN_SECRET:-}" \
+            --arg flwKey "${FLUTTERWAVE_SECRET_KEY:-}" \
+            --arg flwHash "${FLUTTERWAVE_SECRET_HASH:-}" \
+            --arg koraKey "${KORA_SECRET_KEY:-}" \
             --arg tgToken "${MEDIA_TELEGRAM_BOT_TOKEN:-}" \
             --arg tgChat "${MEDIA_TELEGRAM_CHAT_ID:-}" \
             --arg tgOps "${MEDIA_TELEGRAM_OPERATOR_IDS:-}" \
@@ -235,6 +251,8 @@ jobs:
             }
             + (if $saasZone=="" then {} else {MEDIA_SAAS_ZONE_ID:$saasZone} end)
             + (if ($npApi!="" and $npIpn!="") then {NOWPAYMENTS_API_KEY:$npApi,NOWPAYMENTS_IPN_SECRET:$npIpn} else {} end)
+            + (if ($flwKey!="" and $flwHash!="") then {FLUTTERWAVE_SECRET_KEY:$flwKey,FLUTTERWAVE_SECRET_HASH:$flwHash} else {} end)
+            + (if $koraKey=="" then {} else {KORA_SECRET_KEY:$koraKey} end)
             + (if $tgToken=="" then {} else {MEDIA_TELEGRAM_BOT_TOKEN:$tgToken} end)
             + (if $tgChat=="" then {} else {MEDIA_TELEGRAM_CHAT_ID:$tgChat} end)
             + (if $tgOps=="" then {} else {MEDIA_TELEGRAM_OPERATOR_IDS:$tgOps} end)
@@ -347,7 +365,12 @@ jobs:
             "https://media.mkety.com/" \
             "https://media.mkety.com/login" \
             "https://media.mkety.com/enterprise" \
-            "https://media.mkety.com/trust"; do
+            "https://media.mkety.com/trust" \
+            "https://media.mkety.com/robots.txt" \
+            "https://media.mkety.com/sitemap.xml" \
+            "https://media.mkety.com/manifest.webmanifest" \
+            "https://media.mkety.com/opengraph-image" \
+            "https://media.mkety.com/twitter-image"; do
             curl --silent --show-error --fail --retry 8 --retry-delay 5 "$url" >/dev/null
           done
           status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "https://assets.mkety.app/not-a-tenant/not-a-bucket/not-a-file")
