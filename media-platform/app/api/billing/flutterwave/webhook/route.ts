@@ -41,10 +41,12 @@ export async function POST(request:Request){
   }
 
   const db=getMediaDb();
-  const invoice=await db.prepare("SELECT id,amount_usd,status FROM media_invoices WHERE reference=? LIMIT 1").bind(reference).first<any>();
+  const invoice=await db.prepare("SELECT id,amount_usd,checkout_amount,checkout_currency,status FROM media_invoices WHERE reference=? LIMIT 1").bind(reference).first<any>();
   if(!invoice) return NextResponse.json({ok:false},{status:404});
-  if(String(verified.currency||"").toUpperCase()!=="USD") return NextResponse.json({ok:false,message:"currency mismatch"},{status:400});
-  if(Number(verified.amount||0)+0.01<Number(invoice.amount_usd)) return NextResponse.json({ok:false,message:"amount mismatch"},{status:400});
+  const expectedCurrency=String(invoice.checkout_currency||"USD").toUpperCase();
+  const expectedAmount=Number(invoice.checkout_amount??invoice.amount_usd);
+  if(String(verified.currency||"").toUpperCase()!==expectedCurrency) return NextResponse.json({ok:false,message:"currency mismatch"},{status:400});
+  if(Number(verified.amount||0)+0.01<expectedAmount) return NextResponse.json({ok:false,message:"amount mismatch"},{status:400});
 
   const existing=await db.prepare("SELECT id FROM media_payment_events WHERE provider='flutterwave' AND external_event_id=? LIMIT 1").bind(eventId).first();
   if(existing) return NextResponse.json({ok:true,settled:true,duplicate:true});
