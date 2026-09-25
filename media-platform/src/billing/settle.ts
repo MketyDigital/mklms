@@ -12,7 +12,7 @@ function addMonths(date:Date,months:number){
 
 export async function settleInvoice(input:{
   invoiceId:string;
-  provider:"nowpayments"|"bank_transfer";
+  provider:"nowpayments"|"bank_transfer"|"flutterwave"|"kora";
   paymentId:string;
   approvedBy?:string;
 }){
@@ -26,11 +26,12 @@ export async function settleInvoice(input:{
   if(invoice.status!=="pending") throw new Error("Invoice is not payable");
 
   const purchaseType=String(invoice.purchase_type||"subscription");
+  const legacyProvider=input.provider==="flutterwave"||input.provider==="kora"?"invoice":input.provider;
   const now=new Date();
   const nowIso=now.toISOString();
   const statements:any[]=[
-    db.prepare("UPDATE media_invoices SET status='paid',payment_method=?,provider_payment_id=?,paid_at=?,approved_by=?,updated_at=? WHERE id=? AND status='pending'")
-      .bind(input.provider,input.paymentId,nowIso,input.approvedBy||null,nowIso,input.invoiceId),
+    db.prepare("UPDATE media_invoices SET status='paid',payment_method=?,checkout_provider=?,provider_payment_id=?,paid_at=?,approved_by=?,updated_at=? WHERE id=? AND status='pending'")
+      .bind(legacyProvider,input.provider,input.paymentId,nowIso,input.approvedBy||null,nowIso,input.invoiceId),
   ];
 
   let periodEnd:string|null=invoice.current_period_end?String(invoice.current_period_end):null;
@@ -41,7 +42,7 @@ export async function settleInvoice(input:{
     statements.push(
       db.prepare("UPDATE media_tenants SET plan_code=?,status='active' WHERE id=?").bind(targetPlan,String(invoice.tenant_id)),
       db.prepare("UPDATE media_tenant_commercial_terms SET base_plan_code=?,display_name=NULL,monthly_usd=NULL,storage_bytes=NULL,delivery_bytes=NULL,delivery_requests=NULL,logical_buckets=NULL,team_seats=NULL,max_object_bytes=NULL,enterprise_features=0,infrastructure_mode='automatic',preferred_pool_key='r2-global',updated_at=datetime('now') WHERE tenant_id=?").bind(targetPlan,String(invoice.tenant_id)),
-      db.prepare("UPDATE media_subscriptions SET status='active',payment_provider=?,updated_at=? WHERE tenant_id=?").bind(input.provider,nowIso,String(invoice.tenant_id)),
+      db.prepare("UPDATE media_subscriptions SET status='active',payment_provider=?,checkout_provider=?,updated_at=? WHERE tenant_id=?").bind(legacyProvider,input.provider,nowIso,String(invoice.tenant_id)),
     );
   } else if(purchaseType==="addon"){
     const addonCode=String(invoice.addon_code||"");
@@ -59,8 +60,8 @@ export async function settleInvoice(input:{
     periodEnd=addMonths(base,months).toISOString();
     statements.push(
       db.prepare("UPDATE media_tenants SET status='active' WHERE id=?").bind(String(invoice.tenant_id)),
-      db.prepare("UPDATE media_subscriptions SET status='active',payment_provider=?,current_period_end=?,updated_at=? WHERE tenant_id=?")
-        .bind(input.provider,periodEnd,nowIso,String(invoice.tenant_id)),
+      db.prepare("UPDATE media_subscriptions SET status='active',payment_provider=?,checkout_provider=?,current_period_end=?,updated_at=? WHERE tenant_id=?")
+        .bind(legacyProvider,input.provider,periodEnd,nowIso,String(invoice.tenant_id)),
     );
   }
 
