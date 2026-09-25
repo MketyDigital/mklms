@@ -22,15 +22,17 @@ export async function getFlutterwaveV4AccessToken(clientId:string,clientSecret:s
   return cachedToken.value;
 }
 
-function hex(bytes:ArrayBuffer){
-  return [...new Uint8Array(bytes)].map((b)=>b.toString(16).padStart(2,"0")).join("");
+function base64(bytes:ArrayBuffer){
+  let binary="";
+  for(const b of new Uint8Array(bytes)) binary+=String.fromCharCode(b);
+  return btoa(binary);
 }
 
 export async function verifyFlutterwaveV4Webhook(rawBody:string,signature:string,secret:string){
   if(!signature||!secret) return false;
   const key=await crypto.subtle.importKey("raw",encoder.encode(secret),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
-  const expected=hex(await crypto.subtle.sign("HMAC",key,encoder.encode(rawBody)));
-  const normalized=signature.trim().toLowerCase();
+  const expected=base64(await crypto.subtle.sign("HMAC",key,encoder.encode(rawBody)));
+  const normalized=signature.trim();
   if(expected.length!==normalized.length) return false;
   let diff=0;
   for(let i=0;i<expected.length;i++) diff|=expected.charCodeAt(i)^normalized.charCodeAt(i);
