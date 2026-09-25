@@ -292,7 +292,7 @@ CREATE TABLE IF NOT EXISTS media_enterprise_requests (
 INSERT OR IGNORE INTO media_operator_settings (key,value_json)
 VALUES (
   'portal_content',
-  '{"heroTitle":"Upload once. Get fast links. Keep your media simple.","heroSubtitle":"Managed image, video and file storage with cached delivery, straightforward limits and one clean dashboard.","enterpriseTitle":"Need custom limits?","enterpriseText":"Tell us what you need and Mkety will prepare a private Enterprise offer.","maintenanceNotice":"Private launch: self-service signup opens after final platform verification.","signupEnabled":false,"planBenefits":["Images, video and files","Cached Mkety delivery links","Usage and limit dashboard","Secure direct uploads","Preview, copy links and delete","Payment and renewal controls"]}'
+  '{"heroTitle":"Store your media. Use it anywhere.","heroSubtitle":"Upload images, videos and files, organize them in one place, and use fast media links across your websites, apps and campaigns.","enterpriseTitle":"Need a custom plan?","enterpriseText":"Get a plan tailored to your storage, delivery, team, branding and business requirements.","maintenanceNotice":"","signupEnabled":true,"planBenefits":["Images, videos and files","Fast media delivery","Usage dashboard","Large-file uploads","File previews and management","Flexible billing and renewals"]}'
 );
 
 
