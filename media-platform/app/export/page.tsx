@@ -16,10 +16,10 @@ export default async function ExportPage(){
   return <main className="wrap">
     <nav className="nav"><div className="brand">Mkety Media</div><div><Link href="/dashboard">Dashboard</Link></div></nav>
     <section className="card">
-      <h1>Export Library</h1>
-      <p>Export your complete Mkety Media library without contacting support.</p>
+      <h1>Export your library</h1>
+      <p>Download a complete record of your media library or use a ready-made script to copy your files.</p>
       <p><strong>{Number(counts?.objects||0).toLocaleString()}</strong> files · <strong>{(Number(counts?.bytes||0)/1024**3).toFixed(2)} GB</strong></p>
-      <p className="muted">Exports preserve bucket names, object names, sizes, content types and permanent download URLs. Your files remain in Mkety until you delete them.</p>
+      <p className="muted">Exports preserve bucket names, object names, sizes, content types and permanent download URLs. Exporting does not remove or change your files.</p>
       {domain?.hostname&&<p className="muted">Active branded domain: https://{String(domain.hostname)}</p>}
       <div className="toolbar" style={{marginTop:18}}>
         <a className="btn" href="/api/export?format=json">Download JSON manifest</a>
@@ -28,8 +28,8 @@ export default async function ExportPage(){
         <a className="btn secondary" href="/api/export?format=ps1">Download Windows PowerShell script</a>
       </div>
       <div className="notice" style={{marginTop:18}}>
-        <strong>Leaving Mkety?</strong>
-        <p>Use the manifest or download script to copy the entire library to your own computer or another storage provider. Enterprise customers can also request a managed migration.</p>
+        <strong>Moving your media?</strong>
+        <p>Use a manifest or download script to copy your library to your computer or another service. Custom-plan customers can also request migration assistance.</p>
       </div>
     </section>
   </main>;
