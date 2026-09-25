@@ -1,4 +1,5 @@
 name: Verify Mkety Media operator key source
+# Recheck after Media dedicated key setup
 
 on:
   push:
