@@ -79,11 +79,27 @@ export default async function BillingPage({searchParams}:{searchParams:Promise<R
           ):(
             <>
               <div className="toolbar" style={{marginTop:18,alignItems:"flex-start"}}>
-                {flutterwaveConfigured&&<form method="post" action="/api/billing/flutterwave">
+                {flutterwaveConfigured&&<form method="post" action="/api/billing/flutterwave" className="form" style={{minWidth:260}}>
                   <input type="hidden" name="invoiceId" value={String(invoice.id)}/>
                   {user.email?<input type="hidden" name="email" value={user.email}/>:<input type="email" name="email" required placeholder="Email for payment receipt"/>}
-                  <button className="btn">Pay with card / local methods</button>
-                  <p className="muted">Powered by Flutterwave</p>
+                  <label>Payment currency
+                    <select name="currency" defaultValue="USD">
+                      <option value="USD">USD — US Dollar</option>
+                      <option value="NGN">NGN — Nigerian Naira</option>
+                      <option value="GHS">GHS — Ghanaian Cedi</option>
+                      <option value="KES">KES — Kenyan Shilling</option>
+                      <option value="GBP">GBP — British Pound</option>
+                      <option value="EUR">EUR — Euro</option>
+                      <option value="ZAR">ZAR — South African Rand</option>
+                      <option value="XAF">XAF — Central African CFA Franc</option>
+                      <option value="XOF">XOF — West African CFA Franc</option>
+                      <option value="UGX">UGX — Ugandan Shilling</option>
+                      <option value="RWF">RWF — Rwandan Franc</option>
+                      <option value="TZS">TZS — Tanzanian Shilling</option>
+                    </select>
+                  </label>
+                  <button className="btn">Continue with Flutterwave</button>
+                  <p className="muted">Your Mkety invoice remains {Number(invoice.amount_usd).toFixed(2)} USD. Flutterwave will show the payment methods available for the currency you choose.</p>
                 </form>}
                 {koraConfigured&&<form method="post" action="/api/billing/kora">
                   <input type="hidden" name="invoiceId" value={String(invoice.id)}/>
