@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser } from "../../src/lib/current-user";
@@ -5,6 +6,8 @@ import { getTenantState } from "../../src/lib/tenant-state";
 import { usageView } from "../../src/usage/view-model";
 
 export const dynamic = "force-dynamic";
+
+export const metadata:Metadata={robots:{index:false,follow:false,nocache:true}};
 
 function formatBytes(value:number) {
   if (value >= 1024 ** 3) return (value / 1024 ** 3).toFixed(1) + " GB";
