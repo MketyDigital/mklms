@@ -41,7 +41,7 @@ export default async function Home(){
     </section>
     <section><h2>Plans</h2><p className="muted">Monthly, 3-month, 6-month and yearly billing. Longer terms receive a small discount.</p>
       <div className="grid plans">{plans.map((plan:any)=><article className="card" key={plan.code}>
-        <h3>{plan.name}</h3><div className="price">{"$"}{Number(plan.monthly_usd).toFixed(0)}<span className="muted" style={{fontSize:14}}>/mo</span></div>
+        <h3>{plan.name}</h3><div className="price">{"$"}{Number(plan.monthly_usd).toFixed(2)}<span className="muted" style={{fontSize:14}}>/mo</span></div>
         <ul className="features">
           <li>{gb(plan.storage_bytes)} GB storage</li><li>{gb(plan.delivery_bytes)} GB delivery</li>
           <li>{Number(plan.delivery_requests).toLocaleString()} delivery requests</li><li>{plan.logical_buckets} buckets</li>
