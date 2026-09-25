@@ -358,3 +358,42 @@ CREATE TABLE IF NOT EXISTS media_custom_domains (
 );
 CREATE INDEX IF NOT EXISTS media_custom_domains_tenant_idx
   ON media_custom_domains(tenant_id,status,created_at);
+
+
+-- Production copy migration: replace only the original stock Mkety Media wording.
+UPDATE media_operator_settings
+SET value_json=json_set(value_json,'$.heroTitle','Store your media. Use it anywhere.')
+WHERE key='portal_content'
+  AND json_extract(value_json,'$.heroTitle')='Upload once. Get fast links. Keep your media simple.';
+
+UPDATE media_operator_settings
+SET value_json=json_set(value_json,'$.heroSubtitle','Upload images, videos and files, organize them in one place, and use fast media links across your websites, apps and campaigns.')
+WHERE key='portal_content'
+  AND json_extract(value_json,'$.heroSubtitle')='Managed image, video and file storage with cached delivery, straightforward limits and one clean dashboard.';
+
+UPDATE media_operator_settings
+SET value_json=json_set(value_json,'$.enterpriseTitle','Need a custom plan?')
+WHERE key='portal_content'
+  AND json_extract(value_json,'$.enterpriseTitle')='Need custom limits?';
+
+UPDATE media_operator_settings
+SET value_json=json_set(value_json,'$.enterpriseText','Get a plan tailored to your storage, delivery, team, branding and business requirements.')
+WHERE key='portal_content'
+  AND json_extract(value_json,'$.enterpriseText') IN (
+    'Tell us what you need and Mkety will prepare a private Enterprise offer.',
+    'Enterprise accounts can use any exact limits, billing terms, regional placement or dedicated infrastructure while keeping the same simple Mkety Media dashboard.'
+  );
+
+UPDATE media_operator_settings
+SET value_json=json_set(value_json,'$.maintenanceNotice','')
+WHERE key='portal_content'
+  AND json_extract(value_json,'$.maintenanceNotice')='Private launch: self-service signup opens after final platform verification.';
+
+UPDATE media_operator_settings
+SET value_json=json_set(
+  value_json,
+  '$.planBenefits',
+  json('["Images, videos and files","Fast media delivery","Usage dashboard","Large-file uploads","File previews and management","Flexible billing and renewals"]')
+)
+WHERE key='portal_content'
+  AND json_extract(value_json,'$.planBenefits[0]')='Images, video and files';
