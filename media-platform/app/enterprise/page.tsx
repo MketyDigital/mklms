@@ -13,7 +13,7 @@ export default async function EnterprisePage(){
   const botUsername=String(runtime.MEDIA_TELEGRAM_BOT_USERNAME||"");
 
   return <main className="wrap">
-    <nav className="nav"><div className="brand">Mkety Media</div><div><Link href="/">Home</Link><Link href="/trust">Security & reliability</Link><Link href="/login">Login</Link></div></nav>
+    <nav className="nav"><div className="brand">Mkety Media</div><div><Link href="/">Home</Link><Link href="/trust">Security & reliability</Link><Link href="/login">Login</Link><Link className="btn" href="/signup">Register</Link></div></nav>
     <div className="card form">
       <h1>{String(portal.enterpriseTitle||"Enterprise")}</h1>
       <p className="muted">{String(portal.enterpriseText||"Tell us what you need.")}</p>
