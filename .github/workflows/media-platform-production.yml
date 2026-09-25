@@ -155,6 +155,12 @@ jobs:
           if ! npx wrangler d1 execute "$D1_NAME" --remote --config wrangler.production.jsonc --command "SELECT checkout_provider FROM media_invoices LIMIT 0;" >/dev/null 2>&1; then
             npx wrangler d1 execute "$D1_NAME" --remote --config wrangler.production.jsonc --command "ALTER TABLE media_invoices ADD COLUMN checkout_provider TEXT;" --yes
           fi
+          if ! npx wrangler d1 execute "$D1_NAME" --remote --config wrangler.production.jsonc --command "SELECT checkout_amount FROM media_invoices LIMIT 0;" >/dev/null 2>&1; then
+            npx wrangler d1 execute "$D1_NAME" --remote --config wrangler.production.jsonc --command "ALTER TABLE media_invoices ADD COLUMN checkout_amount REAL;" --yes
+          fi
+          if ! npx wrangler d1 execute "$D1_NAME" --remote --config wrangler.production.jsonc --command "SELECT checkout_currency FROM media_invoices LIMIT 0;" >/dev/null 2>&1; then
+            npx wrangler d1 execute "$D1_NAME" --remote --config wrangler.production.jsonc --command "ALTER TABLE media_invoices ADD COLUMN checkout_currency TEXT;" --yes
+          fi
           if ! npx wrangler d1 execute "$D1_NAME" --remote --config wrangler.production.jsonc --command "SELECT checkout_provider FROM media_subscriptions LIMIT 0;" >/dev/null 2>&1; then
             npx wrangler d1 execute "$D1_NAME" --remote --config wrangler.production.jsonc --command "ALTER TABLE media_subscriptions ADD COLUMN checkout_provider TEXT;" --yes
           fi
