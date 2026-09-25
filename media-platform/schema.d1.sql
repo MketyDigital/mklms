@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS media_tenants (
 CREATE TABLE IF NOT EXISTS media_users (
   id TEXT PRIMARY KEY,
   username TEXT NOT NULL COLLATE NOCASE UNIQUE,
+  email TEXT,
   password_hash TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','disabled')),
   activated_at TEXT,
@@ -56,6 +57,7 @@ CREATE TABLE IF NOT EXISTS media_subscriptions (
   tenant_id TEXT PRIMARY KEY REFERENCES media_tenants(id) ON DELETE CASCADE,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','trial','active','past_due','manual','cancelled')),
   payment_provider TEXT CHECK (payment_provider IN ('nowpayments','bank_transfer','invoice')),
+  checkout_provider TEXT,
   external_customer_id TEXT,
   external_subscription_id TEXT,
   current_period_end TEXT,
@@ -128,6 +130,7 @@ CREATE TABLE IF NOT EXISTS media_invoices (
   amount_local REAL,
   local_currency TEXT,
   payment_method TEXT NOT NULL CHECK (payment_method IN ('nowpayments','bank_transfer','invoice')),
+  checkout_provider TEXT,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','paid','expired','rejected','cancelled')),
   provider_invoice_id TEXT,
   provider_payment_id TEXT,
