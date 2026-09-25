@@ -21,7 +21,7 @@ export default function TrustPage(){
     ["Data residency","Standard storage placement is managed by Mkety's infrastructure layer. A specific country/region residency commitment is only provided when explicitly agreed for a custom deployment."],
   ];
   return <main className="wrap">
-    <nav className="nav"><div className="brand">Mkety Media</div><div><Link href="/">Home</Link><Link href="/enterprise">Custom plans</Link><Link href="/login">Login</Link></div></nav>
+    <nav className="nav"><div className="brand">Mkety Media</div><div><Link href="/">Home</Link><Link href="/enterprise">Custom plans</Link><Link href="/login">Login</Link><Link className="btn" href="/signup">Register</Link></div></nav>
     <section className="hero"><h1>Security, reliability and control</h1><p>Clear information about how Mkety Media stores, protects and delivers your files.</p></section>
     <section className="card"><h2>Service information</h2><table className="table"><tbody>{rows.map(([q,a])=><tr key={q}><th style={{textAlign:"left",verticalAlign:"top",width:"28%"}}>{q}</th><td>{a}</td></tr>)}</tbody></table></section>
     <section className="card" style={{marginTop:18}}><h2>Advanced requirements</h2><p>Dedicated backups, specific data residency, private delivery, dedicated hosting and contractual SLA requirements can be arranged on eligible custom plans.</p></section>
