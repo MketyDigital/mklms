@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { getPublicPlans } from "../../src/lib/plans-db";
 import { getBillingTerms,getSetting } from "../../src/lib/operator-settings";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
+
+export const metadata:Metadata={robots:{index:false,follow:false,nocache:true}};
 
 export default async function SignupPage({searchParams}:{searchParams:Promise<Record<string,string|undefined>>}){
   const params=await searchParams;
