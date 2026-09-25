@@ -42,7 +42,7 @@ export default async function OperatorPage(){
   const runtime=getMediaEnv() as any;
   const integrationStatus={
     nowpayments:Boolean(runtime.NOWPAYMENTS_API_KEY&&runtime.NOWPAYMENTS_IPN_SECRET),
-    flutterwave:Boolean(runtime.FLUTTERWAVE_SECRET_KEY&&runtime.FLUTTERWAVE_SECRET_HASH),
+    flutterwave:Boolean(runtime.FLUTTERWAVE_CLIENT_ID&&runtime.FLUTTERWAVE_CLIENT_SECRET&&runtime.FLUTTERWAVE_WEBHOOK_SECRET),
     kora:Boolean(runtime.KORA_SECRET_KEY),
     telegramToken:Boolean(runtime.MEDIA_TELEGRAM_BOT_TOKEN),
     telegramUsername:String(runtime.MEDIA_TELEGRAM_BOT_USERNAME||""),
