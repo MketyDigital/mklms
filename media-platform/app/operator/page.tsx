@@ -21,11 +21,11 @@ export default async function OperatorPage(){
     db.prepare("SELECT * FROM media_addon_products ORDER BY display_order,price_usd").all<any>(),
     db.prepare("SELECT t.id,t.slug,t.name,t.status,t.plan_code,c.* FROM media_tenants t LEFT JOIN media_tenant_commercial_terms c ON c.tenant_id=t.id ORDER BY t.created_at DESC LIMIT 200").all<any>(),
     db.prepare("SELECT * FROM media_provider_pools ORDER BY priority").all<any>(),
-    db.prepare("SELECT i.id,i.reference,i.amount_usd,i.amount_local,i.local_currency,i.payment_method,i.created_at,t.name AS tenant_name FROM media_invoices i JOIN media_tenants t ON t.id=i.tenant_id WHERE i.status='pending' ORDER BY i.created_at DESC LIMIT 100").all<any>(),
+    db.prepare("SELECT i.id,i.reference,i.amount_usd,i.amount_local,i.local_currency,i.payment_method,i.checkout_provider,i.created_at,t.name AS tenant_name FROM media_invoices i JOIN media_tenants t ON t.id=i.tenant_id WHERE i.status='pending' ORDER BY i.created_at DESC LIMIT 100").all<any>(),
     db.prepare("SELECT * FROM media_enterprise_requests WHERE status IN ('new','contacted') ORDER BY created_at DESC LIMIT 100").all<any>(),
     db.prepare("SELECT d.*,t.name AS tenant_name,t.slug AS tenant_slug FROM media_custom_domains d JOIN media_tenants t ON t.id=d.tenant_id WHERE d.status<>'removed' ORDER BY d.created_at DESC LIMIT 100").all<any>(),
     getBillingTerms(),
-    getSetting<any>("bank_transfer",{enabled:false,currency:"NGN",usdToLocalRate:0,roundTo:100,bankName:"",accountName:"",accountNumber:"",instructions:""}),
+    getSetting<any>("bank_transfer",{enabled:false,currency:"NGN",usdToLocalRate:0,roundTo:100,bankName:"",accountName:"",accountNumber:"",paymentUrl:"",paymentProviderName:"",paymentButtonText:"Pay securely",instructions:""}),
     getSetting<any>("enforcement",{graceDays:3,suspendDeliveryAfterGrace:true}),
     getSetting<any>("portal_content",{
       heroTitle:"Store your media. Use it anywhere.",
@@ -42,6 +42,8 @@ export default async function OperatorPage(){
   const runtime=getMediaEnv() as any;
   const integrationStatus={
     nowpayments:Boolean(runtime.NOWPAYMENTS_API_KEY&&runtime.NOWPAYMENTS_IPN_SECRET),
+    flutterwave:Boolean(runtime.FLUTTERWAVE_SECRET_KEY&&runtime.FLUTTERWAVE_SECRET_HASH),
+    kora:Boolean(runtime.KORA_SECRET_KEY),
     telegramToken:Boolean(runtime.MEDIA_TELEGRAM_BOT_TOKEN),
     telegramUsername:String(runtime.MEDIA_TELEGRAM_BOT_USERNAME||""),
     telegramGroup:Boolean(boundTelegramChatId),
@@ -53,6 +55,8 @@ export default async function OperatorPage(){
 
     <section className="card"><h2>Integrations</h2>
       <p>NOWPayments: <strong>{integrationStatus.nowpayments?"Configured":"Not configured"}</strong></p>
+      <p>Flutterwave: <strong>{integrationStatus.flutterwave?"Configured":"Not configured"}</strong></p>
+      <p>Kora: <strong>{integrationStatus.kora?"Configured":"Not configured"}</strong></p>
       <p>Telegram bot token: <strong>{integrationStatus.telegramToken?"Configured":"Not configured"}</strong></p>
       <p>Telegram bot username: <strong>{integrationStatus.telegramUsername?("@"+integrationStatus.telegramUsername):"Not discovered yet"}</strong></p>
       <p>Telegram operator group: <strong>{integrationStatus.telegramGroup?"Configured":"Not configured"}</strong></p>
@@ -84,15 +88,19 @@ export default async function OperatorPage(){
       <label><input type="checkbox" name="enabled" defaultChecked={Boolean(bank.enabled)}/> Enable bank transfer</label>
       <label>Local currency<input name="currency" defaultValue={bank.currency||"NGN"}/></label>
       <label>USD to local rate<input name="usdToLocalRate" type="number" step="0.01" defaultValue={Number(bank.usdToLocalRate||0)}/></label>
-      <label>Round local amount to<input name="roundTo" type="number" step="1" defaultValue={Number(bank.roundTo||100)}/></label>
+      <label>Round converted amount up to nearest<input name="roundTo" type="number" step="1" min="1" defaultValue={Number(bank.roundTo||100)}/></label>
+      <p className="muted">Examples: 1 = nearest whole unit, 10 = nearest 10, 100 = nearest 100. This affects only manual local-currency payments, not the USD plan price.</p>
       <label>Bank name<input name="bankName" defaultValue={bank.bankName||""}/></label>
       <label>Account name<input name="accountName" defaultValue={bank.accountName||""}/></label>
       <label>Account number<input name="accountNumber" defaultValue={bank.accountNumber||""}/></label>
+      <label>Optional payment provider name<input name="paymentProviderName" defaultValue={bank.paymentProviderName||""} placeholder="e.g. Selar or another manual checkout"/></label>
+      <label>Optional payment link<input name="paymentUrl" type="url" defaultValue={bank.paymentUrl||""} placeholder="https://..."/></label>
+      <label>Payment-link button text<input name="paymentButtonText" defaultValue={bank.paymentButtonText||"Pay securely"}/></label>
       <label>Instructions<input name="instructions" defaultValue={bank.instructions||""}/></label>
-      <button className="btn">Save bank details</button></form>
+      <button className="btn">Save manual payment settings</button></form>
       <div className="notice" style={{marginTop:14}}>
         <strong>When does manual payment appear?</strong>
-        <p>Enable bank transfer, set the local currency/FX rate, bank name, account name and account number, then save. Customers with a pending invoice will immediately see <em>Pay by bank transfer</em> beside automatic payment.</p>
+        <p>Enable manual payment and configure bank details, an external payment link, or both. Customers with a pending invoice will see the manual option beside enabled automated providers.</p>
         <p>After they choose it, the invoice locks the exact local amount. They can submit proof through the Telegram bot; an authorized operator must verify the actual bank credit before approval.</p>
       </div>
     </section>
@@ -146,7 +154,7 @@ export default async function OperatorPage(){
 
     <h2 style={{marginTop:30}}>Pending payments</h2>
     <div className="card"><table className="table"><thead><tr><th>Customer</th><th>Invoice</th><th>Amount</th><th>Method</th><th></th></tr></thead><tbody>
-      {(pendingInvoices.results||[]).map((i:any)=><tr key={i.id}><td>{i.tenant_name}</td><td>{i.reference}</td><td>{i.amount_local!=null?String(i.local_currency||"")+" "+Number(i.amount_local).toLocaleString():"$"+Number(i.amount_usd).toFixed(2)}</td><td>{i.payment_method}</td><td><div className="toolbar"><form method="post" action="/api/operator/invoices"><input type="hidden" name="invoiceId" value={i.id}/><input type="hidden" name="action" value="approve"/><button className="btn">Approve</button></form><form method="post" action="/api/operator/invoices"><input type="hidden" name="invoiceId" value={i.id}/><input type="hidden" name="action" value="reject"/><button className="btn secondary">Reject</button></form></div></td></tr>)}
+      {(pendingInvoices.results||[]).map((i:any)=><tr key={i.id}><td>{i.tenant_name}</td><td>{i.reference}</td><td>{i.amount_local!=null?String(i.local_currency||"")+" "+Number(i.amount_local).toLocaleString():"$"+Number(i.amount_usd).toFixed(2)}</td><td>{i.checkout_provider||i.payment_method}</td><td><div className="toolbar"><form method="post" action="/api/operator/invoices"><input type="hidden" name="invoiceId" value={i.id}/><input type="hidden" name="action" value="approve"/><button className="btn">Approve</button></form><form method="post" action="/api/operator/invoices"><input type="hidden" name="invoiceId" value={i.id}/><input type="hidden" name="action" value="reject"/><button className="btn secondary">Reject</button></form></div></td></tr>)}
     </tbody></table></div>
 
     <h2 style={{marginTop:30}}>Public plans</h2>
