@@ -39,8 +39,6 @@ jobs:
       FLUTTERWAVE_WEBHOOK_SECRET: ${{ secrets.FLUTTERWAVE_WEBHOOK_SECRET }}
       FLUTTERWAVE_CHECKOUT_BROKER_URL: ${{ secrets.FLUTTERWAVE_CHECKOUT_BROKER_URL }}
       FLUTTERWAVE_CHECKOUT_BROKER_SECRET: ${{ secrets.FLUTTERWAVE_CHECKOUT_BROKER_SECRET }}
-      FLUTTERWAVE_V3_SECRET_KEY: ${{ secrets.FLUTTERWAVE_V3_SECRET_KEY }}
-      FLUTTERWAVE_V3_SECRET_HASH: ${{ secrets.FLUTTERWAVE_V3_SECRET_HASH }}
       KORA_SECRET_KEY: ${{ secrets.KORA_SECRET_KEY }}
       MEDIA_TELEGRAM_BOT_TOKEN: ${{ secrets.MEDIA_TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
       MEDIA_TELEGRAM_CHAT_ID: ${{ secrets.MEDIA_TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID }}
@@ -244,8 +242,6 @@ jobs:
             --arg flwWebhookSecret "${FLUTTERWAVE_WEBHOOK_SECRET:-}" \
             --arg flwBrokerUrl "${FLUTTERWAVE_CHECKOUT_BROKER_URL:-}" \
             --arg flwBrokerSecret "${FLUTTERWAVE_CHECKOUT_BROKER_SECRET:-}" \
-            --arg flwV3Key "${FLUTTERWAVE_V3_SECRET_KEY:-}" \
-            --arg flwV3Hash "${FLUTTERWAVE_V3_SECRET_HASH:-}" \
             --arg koraKey "${KORA_SECRET_KEY:-}" \
             --arg tgToken "${MEDIA_TELEGRAM_BOT_TOKEN:-}" \
             --arg tgChat "${MEDIA_TELEGRAM_CHAT_ID:-}" \
@@ -269,7 +265,6 @@ jobs:
             + (if ($npApi!="" and $npIpn!="") then {NOWPAYMENTS_API_KEY:$npApi,NOWPAYMENTS_IPN_SECRET:$npIpn} else {} end)
             + (if ($flwClientId!="" and $flwClientSecret!="" and $flwWebhookSecret!="") then {FLUTTERWAVE_CLIENT_ID:$flwClientId,FLUTTERWAVE_CLIENT_SECRET:$flwClientSecret,FLUTTERWAVE_WEBHOOK_SECRET:$flwWebhookSecret} else {} end)
             + (if ($flwBrokerUrl!="" and $flwBrokerSecret!="") then {FLUTTERWAVE_CHECKOUT_BROKER_URL:$flwBrokerUrl,FLUTTERWAVE_CHECKOUT_BROKER_SECRET:$flwBrokerSecret} else {} end)
-            + (if ($flwV3Key!="" and $flwV3Hash!="") then {FLUTTERWAVE_V3_SECRET_KEY:$flwV3Key,FLUTTERWAVE_V3_SECRET_HASH:$flwV3Hash} else {} end)
             + (if $koraKey=="" then {} else {KORA_SECRET_KEY:$koraKey} end)
             + (if $tgToken=="" then {} else {MEDIA_TELEGRAM_BOT_TOKEN:$tgToken} end)
             + (if $tgChat=="" then {} else {MEDIA_TELEGRAM_CHAT_ID:$tgChat} end)
