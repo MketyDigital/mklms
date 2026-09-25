@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   const planCode=String(form.get("plan")||"starter");
   const termMonths=Number(form.get("term")||1);
 
-  if(!name || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || !/^[A-Za-z0-9_-]{3,40}$/.test(username) || password.length<10) {
+  if(!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !/^[A-Za-z0-9_-]{3,40}$/.test(username) || password.length<10) {
     return NextResponse.redirect(new URL("/signup?error=invalid",request.url),303);
   }
   const billingTerms=await getBillingTerms();
