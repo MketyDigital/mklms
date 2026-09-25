@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser } from "../../src/lib/current-user";
@@ -6,6 +7,8 @@ import { getMediaDb, getMediaEnv } from "../../src/lib/postgres";
 import { getSetting,getBillingTerms } from "../../src/lib/operator-settings";
 
 export const dynamic = "force-dynamic";
+
+export const metadata:Metadata={robots:{index:false,follow:false,nocache:true}};
 
 function gb(bytes:any){return Number(bytes||0)/1024**3;}
 
