@@ -131,6 +131,8 @@ CREATE TABLE IF NOT EXISTS media_invoices (
   local_currency TEXT,
   payment_method TEXT NOT NULL CHECK (payment_method IN ('nowpayments','bank_transfer','invoice')),
   checkout_provider TEXT,
+  checkout_amount REAL,
+  checkout_currency TEXT,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','paid','expired','rejected','cancelled')),
   provider_invoice_id TEXT,
   provider_payment_id TEXT,
