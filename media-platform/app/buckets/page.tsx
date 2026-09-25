@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser } from "../../src/lib/current-user";
@@ -5,6 +6,8 @@ import { getTenantState } from "../../src/lib/tenant-state";
 import { getMediaDb } from "../../src/lib/postgres";
 
 export const dynamic = "force-dynamic";
+
+export const metadata:Metadata={robots:{index:false,follow:false,nocache:true}};
 
 export default async function BucketsPage(){
   const user=await getCurrentUser();
