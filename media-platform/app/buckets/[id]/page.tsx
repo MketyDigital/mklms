@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect,notFound } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser } from "../../../src/lib/current-user";
@@ -5,6 +6,8 @@ import { getMediaDb } from "../../../src/lib/postgres";
 import UploadClient from "./UploadClient";
 
 export const dynamic = "force-dynamic";
+
+export const metadata:Metadata={robots:{index:false,follow:false,nocache:true}};
 
 export default async function BucketPage({params}:{params:Promise<{id:string}>}){
   const user=await getCurrentUser(); if(!user) redirect("/login");
