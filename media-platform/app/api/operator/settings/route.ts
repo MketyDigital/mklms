@@ -26,6 +26,9 @@ export async function POST(request:Request){
       bankName:String(form.get("bankName")||""),
       accountName:String(form.get("accountName")||""),
       accountNumber:String(form.get("accountNumber")||""),
+      paymentUrl:(()=>{const raw=String(form.get("paymentUrl")||"").trim();if(!raw)return "";try{const u=new URL(raw);return u.protocol==="https:"||u.protocol==="http:"?u.toString():"";}catch{return "";}})(),
+      paymentProviderName:String(form.get("paymentProviderName")||"").trim(),
+      paymentButtonText:String(form.get("paymentButtonText")||"Pay securely").trim()||"Pay securely",
       instructions:String(form.get("instructions")||""),
     });
   }
