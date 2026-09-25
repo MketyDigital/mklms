@@ -23,13 +23,13 @@ export default async function Home(){
   ]);
 
   return <main className="wrap">
-    <nav className="nav"><div className="brand">Mkety Media</div><div><Link href="/trust">Security & reliability</Link><Link href="/login">Login</Link>{portal.signupEnabled!==false&&<Link className="btn" href="/signup">Get started</Link>}</div></nav>
+    <nav className="nav"><div className="brand">Mkety Media</div><div><Link href="/trust">Security & reliability</Link><Link href="/login">Login</Link>{portal.signupEnabled!==false&&<Link className="btn" href="/signup">Register</Link>}</div></nav>
     {portal.maintenanceNotice&&<div className="notice">{String(portal.maintenanceNotice)}</div>}
     <section className="hero"><h1>{String(portal.heroTitle)}</h1><p>{String(portal.heroSubtitle)}</p></section>
     <section className="grid" style={{marginBottom:24}}>
-      <article className="card"><h2>Your media stays yours</h2><p>Download your full library inventory at any time and move your files whenever you need to.</p><Link href="/trust">Learn about security & reliability</Link></article>
-      <article className="card"><h2>Clear, predictable plans</h2><p>See exactly what your plan includes. Upgrade or add more capacity when you need it.</p></article>
-      <article className="card"><h2>Use your own media domain</h2><p>Eligible custom plans can serve files from a branded address such as <strong>media.example.com</strong>.</p><Link href="/enterprise">Explore custom plans</Link></article>
+      <article className="card"><h2>Fast media delivery</h2><p>Upload images, videos and files once and use reliable media links across your websites, apps and campaigns.</p><Link href="/trust">Security & reliability</Link></article>
+      <article className="card"><h2>Simple, predictable plans</h2><p>Know exactly what is included and add more capacity whenever your business needs it.</p></article>
+      <article className="card"><h2>Your brand, your media address</h2><p>Eligible custom plans can serve files from a branded address such as <strong>media.example.com</strong>.</p><Link href="/enterprise">Explore custom plans</Link></article>
     </section>
     <section><h2>Plans</h2><p className="muted">Monthly, 3-month, 6-month and yearly billing. Longer terms receive a small discount.</p>
       <div className="grid plans">{plans.map((plan:any)=><article className="card" key={plan.code}>
