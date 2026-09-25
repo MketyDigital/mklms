@@ -1,0 +1,53 @@
+name: Verify Mkety Media operator key source
+
+on:
+  push:
+    branches:
+      - media-platform
+    paths:
+      - ".github/workflows/media-operator-key-source.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    env:
+      MEDIA_KEY: ${{ secrets.MEDIA_OPERATOR_ACCESS_KEY }}
+      MKETY_KEY: ${{ secrets.MKETY_ADMIN_ACCESS_KEY }}
+      MEDIA_SESSION: ${{ secrets.MEDIA_OPERATOR_SESSION_SECRET }}
+      MKETY_SESSION: ${{ secrets.MKETY_ADMIN_SESSION_SECRET }}
+    steps:
+      - name: Report effective source without revealing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${MEDIA_KEY:-}" ]; then
+            echo "MEDIA_OPERATOR_ACCESS_KEY: dedicated secret is present"
+            echo "Effective Media operator access-key source: MEDIA_OPERATOR_ACCESS_KEY"
+          elif [ -n "${MKETY_KEY:-}" ]; then
+            echo "MEDIA_OPERATOR_ACCESS_KEY: dedicated secret is not present"
+            echo "Effective Media operator access-key source: MKETY_ADMIN_ACCESS_KEY fallback"
+          else
+            echo "No Media/Mkety operator access key is configured"
+            exit 1
+          fi
+
+          if [ -n "${MEDIA_KEY:-}" ] && [ -n "${MKETY_KEY:-}" ]; then
+            if [ "$MEDIA_KEY" = "$MKETY_KEY" ]; then
+              echo "Dedicated Media access key equals shared Mkety access key: yes"
+            else
+              echo "Dedicated Media access key equals shared Mkety access key: no"
+            fi
+          fi
+
+          if [ -n "${MEDIA_SESSION:-}" ]; then
+            echo "Effective Media operator session-secret source: MEDIA_OPERATOR_SESSION_SECRET"
+          elif [ -n "${MKETY_SESSION:-}" ]; then
+            echo "Effective Media operator session-secret source: MKETY_ADMIN_SESSION_SECRET fallback"
+          else
+            echo "No Media/Mkety operator session secret is configured"
+            exit 1
+          fi
