@@ -12,10 +12,10 @@ export default async function Home(){
     getPublicPlans(),
     getBillingTerms(),
     getSetting<any>("portal_content",{
-      heroTitle:"Upload once. Get fast links. Keep your media simple.",
-      heroSubtitle:"Managed image, video and file storage with cached delivery, straightforward limits and one clean dashboard.",
-      enterpriseTitle:"Need custom limits?",
-      enterpriseText:"Enterprise accounts can use any exact limits, billing terms, regional placement or dedicated infrastructure while keeping the same simple Mkety Media dashboard.",
+      heroTitle:"Store your media. Use it anywhere.",
+      heroSubtitle:"Upload images, videos and files, organize them in one place, and use fast media links across your websites, apps and campaigns.",
+      enterpriseTitle:"Need a custom plan?",
+      enterpriseText:"Get a plan tailored to your storage, delivery, team, branding and business requirements.",
       maintenanceNotice:"",
       signupEnabled:true,
       planBenefits:["Images, video and files","Cached Mkety delivery links","Usage and limit dashboard","Secure direct uploads","Preview, copy links and delete","Payment and renewal controls"],
@@ -23,13 +23,13 @@ export default async function Home(){
   ]);
 
   return <main className="wrap">
-    <nav className="nav"><div className="brand">Mkety Media</div><div><Link href="/trust">Trust & infrastructure</Link><Link href="/login">Login</Link>{portal.signupEnabled!==false&&<Link className="btn" href="/signup">Get started</Link>}</div></nav>
+    <nav className="nav"><div className="brand">Mkety Media</div><div><Link href="/trust">Security & reliability</Link><Link href="/login">Login</Link>{portal.signupEnabled!==false&&<Link className="btn" href="/signup">Get started</Link>}</div></nav>
     {portal.maintenanceNotice&&<div className="notice">{String(portal.maintenanceNotice)}</div>}
     <section className="hero"><h1>{String(portal.heroTitle)}</h1><p>{String(portal.heroSubtitle)}</p></section>
     <section className="grid" style={{marginBottom:24}}>
-      <article className="card"><h2>Portable by design</h2><p>Export your complete library as JSON/CSV or generate download-all scripts without asking support for permission.</p><Link href="/trust">See portability & trust details</Link></article>
-      <article className="card"><h2>Predictable prepaid limits</h2><p>Public plans are hard-capped. Upgrade or add prepaid capacity instead of accumulating surprise infrastructure overage.</p></article>
-      <article className="card"><h2>Brand it on Enterprise</h2><p>Custom/Enterprise accounts can request a branded media hostname such as <strong>media.example.com</strong> plus custom limits and infrastructure requirements.</p><Link href="/enterprise">Talk to Enterprise</Link></article>
+      <article className="card"><h2>Your media stays yours</h2><p>Download your full library inventory at any time and move your files whenever you need to.</p><Link href="/trust">Learn about security & reliability</Link></article>
+      <article className="card"><h2>Clear, predictable plans</h2><p>See exactly what your plan includes. Upgrade or add more capacity when you need it.</p></article>
+      <article className="card"><h2>Use your own media domain</h2><p>Eligible custom plans can serve files from a branded address such as <strong>media.example.com</strong>.</p><Link href="/enterprise">Explore custom plans</Link></article>
     </section>
     <section><h2>Plans</h2><p className="muted">Monthly, 3-month, 6-month and yearly billing. Longer terms receive a small discount.</p>
       <div className="grid plans">{plans.map((plan:any)=><article className="card" key={plan.code}>
@@ -39,12 +39,12 @@ export default async function Home(){
           <li>{Number(plan.delivery_requests).toLocaleString()} delivery requests</li><li>{plan.logical_buckets} buckets</li>
           <li>{plan.team_seats} team seat{Number(plan.team_seats)===1?"":"s"}</li>
           {(portal.planBenefits||[]).map((benefit:string)=><li key={benefit}>{benefit}</li>)}
-          {plan.dedicated_storage_eligible&&<li>Regional or dedicated infrastructure eligibility</li>}
+          {plan.dedicated_storage_eligible&&<li>Custom hosting options</li>}
         </ul>
         {portal.signupEnabled!==false&&<Link className="btn" href={"/signup?plan="+plan.code}>Choose {plan.name}</Link>}
         <div style={{marginTop:14}} className="muted">{(terms as any[]).filter((term)=>Number(term.months)>1).map((term)=><div key={term.months}>{term.label}: {"$"}{termPrice(Number(plan.monthly_usd),Number(term.months),Number(term.discountPercent||0)).toFixed(2)} ({Number(term.discountPercent||0)}% off)</div>)}</div>
       </article>)}</div>
     </section>
-    <section className="card"><h2>{String(portal.enterpriseTitle)}</h2><p>{String(portal.enterpriseText)}</p><Link className="btn" href="/enterprise">Request Enterprise setup</Link></section>
+    <section className="card"><h2>{String(portal.enterpriseTitle)}</h2><p>{String(portal.enterpriseText)}</p><Link className="btn" href="/enterprise">Request a custom plan</Link></section>
   </main>;
 }
