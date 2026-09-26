@@ -19,9 +19,31 @@ export async function POST(request:Request){
 
   const env=getMediaEnv() as any;
   const secretKey=String(env.KORA_SECRET_KEY||"");
+  const publicKey=String(env.KORA_PUBLIC_KEY||"");
   if(!secretKey) return NextResponse.redirect(new URL("/billing?error=kora",request.url),303);
 
   const origin=new URL(request.url).origin;
+  if(request.headers.get("accept")?.includes("application/json")){
+    if(!publicKey) return NextResponse.json({ok:false,error:"kora-config"},{status:503});
+    await db.batch([
+      db.prepare("UPDATE media_users SET email=? WHERE id=?").bind(email,user.userId),
+      db.prepare("UPDATE media_invoices SET checkout_provider='kora',provider_invoice_id=?,checkout_amount=?,checkout_currency='USD',updated_at=datetime('now') WHERE id=? AND status='pending'")
+        .bind("kora:"+String(invoice.reference),Number(invoice.amount_usd),invoiceId),
+    ]);
+    return NextResponse.json({
+      ok:true,
+      publicKey,
+      reference:String(invoice.reference),
+      amount:Number(invoice.amount_usd),
+      currency:"USD",
+      email,
+      customerName:user.tenantName,
+      notificationUrl:origin+"/api/billing/kora/webhook",
+      redirectPath:"/billing?payment=processing&provider=kora",
+      metadata:{source:"media",invoiceId:String(invoice.id),tenantId:user.tenantId},
+    });
+  }
+
   const response=await fetch("https://api.korapay.com/merchant/api/v1/charges/initialize",{
     method:"POST",
     headers:{Authorization:"Bearer "+secretKey,"content-type":"application/json"},
