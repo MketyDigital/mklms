@@ -32,7 +32,17 @@ export async function POST(request:Request){
   const payload=await response.json().catch(()=>null) as any;
   if(!response.ok || !payload?.invoice_url) return NextResponse.redirect(new URL("/billing?error=payments",request.url),303);
 
+  const providerInvoiceId=String(payload.id||payload.invoice_id||"");
   await db.prepare("UPDATE media_invoices SET payment_method='nowpayments',checkout_provider='nowpayments',provider_invoice_id=?,updated_at=datetime('now') WHERE id=?")
-    .bind(String(payload.id||payload.invoice_id||""),invoiceId).run();
+    .bind(providerInvoiceId,invoiceId).run();
+
+  if(String(form.get("experience")||"")==="embedded" || request.headers.get("accept")?.includes("application/json")){
+    return NextResponse.json({
+      ok:true,
+      invoiceId:providerInvoiceId,
+      widgetUrl:"https://nowpayments.io/embeds/payment-widget?iid="+encodeURIComponent(providerInvoiceId),
+      hostedUrl:String(payload.invoice_url),
+    });
+  }
   return NextResponse.redirect(String(payload.invoice_url),303);
 }
