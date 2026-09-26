@@ -39,6 +39,7 @@ jobs:
       FLUTTERWAVE_WEBHOOK_SECRET: ${{ secrets.FLUTTERWAVE_WEBHOOK_SECRET }}
       FLUTTERWAVE_CHECKOUT_BROKER_URL: ${{ secrets.FLUTTERWAVE_CHECKOUT_BROKER_URL }}
       FLUTTERWAVE_CHECKOUT_BROKER_SECRET: ${{ secrets.FLUTTERWAVE_CHECKOUT_BROKER_SECRET }}
+      KORA_PUBLIC_KEY: ${{ secrets.KORA_PUBLIC_KEY }}
       KORA_SECRET_KEY: ${{ secrets.KORA_SECRET_KEY }}
       MEDIA_TELEGRAM_BOT_TOKEN: ${{ secrets.MEDIA_TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
       MEDIA_TELEGRAM_CHAT_ID: ${{ secrets.MEDIA_TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID }}
@@ -242,6 +243,7 @@ jobs:
             --arg flwWebhookSecret "${FLUTTERWAVE_WEBHOOK_SECRET:-}" \
             --arg flwBrokerUrl "${FLUTTERWAVE_CHECKOUT_BROKER_URL:-}" \
             --arg flwBrokerSecret "${FLUTTERWAVE_CHECKOUT_BROKER_SECRET:-}" \
+            --arg koraPublic "${KORA_PUBLIC_KEY:-}" \
             --arg koraKey "${KORA_SECRET_KEY:-}" \
             --arg tgToken "${MEDIA_TELEGRAM_BOT_TOKEN:-}" \
             --arg tgChat "${MEDIA_TELEGRAM_CHAT_ID:-}" \
@@ -265,7 +267,7 @@ jobs:
             + (if ($npApi!="" and $npIpn!="") then {NOWPAYMENTS_API_KEY:$npApi,NOWPAYMENTS_IPN_SECRET:$npIpn} else {} end)
             + (if ($flwClientId!="" and $flwClientSecret!="" and $flwWebhookSecret!="") then {FLUTTERWAVE_CLIENT_ID:$flwClientId,FLUTTERWAVE_CLIENT_SECRET:$flwClientSecret,FLUTTERWAVE_WEBHOOK_SECRET:$flwWebhookSecret} else {} end)
             + (if ($flwBrokerUrl!="" and $flwBrokerSecret!="") then {FLUTTERWAVE_CHECKOUT_BROKER_URL:$flwBrokerUrl,FLUTTERWAVE_CHECKOUT_BROKER_SECRET:$flwBrokerSecret} else {} end)
-            + (if $koraKey=="" then {} else {KORA_SECRET_KEY:$koraKey} end)
+            + (if ($koraPublic!="" and $koraKey!="") then {KORA_PUBLIC_KEY:$koraPublic,KORA_SECRET_KEY:$koraKey} else {} end)
             + (if $tgToken=="" then {} else {MEDIA_TELEGRAM_BOT_TOKEN:$tgToken} end)
             + (if $tgChat=="" then {} else {MEDIA_TELEGRAM_CHAT_ID:$tgChat} end)
             + (if $tgOps=="" then {} else {MEDIA_TELEGRAM_OPERATOR_IDS:$tgOps} end)
