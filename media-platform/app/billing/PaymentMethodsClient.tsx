@@ -37,7 +37,7 @@ async function postForm(url:string,values:Record<string,string>){
     body,
     credentials:"same-origin",
   });
-  const payload=await response.json().catch(()=>null);
+  const payload:any=await response.json().catch(()=>null);
   if(!response.ok||!payload) throw new Error(payload?.error||"payment");
   return payload;
 }
