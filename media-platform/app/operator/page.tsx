@@ -43,7 +43,7 @@ export default async function OperatorPage(){
   const integrationStatus={
     nowpayments:Boolean(runtime.NOWPAYMENTS_API_KEY&&runtime.NOWPAYMENTS_IPN_SECRET),
     flutterwave:Boolean(runtime.FLUTTERWAVE_CLIENT_ID&&runtime.FLUTTERWAVE_CLIENT_SECRET&&runtime.FLUTTERWAVE_WEBHOOK_SECRET),
-    kora:Boolean(runtime.KORA_SECRET_KEY),
+    kora:Boolean(runtime.KORA_PUBLIC_KEY&&runtime.KORA_SECRET_KEY),
     telegramToken:Boolean(runtime.MEDIA_TELEGRAM_BOT_TOKEN),
     telegramUsername:String(runtime.MEDIA_TELEGRAM_BOT_USERNAME||""),
     telegramGroup:Boolean(boundTelegramChatId),
