@@ -5,6 +5,7 @@ import { getCurrentUser } from "../../src/lib/current-user";
 import { getTenantState } from "../../src/lib/tenant-state";
 import { getMediaDb, getMediaEnv } from "../../src/lib/postgres";
 import { getSetting,getBillingTerms } from "../../src/lib/operator-settings";
+import PaymentMethodsClient from "./PaymentMethodsClient";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +34,7 @@ export default async function BillingPage({searchParams}:{searchParams:Promise<R
   const runtime=getMediaEnv() as any;
   const nowPaymentsConfigured=Boolean(runtime.NOWPAYMENTS_API_KEY&&runtime.NOWPAYMENTS_IPN_SECRET);
   const flutterwaveConfigured=Boolean(runtime.FLUTTERWAVE_CHECKOUT_BROKER_URL&&runtime.FLUTTERWAVE_CHECKOUT_BROKER_SECRET);
-  const koraConfigured=Boolean(runtime.KORA_SECRET_KEY);
+  const koraConfigured=Boolean(runtime.KORA_PUBLIC_KEY&&runtime.KORA_SECRET_KEY);
   const telegramBotUsername=String(runtime.MEDIA_TELEGRAM_BOT_USERNAME||"");
   const currentPlan=await db.prepare("SELECT plan_code FROM media_tenants WHERE id=? LIMIT 1").bind(user.tenantId).first<any>();
   const currentPublicPlan=(plansResult.results||[]).find((p:any)=>p.code===currentPlan?.plan_code);
@@ -78,38 +79,21 @@ export default async function BillingPage({searchParams}:{searchParams:Promise<R
             </div>
           ):(
             <>
-              <div className="toolbar" style={{marginTop:18,alignItems:"flex-start"}}>
-                {flutterwaveConfigured&&<form method="post" action="/api/billing/flutterwave" className="form" style={{minWidth:260}}>
-                  <input type="hidden" name="invoiceId" value={String(invoice.id)}/>
-                  {user.email?<input type="hidden" name="email" value={user.email}/>:<input type="email" name="email" required placeholder="Email for payment receipt"/>}
-                  <label>Payment currency
-                    <select name="currency" defaultValue="USD">
-                      <option value="USD">USD — US Dollar</option>
-                      <option value="NGN">NGN — Nigerian Naira</option>
-                      <option value="GHS">GHS — Ghanaian Cedi</option>
-                      <option value="KES">KES — Kenyan Shilling</option>
-                      <option value="GBP">GBP — British Pound</option>
-                      <option value="EUR">EUR — Euro</option>
-                      <option value="ZAR">ZAR — South African Rand</option>
-                      <option value="XAF">XAF — Central African CFA Franc</option>
-                      <option value="XOF">XOF — West African CFA Franc</option>
-                      <option value="UGX">UGX — Ugandan Shilling</option>
-                      <option value="RWF">RWF — Rwandan Franc</option>
-                      <option value="TZS">TZS — Tanzanian Shilling</option>
-                    </select>
-                  </label>
-                  <button className="btn">Continue with Flutterwave</button>
-                  <p className="muted">Your Mkety invoice remains {Number(invoice.amount_usd).toFixed(2)} USD. Flutterwave will show the payment methods available for the currency you choose.</p>
-                </form>}
-                {koraConfigured&&<form method="post" action="/api/billing/kora">
-                  <input type="hidden" name="invoiceId" value={String(invoice.id)}/>
-                  {user.email?<input type="hidden" name="email" value={user.email}/>:<input type="email" name="email" required placeholder="Email for payment receipt"/>}
-                  <button className="btn">Pay with Kora</button>
-                  <p className="muted">Available where enabled for this merchant account</p>
-                </form>}
-                {nowPaymentsConfigured&&<form method="post" action="/api/billing/nowpayments"><input type="hidden" name="invoiceId" value={String(invoice.id)}/><button className="btn secondary">Pay with crypto</button><p className="muted">Powered by NOWPayments</p></form>}
-                {bank.enabled&&<form method="post" action="/api/billing/bank-transfer"><input type="hidden" name="invoiceId" value={String(invoice.id)}/><button className="btn secondary">{manualLabel}</button></form>}
-              </div>
+              {(flutterwaveConfigured||koraConfigured||nowPaymentsConfigured)&&
+                <PaymentMethodsClient
+                  invoiceId={String(invoice.id)}
+                  amountUsd={Number(invoice.amount_usd)}
+                  defaultEmail={String(user.email||"")}
+                  nowPaymentsConfigured={nowPaymentsConfigured}
+                  flutterwaveConfigured={flutterwaveConfigured}
+                  koraConfigured={koraConfigured}
+                />
+              }
+              {bank.enabled&&<form method="post" action="/api/billing/bank-transfer" style={{marginTop:16}}>
+                <input type="hidden" name="invoiceId" value={String(invoice.id)}/>
+                <button className="btn secondary">{manualLabel}</button>
+                <p className="muted">Manual payment remains available as a separate fallback.</p>
+              </form>}
               {!flutterwaveConfigured&&!koraConfigured&&!nowPaymentsConfigured&&!bank.enabled&&<p className="muted">No payment method is configured yet. Contact Mkety support.</p>}
             </>
           )}
