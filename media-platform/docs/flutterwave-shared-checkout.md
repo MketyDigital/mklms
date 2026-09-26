@@ -4,7 +4,7 @@ Mkety Media keeps all product and invoice pricing in USD. The shared MkSaaS Flut
 
 ## Start checkout
 
-Media calls the configured `FLUTTERWAVE_CHECKOUT_BROKER_URL` with an internal bearer secret.
+Media calls the configured `FLUTTERWAVE_CHECKOUT_BROKER_URL` with an internal bearer secret and requests the Inline experience.
 
 Request:
 
@@ -19,27 +19,38 @@ Request:
   "invoice_id": "media-invoice-id",
   "tenant_id": "media-tenant-id",
   "redirect_url": "https://media.mkety.com/billing?payment=processing&provider=flutterwave",
-  "media_webhook_url": "https://media.mkety.com/api/billing/flutterwave/webhook"
+  "media_webhook_url": "https://media.mkety.com/api/billing/flutterwave/webhook",
+  "checkout_experience": "inline"
 }
 ```
 
-Successful response:
+Successful Inline response:
 
 ```json
 {
-  "checkout_url": "https://...",
+  "checkout_experience": "inline",
   "checkout_amount": 65000,
-  "checkout_currency": "NGN"
+  "checkout_currency": "NGN",
+  "inline": {
+    "publicKey": "FLWPUBK_...",
+    "reference": "MKM-XXXXXXXXXX",
+    "amount": 65000,
+    "currency": "NGN",
+    "email": "customer@example.com",
+    "redirectPath": "/billing?payment=processing&provider=flutterwave",
+    "metadata": {},
+    "payloadHash": "..."
+  }
 }
 ```
 
-The aliases `url`, `amount`, and `currency` are also accepted.
+The Flutterwave Standard secret key never leaves MkSaaS. If Inline is unavailable, Media may consume the existing hosted-checkout fallback returned by the broker.
 
-For non-USD checkout, the broker must perform the currency quote. Media does not maintain FX rates. Media stores the returned amount/currency on the invoice and later verifies the settled Flutterwave charge against that exact quote.
+For non-USD checkout, the broker performs the currency quote. Media does not maintain FX rates. Media stores the returned amount/currency on the invoice and later verifies the settled Flutterwave charge against that stored quote.
 
 ## Webhook routing
 
-Flutterwave's dashboard can use one central webhook, for example:
+The Flutterwave dashboard webhook for the shared Mkety Standard/v3 integration is:
 
 `https://mkety.com/api/payments/flutterwave/webhook`
 
@@ -47,18 +58,16 @@ For Media events, the central service forwards the original raw body unchanged t
 
 `https://media.mkety.com/api/billing/flutterwave/webhook`
 
-For v4 events, preserve the original `flutterwave-signature` header. Media independently verifies that HMAC signature and then re-fetches the charge from Flutterwave v4 before settlement.
-
-Media v4 production charge re-query uses Flutterwave's documented v4 production base `https://f4bexperience.flutterwave.com`. Flutterwave Standard/v3 verification remains on `https://api.flutterwave.com/v3` and is owned centrally by MkSaaS.
-
-For Flutterwave Standard/v3 events, preserve the original `verif-hash` header. The central Mkety webhook must first validate `verif-hash`, re-query the transaction with `FLUTTERWAVE_STANDARD_SECRET_KEY`, and verify status/reference/currency/amount. Only after that succeeds should it forward the unchanged original body and original `verif-hash` to Media, together with:
+For Flutterwave Standard/v3 events, MkSaaS validates `verif-hash`, re-queries the transaction with `FLUTTERWAVE_STANDARD_SECRET_KEY`, and verifies status/reference/currency/amount. Only after that succeeds does it forward the unchanged original body and original `verif-hash` to Media, together with:
 
 `x-mkety-payment-attestation: <base64 HMAC-SHA256 of the unchanged raw body using FLUTTERWAVE_CHECKOUT_BROKER_SECRET>`
 
-Media validates that internal attestation before using the Standard event. This keeps the Standard secret key centralized on MkSaaS; Media does not need it.
+Media validates that internal attestation before settlement. This keeps the Standard secret key centralized on MkSaaS; Media does not need it.
+
+Media retains compatibility code for direct Flutterwave v4 events when v4 credentials are intentionally configured. That path is separate from the shared MkSaaS Standard/v3 Inline flow.
 
 ## Supported Media currency choices
 
-USD, NGN, GHS, KES, GBP, EUR, ZAR, XAF, XOF, UGX, RWF, TZS.
+USD, NGN, GHS, KES, GBP, EUR, ZAR, XAF, XOF, UGX, RWF, TZS, MWK, EGP.
 
-Actual payment methods remain subject to the Flutterwave merchant account, currency, country and method enablement.
+Actual payment methods remain subject to the Flutterwave merchant account, currency, country, and method enablement.
