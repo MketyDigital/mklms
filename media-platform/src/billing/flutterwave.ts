@@ -42,7 +42,7 @@ export async function verifyFlutterwaveV4Webhook(rawBody:string,signature:string
 export async function retrieveFlutterwaveV4Charge(clientId:string,clientSecret:string,chargeId:string){
   const token=await getFlutterwaveV4AccessToken(clientId,clientSecret);
   const trace="mkm-"+crypto.randomUUID();
-  const response=await fetch("https://api.flutterwave.com/charges/"+encodeURIComponent(chargeId),{
+  const response=await fetch("https://f4bexperience.flutterwave.com/charges/"+encodeURIComponent(chargeId),{
     headers:{
       Authorization:"Bearer "+token,
       "content-type":"application/json",
