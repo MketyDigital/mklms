@@ -49,6 +49,8 @@ For Media events, the central service forwards the original raw body unchanged t
 
 For v4 events, preserve the original `flutterwave-signature` header. Media independently verifies that HMAC signature and then re-fetches the charge from Flutterwave v4 before settlement.
 
+Media v4 production charge re-query uses Flutterwave's documented v4 production base `https://f4bexperience.flutterwave.com`. Flutterwave Standard/v3 verification remains on `https://api.flutterwave.com/v3` and is owned centrally by MkSaaS.
+
 For Flutterwave Standard/v3 events, preserve the original `verif-hash` header. The central Mkety webhook must first validate `verif-hash`, re-query the transaction with `FLUTTERWAVE_STANDARD_SECRET_KEY`, and verify status/reference/currency/amount. Only after that succeeds should it forward the unchanged original body and original `verif-hash` to Media, together with:
 
 `x-mkety-payment-attestation: <base64 HMAC-SHA256 of the unchanged raw body using FLUTTERWAVE_CHECKOUT_BROKER_SECRET>`
