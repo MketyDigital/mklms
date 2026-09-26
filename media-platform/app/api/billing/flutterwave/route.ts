@@ -4,7 +4,7 @@ import { getMediaDb,getMediaEnv } from "../../../../src/lib/postgres";
 
 function validEmail(value:string){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);}
 
-const allowedCurrencies=new Set(["USD","NGN","GHS","KES","GBP","EUR","ZAR","XAF","XOF","UGX","RWF","TZS"]);
+const allowedCurrencies=new Set(["USD","NGN","GHS","KES","GBP","EUR","ZAR","XAF","XOF","UGX","RWF","TZS","MWK","EGP"]);
 
 export async function POST(request:Request){
   const user=await getCurrentUser();
@@ -44,13 +44,19 @@ export async function POST(request:Request){
       tenant_id:user.tenantId,
       redirect_url:origin+"/billing?payment=processing&provider=flutterwave",
       media_webhook_url:origin+"/api/billing/flutterwave/webhook",
+      checkout_experience:"inline",
     }),
   });
   const payload=await response.json().catch(()=>null) as any;
+  const inline=payload?.inline;
   const checkoutUrl=String(payload?.url||payload?.checkout_url||"");
   const checkoutCurrency=String(payload?.currency||payload?.checkout_currency||"").toUpperCase();
   const checkoutAmount=Number(payload?.amount??payload?.checkout_amount??NaN);
-  if(!response.ok||!checkoutUrl||!allowedCurrencies.has(checkoutCurrency)||!Number.isFinite(checkoutAmount)||checkoutAmount<=0){
+  const inlineReady=Boolean(
+    inline?.publicKey&&inline?.reference&&Number(inline?.amount)>0&&inline?.currency&&inline?.email&&inline?.payloadHash
+  );
+  if(!response.ok||(!inlineReady&&!checkoutUrl)||!allowedCurrencies.has(checkoutCurrency)||!Number.isFinite(checkoutAmount)||checkoutAmount<=0){
+    if(request.headers.get("accept")?.includes("application/json")) return NextResponse.json({ok:false,error:"flutterwave"},{status:502});
     return NextResponse.redirect(new URL("/billing?error=flutterwave",request.url),303);
   }
   if(checkoutCurrency!==paymentCurrency){
@@ -62,5 +68,15 @@ export async function POST(request:Request){
     db.prepare("UPDATE media_invoices SET checkout_provider='flutterwave',checkout_amount=?,checkout_currency=?,provider_invoice_id=?,updated_at=datetime('now') WHERE id=? AND status='pending'")
       .bind(checkoutAmount,checkoutCurrency,"flutterwave:"+String(invoice.reference),invoiceId),
   ]);
-  return NextResponse.redirect(checkoutUrl,303);
+  if(request.headers.get("accept")?.includes("application/json")){
+    return NextResponse.json({
+      ok:true,
+      checkoutExperience:inlineReady?"inline":"hosted",
+      inline:inlineReady?inline:null,
+      checkoutUrl:inlineReady?"":checkoutUrl,
+      checkoutAmount,
+      checkoutCurrency,
+    });
+  }
+  return NextResponse.redirect(inlineReady?new URL("/billing?payment=ready&provider=flutterwave",request.url):checkoutUrl,303);
 }
