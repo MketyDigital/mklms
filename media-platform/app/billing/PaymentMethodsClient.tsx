@@ -49,6 +49,7 @@ export default function PaymentMethodsClient({
   nowPaymentsConfigured,
   flutterwaveConfigured,
   koraConfigured,
+  lockedProvider,
 }:{
   invoiceId:string;
   amountUsd:number;
@@ -56,6 +57,7 @@ export default function PaymentMethodsClient({
   nowPaymentsConfigured:boolean;
   flutterwaveConfigured:boolean;
   koraConfigured:boolean;
+  lockedProvider?:string;
 }){
   const [email,setEmail]=useState(defaultEmail);
   const [currency,setCurrency]=useState("USD");
@@ -64,7 +66,8 @@ export default function PaymentMethodsClient({
   const [nowWidget,setNowWidget]=useState<{widgetUrl:string;hostedUrl:string}|null>(null);
   const [fwReady,setFwReady]=useState(false);
   const [koraReady,setKoraReady]=useState(false);
-  const [activeProvider,setActiveProvider]=useState<""|"now"|"flutterwave"|"kora">("");
+  const normalizedLockedProvider=lockedProvider==="nowpayments"?"now":lockedProvider==="flutterwave"?"flutterwave":lockedProvider==="kora"?"kora":"";
+  const [activeProvider,setActiveProvider]=useState<""|"now"|"flutterwave"|"kora">(normalizedLockedProvider);
 
   async function startNowPayments(){
     setActiveProvider("now"); setBusy("now"); setMessage("Preparing secure crypto checkout…");
@@ -183,16 +186,18 @@ export default function PaymentMethodsClient({
 
       {activeProvider!==""&&<div className="toolbar" style={{justifyContent:"space-between",alignItems:"center"}}>
         <strong>{activeProvider==="now"?"Pay with crypto":activeProvider==="flutterwave"?"Pay with Flutterwave":"Pay with Kora"}</strong>
-        <button type="button" className="btn secondary" onClick={()=>{
+        {!normalizedLockedProvider&&<button type="button" className="btn secondary" onClick={()=>{
           setActiveProvider("");
           setNowWidget(null);
           setMessage("");
-        }}>Change payment method</button>
+        }}>Change payment method</button>}
       </div>}
 
       {message&&<div className="notice" style={{marginTop:12}}>{message}</div>}
 
-      {activeProvider==="now"&&nowWidget&&<div style={{marginTop:18}}>
+      {activeProvider==="now"&&<div style={{marginTop:18}}>
+        {!nowWidget&&<button type="button" className="btn" disabled={busy==="now"} onClick={startNowPayments}>{busy==="now"?"Preparing…":"Continue with crypto"}</button>}
+        {nowWidget&&<>
         <iframe
           src={nowWidget.widgetUrl}
           title="NOWPayments secure cryptocurrency checkout"
@@ -200,13 +205,27 @@ export default function PaymentMethodsClient({
           allow="clipboard-write; payment"
           referrerPolicy="strict-origin-when-cross-origin"
         />
-        <p className="muted">If the widget does not load, <a href={nowWidget.hostedUrl} target="_blank" rel="noopener noreferrer">open NOWPayments securely</a>.</p>
+        <p className="muted">If the secure checkout does not load, <a href={nowWidget.hostedUrl} target="_blank" rel="noopener noreferrer">open it in a new tab</a>.</p>
+        </>}
       </div>}
 
-      {activeProvider==="kora"&&koraConfigured&&<div id="mkety-media-kora-checkout" style={{margin:"18px auto 0",minHeight:0,maxWidth:440,overflow:"hidden",borderRadius:16}}/>}
+      {activeProvider==="flutterwave"&&normalizedLockedProvider&&<div style={{marginTop:18}}>
+        <label>Payment currency
+          <select value={currency} onChange={e=>setCurrency(e.target.value)}>
+            {currencies.map(([code,name])=><option key={code} value={code}>{code} — {name}</option>)}
+          </select>
+        </label>
+        <button type="button" className="btn" disabled={busy==="flutterwave"||!fwReady} onClick={startFlutterwave}>
+          {!fwReady?"Loading secure checkout…":busy==="flutterwave"?"Preparing…":"Continue payment"}
+        </button>
+      </div>}
 
-      <p className="muted">Payment completion in a widget or modal does not activate service by itself. Mkety waits for provider webhook verification and server-side settlement.</p>
-      <p className="muted">Mkety invoice value: USD {amountUsd.toFixed(2)}.</p>
+      {activeProvider==="kora"&&koraConfigured&&<>
+        {normalizedLockedProvider&&<button type="button" className="btn" disabled={busy==="kora"||!koraReady} onClick={startKora}>{!koraReady?"Loading secure checkout…":busy==="kora"?"Preparing…":"Continue payment"}</button>}
+        <div id="mkety-media-kora-checkout" style={{margin:"18px auto 0",minHeight:0,maxWidth:440,overflow:"hidden",borderRadius:16}}/>
+      </>}
+
+      <p className="muted">Your plan updates automatically after payment is confirmed.</p>
     </div>
   </>;
 }
