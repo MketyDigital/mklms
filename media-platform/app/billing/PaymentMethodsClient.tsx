@@ -49,6 +49,7 @@ export default function PaymentMethodsClient({
   flutterwaveConfigured,
   koraConfigured,
   lockedProvider,
+  initialCurrency,
 }:{
   invoiceId:string;
    defaultEmail:string;
@@ -56,9 +57,10 @@ export default function PaymentMethodsClient({
   flutterwaveConfigured:boolean;
   koraConfigured:boolean;
   lockedProvider?:string;
+  initialCurrency?:string;
 }){
   const [email,setEmail]=useState(defaultEmail);
-  const [currency,setCurrency]=useState("USD");
+  const [currency,setCurrency]=useState(initialCurrency||"USD");
   const [message,setMessage]=useState("");
   const [busy,setBusy]=useState("");
   const [nowWidget,setNowWidget]=useState<{widgetUrl:string;hostedUrl:string}|null>(null);
@@ -72,7 +74,7 @@ export default function PaymentMethodsClient({
     try{
       const data=await postForm("/api/billing/nowpayments",{invoiceId,experience:"embedded"});
       setNowWidget({widgetUrl:String(data.widgetUrl),hostedUrl:String(data.hostedUrl)});
-      setMessage("NOWPayments is ready below. Access activates only after Mkety verifies the signed payment notification.");
+      setMessage("Your secure crypto checkout is ready below. Your plan updates after payment is confirmed.");
     }catch{
       setActiveProvider("");
       setMessage("Could not prepare NOWPayments checkout. Please try again.");
@@ -158,11 +160,11 @@ export default function PaymentMethodsClient({
             <button type="button" className="btn secondary" disabled={busy==="now"} onClick={startNowPayments}>
               {busy==="now"?"Preparing…":"Pay with crypto"}
             </button>
-            <p className="muted">NOWPayments widget · stays on Mkety Media</p>
+            <p className="muted">Secure cryptocurrency checkout</p>
           </div>}
 
           {flutterwaveConfigured&&<div style={{minWidth:270}}>
-            <label>Flutterwave payment currency
+            <label>Payment currency
               <select value={currency} onChange={e=>setCurrency(e.target.value)}>
                 {currencies.map(([code,name])=><option key={code} value={code}>{code} — {name}</option>)}
               </select>
@@ -170,14 +172,14 @@ export default function PaymentMethodsClient({
             <button type="button" className="btn" disabled={busy==="flutterwave"||!fwReady} onClick={startFlutterwave}>
               {!fwReady?"Loading Flutterwave…":busy==="flutterwave"?"Preparing…":"Pay with Flutterwave"}
             </button>
-            <p className="muted">Secure Flutterwave Inline opens over this page.</p>
+            <p className="muted">Pay securely in your selected currency.</p>
           </div>}
 
           {koraConfigured&&<div style={{minWidth:220}}>
             <button type="button" className="btn secondary" disabled={busy==="kora"||!koraReady} onClick={startKora}>
               {!koraReady?"Loading Kora…":busy==="kora"?"Preparing…":"Pay with Kora"}
             </button>
-            <p className="muted">Kora checkout embeds below.</p>
+            <p className="muted">Secure local payment options.</p>
           </div>}
         </div>
       </>}
@@ -209,8 +211,8 @@ export default function PaymentMethodsClient({
 
       {activeProvider==="flutterwave"&&normalizedLockedProvider&&<div style={{marginTop:18}}>
         <label>Payment currency
-          <select value={currency} onChange={e=>setCurrency(e.target.value)}>
-            {currencies.map(([code,name])=><option key={code} value={code}>{code} — {name}</option>)}
+          <select value={currency} disabled>
+            {currencies.filter(([code])=>code===currency).map(([code,name])=><option key={code} value={code}>{code} — {name}</option>)}
           </select>
         </label>
         <button type="button" className="btn" disabled={busy==="flutterwave"||!fwReady} onClick={startFlutterwave}>
