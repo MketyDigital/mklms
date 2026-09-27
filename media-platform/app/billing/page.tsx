@@ -38,6 +38,7 @@ export default async function BillingPage({searchParams}:{searchParams:Promise<R
   const telegramBotUsername=String(runtime.MEDIA_TELEGRAM_BOT_USERNAME||"");
   const currentPlan=await db.prepare("SELECT plan_code FROM media_tenants WHERE id=? LIMIT 1").bind(user.tenantId).first<any>();
   const currentPublicPlan=(plansResult.results||[]).find((p:any)=>p.code===currentPlan?.plan_code);
+  const recoveryLink=await db.prepare("SELECT telegram_chat_id,linked_at FROM media_account_recovery_links WHERE user_id=? LIMIT 1").bind(user.userId).first<any>();
   const bankHasDetails=Boolean(bank.bankName||bank.accountName||bank.accountNumber);
   const paymentUrl=String(bank.paymentUrl||"");
   const manualLabel=paymentUrl?(bankHasDetails?"Bank transfer / payment link":"Pay with payment link"):"Pay by bank transfer";
@@ -52,6 +53,17 @@ export default async function BillingPage({searchParams}:{searchParams:Promise<R
         <p>Account status: <strong>{state.subscriptionStatus}</strong></p>
         {state.renewalAt&&<p>Current paid period ends: {new Date(state.renewalAt).toLocaleDateString()}</p>}
         {(state.addonStorageBytes>0||state.addonDeliveryBytes>0||state.addonDeliveryRequests>0)&&<p className="muted">Current limits include paid extra capacity.</p>}
+      </div>
+
+      <div className="card" style={{marginTop:18}}>
+        <h2>Account recovery</h2>
+        {recoveryLink?.telegram_chat_id?<>
+          <p>Your Telegram account is connected for password recovery.</p>
+          <form method="post" action="/api/auth/recovery/telegram-link"><button className="btn secondary">Reconnect Telegram</button></form>
+        </>:<>
+          <p className="muted">Connect Telegram once so you can securely recover your account if you forget your password.</p>
+          <form method="post" action="/api/auth/recovery/telegram-link"><button className="btn secondary">Connect Telegram for recovery</button></form>
+        </>}
       </div>
 
       {params.payment==="processing"&&<div className="notice" style={{marginTop:18}}>Payment confirmation is being checked. This page will show the updated account status after the provider confirms the transaction.</div>}
