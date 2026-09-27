@@ -13,7 +13,7 @@ export default async function ForgotPasswordPage({searchParams}:{searchParams:Pr
     <div className="auth-brand" aria-label="Mkety"></div>
     <h1>Recover your account</h1>
     <p className="muted">Enter the email or username on your Mkety Media account.</p>
-    {params.status==="sent"&&<div className="notice">If Telegram recovery is linked to this account, continue with the recovery button shown on the next step.</div>}
+    {params.status==="sent"&&<div className="notice">If this account has Telegram recovery connected, we’ve sent a secure reset link there. If you don’t receive it, contact Mkety Support for help.</div>}
     {params.error==="rate"&&<div className="notice danger">Too many recovery attempts. Please try again shortly.</div>}
     {!telegramReady&&<div className="notice">Account recovery is temporarily handled by Mkety Support.</div>}
     <form method="post" action="/api/auth/recovery/start">
