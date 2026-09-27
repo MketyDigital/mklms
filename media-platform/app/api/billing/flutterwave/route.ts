@@ -56,10 +56,22 @@ export async function POST(request:Request){
     inline?.publicKey&&inline?.reference&&Number(inline?.amount)>0&&inline?.currency&&inline?.email&&inline?.payloadHash
   );
   if(!response.ok||(!inlineReady&&!checkoutUrl)||!allowedCurrencies.has(checkoutCurrency)||!Number.isFinite(checkoutAmount)||checkoutAmount<=0){
-    if(request.headers.get("accept")?.includes("application/json")) return NextResponse.json({ok:false,error:"flutterwave"},{status:502});
+    if(request.headers.get("accept")?.includes("application/json")) return NextResponse.json({
+      ok:false,
+      error:"flutterwave",
+      message:String(payload?.message||payload?.error||"Flutterwave checkout could not be prepared."),
+      requestedCurrency:paymentCurrency,
+    },{status:502});
     return NextResponse.redirect(new URL("/billing?error=flutterwave",request.url),303);
   }
   if(checkoutCurrency!==paymentCurrency){
+    if(request.headers.get("accept")?.includes("application/json")) return NextResponse.json({
+      ok:false,
+      error:"currency-quote",
+      message:"The selected currency could not be quoted. Choose another currency or ask the Mkety operator to configure its FX rate.",
+      requestedCurrency:paymentCurrency,
+      checkoutCurrency,
+    },{status:409});
     return NextResponse.redirect(new URL("/billing?error=currency-quote",request.url),303);
   }
 
