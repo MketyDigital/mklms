@@ -407,6 +407,9 @@ async function handleMessage(message:any){
       const telegramUserId=String(message.from?.id||"");
       await getMediaDb().batch([
         getMediaDb().prepare(
+          "DELETE FROM media_account_recovery_links WHERE user_id<>? AND (telegram_chat_id=? OR telegram_user_id=?)"
+        ).bind(String(binding.user_id),chatId,telegramUserId),
+        getMediaDb().prepare(
           "INSERT INTO media_account_recovery_links (user_id,telegram_chat_id,telegram_user_id,linked_at,updated_at) VALUES (?,?,?,?,datetime('now')) ON CONFLICT(user_id) DO UPDATE SET telegram_chat_id=excluded.telegram_chat_id,telegram_user_id=excluded.telegram_user_id,linked_at=excluded.linked_at,updated_at=datetime('now')"
         ).bind(String(binding.user_id),chatId,telegramUserId,new Date().toISOString()),
         getMediaDb().prepare("UPDATE media_recovery_binding_tokens SET used_at=datetime('now') WHERE id=?").bind(String(binding.id)),
