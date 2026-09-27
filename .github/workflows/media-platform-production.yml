@@ -379,6 +379,9 @@ jobs:
           for url in \
             "https://media.mkety.com/" \
             "https://media.mkety.com/login" \
+            "https://media.mkety.com/signup" \
+            "https://media.mkety.com/forgot-password" \
+            "https://media.mkety.com/reset-password" \
             "https://media.mkety.com/enterprise" \
             "https://media.mkety.com/trust" \
             "https://media.mkety.com/robots.txt" \
