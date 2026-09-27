@@ -3,13 +3,15 @@ import Link from "next/link";
 
 export const metadata:Metadata={robots:{index:false,follow:false,nocache:true}};
 
-export default function LoginPage() {
+export default async function LoginPage({searchParams}:{searchParams:Promise<Record<string,string|undefined>>}) {
+  const params=await searchParams;
   return (
     <main className="wrap">
       <form className="card form" method="post" action="/api/auth/login"><div className="auth-brand" aria-label="Mkety"></div>
         <h1>Welcome back</h1>
-        <label>Username</label>
-        <input name="username" autoComplete="username" required />
+        {params.notice==="existing"&&<div className="notice">You already have a Mkety Media account with this email. Sign in to continue your payment or access your account.</div>}
+        <label>Email or username</label>
+        <input name="username" autoComplete="username" defaultValue={params.email||""} required />
         <label>Password</label>
         <input type="password" name="password" autoComplete="current-password" required />
         <button className="btn" type="submit">Login</button>
