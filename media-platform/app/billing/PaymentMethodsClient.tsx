@@ -44,16 +44,14 @@ async function postForm(url:string,values:Record<string,string>){
 
 export default function PaymentMethodsClient({
   invoiceId,
-  amountUsd,
-  defaultEmail,
+   defaultEmail,
   nowPaymentsConfigured,
   flutterwaveConfigured,
   koraConfigured,
   lockedProvider,
 }:{
   invoiceId:string;
-  amountUsd:number;
-  defaultEmail:string;
+   defaultEmail:string;
   nowPaymentsConfigured:boolean;
   flutterwaveConfigured:boolean;
   koraConfigured:boolean;
