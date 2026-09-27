@@ -47,9 +47,9 @@ export default async function BillingPage({searchParams}:{searchParams:Promise<R
       <nav className="nav"><div className="brand">Mkety Media</div><div><Link href="/dashboard">Dashboard</Link><form style={{display:"inline"}} method="post" action="/api/auth/logout"><button className="btn secondary">Logout</button></form></div></nav>
 
       <div className="card">
-        <h1>Billing & capacity</h1>
-        <p><strong>{state.planName}</strong> · {"$"}{state.monthlyUsd.toFixed(2)}/month equivalent · {state.billingTermMonths}-month term</p>
-        <p>Status: <strong>{state.subscriptionStatus}</strong></p>
+        <h1>Plan & billing</h1>
+        <p><strong>{state.planName}</strong> · {"$"}{state.monthlyUsd.toFixed(2)}/month · {state.billingTermMonths}-month billing term</p>
+        <p>Account status: <strong>{state.subscriptionStatus}</strong></p>
         {state.renewalAt&&<p>Current paid period ends: {new Date(state.renewalAt).toLocaleDateString()}</p>}
         {(state.addonStorageBytes>0||state.addonDeliveryBytes>0||state.addonDeliveryRequests>0)&&<p className="muted">Current limits include paid extra capacity.</p>}
       </div>
@@ -82,47 +82,47 @@ export default async function BillingPage({searchParams}:{searchParams:Promise<R
               {(flutterwaveConfigured||koraConfigured||nowPaymentsConfigured)&&
                 <PaymentMethodsClient
                   invoiceId={String(invoice.id)}
-                  amountUsd={Number(invoice.amount_usd)}
                   defaultEmail={String(user.email||"")}
                   nowPaymentsConfigured={nowPaymentsConfigured}
                   flutterwaveConfigured={flutterwaveConfigured}
                   koraConfigured={koraConfigured}
+                  lockedProvider={paymentStarted?String(invoice.checkout_provider||""):""}
                 />
               }
-              {bank.enabled&&<form method="post" action="/api/billing/bank-transfer" style={{marginTop:16}}>
+              {bank.enabled&&!paymentStarted&&<form method="post" action="/api/billing/bank-transfer" style={{marginTop:16}}>
                 <input type="hidden" name="invoiceId" value={String(invoice.id)}/>
                 <button className="btn secondary">{manualLabel}</button>
-                <p className="muted">Manual payment remains available as a separate fallback.</p>
+                <p className="muted">Prefer a manual payment? Use this option instead.</p>
               </form>}
               {!flutterwaveConfigured&&!koraConfigured&&!nowPaymentsConfigured&&!bank.enabled&&<p className="muted">No payment method is configured yet. Contact Mkety support.</p>}
             </>
           )}
-          <p className="muted">No quota or plan increase is applied before payment verification.</p>
+          <p className="muted">Your plan updates automatically after payment is confirmed.</p>
           {state.status==="pending"&&!paymentStarted&&<details style={{marginTop:18}}>
             <summary><strong>Choose a different plan or billing term</strong></summary>
             <form method="post" action="/api/billing/change-plan" className="form" style={{marginTop:12}}>
               <label>Plan<select name="plan" defaultValue={currentPlan?.plan_code||"starter"}>{(plansResult.results||[]).map((p:any)=><option key={p.code} value={p.code}>{p.name} — {"$"}{Number(p.monthly_usd).toFixed(2)}/mo</option>)}</select></label>
               <label>Billing term<select name="term" defaultValue={String(state.billingTermMonths)}>{(billingTerms as any[]).map((t:any)=><option key={t.months} value={t.months}>{t.label}{Number(t.discountPercent||0)>0?" — "+Number(t.discountPercent)+"% off":""}</option>)}</select></label>
-              <button className="btn secondary">Replace unpaid invoice</button>
-              <p className="muted">Your current unpaid invoice is cancelled and replaced. Your account and username stay the same.</p>
+              <button className="btn secondary">Update plan and continue</button>
+              <p className="muted">We’ll replace this unpaid invoice with a fresh one using your new selection.</p>
             </form>
             <form method="post" action="/api/billing/cancel" style={{marginTop:10}}>
-              <button className="btn secondary">Cancel this unpaid invoice</button>
-              <p className="muted">You can log out and return later. Your account remains pending and no storage activates until a new invoice is paid.</p>
+              <button className="btn secondary">Cancel this payment request</button>
+              <p className="muted">Your account stays saved. You can return later and choose a plan again.</p>
             </form>
           </details>}
-          {state.status==="pending"&&paymentStarted&&<p className="muted">A payment method has already been started for this invoice. To avoid paying an old or cancelled reference, finish this payment or contact Mkety Support before changing the plan.</p>}
+          {state.status==="pending"&&paymentStarted&&<p className="muted">This payment is already in progress. Continue with the same payment method above. If you need to change the order, contact Mkety Support first so we can avoid duplicate or late payments.</p>}
         </div>
       )}
 
       {state.status==="pending"&&!hasPending&&(
         <div className="card" style={{marginTop:18}}>
           <h2>Choose your plan and continue</h2>
-          <p className="muted">Your account is saved, but no active payment is pending. Choose any current public plan and billing term to create a fresh invoice.</p>
+          <p className="muted">Your account is saved. Choose a plan and billing term to continue where you left off.</p>
           <form method="post" action="/api/billing/change-plan" className="form">
             <label>Plan<select name="plan" defaultValue={currentPlan?.plan_code||"starter"}>{(plansResult.results||[]).map((p:any)=><option key={p.code} value={p.code}>{p.name} — {"$"}{Number(p.monthly_usd).toFixed(2)}/mo</option>)}</select></label>
             <label>Billing term<select name="term" defaultValue={String(state.billingTermMonths)}>{(billingTerms as any[]).map((t:any)=><option key={t.months} value={t.months}>{t.label}{Number(t.discountPercent||0)>0?" — "+Number(t.discountPercent)+"% off":""}</option>)}</select></label>
-            <button className="btn">Create payment</button>
+            <button className="btn">Continue to payment</button>
           </form>
         </div>
       )}
