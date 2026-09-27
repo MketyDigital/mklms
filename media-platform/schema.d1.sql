@@ -301,6 +301,26 @@ VALUES (
 );
 
 
+
+CREATE TABLE IF NOT EXISTS media_account_recovery_links (
+  user_id TEXT PRIMARY KEY REFERENCES media_users(id) ON DELETE CASCADE,
+  telegram_chat_id TEXT UNIQUE,
+  telegram_user_id TEXT UNIQUE,
+  linked_at TEXT,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS media_password_reset_tokens (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES media_users(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TEXT NOT NULL,
+  used_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS media_password_reset_tokens_user_idx
+  ON media_password_reset_tokens(user_id, expires_at);
+
 CREATE TABLE IF NOT EXISTS media_telegram_contacts (
   chat_id TEXT PRIMARY KEY,
   telegram_user_id TEXT,
