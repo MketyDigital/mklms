@@ -9,6 +9,7 @@ import {
   bindTelegramOperatorChat,
 } from "../../../../src/billing/telegram";
 import { settleInvoice } from "../../../../src/billing/settle";
+import { recoveryTokenHash } from "../../../../src/auth/recovery";
 
 function isPrivate(message:any){
   return String(message?.chat?.type||"")==="private";
@@ -392,6 +393,30 @@ async function handleMessage(message:any){
 
   if(cmd==="/start"){
     const payload=startPayload(text);
+    const recoveryMatch=payload.match(/^recovery_([a-f0-9]+)$/i);
+    if(recoveryMatch){
+      const tokenHash=await recoveryTokenHash(recoveryMatch[1]);
+      const binding=await getMediaDb().prepare(
+        "SELECT id,user_id FROM media_recovery_binding_tokens WHERE token_hash=? AND used_at IS NULL AND expires_at>datetime('now') LIMIT 1"
+      ).bind(tokenHash).first<any>();
+      if(!binding){
+        await telegram("sendMessage",{chat_id:String(message.chat.id),text:"This recovery connection link has expired. Return to Mkety Media and create a new one."});
+        return;
+      }
+      const chatId=String(message.chat.id);
+      const telegramUserId=String(message.from?.id||"");
+      await getMediaDb().batch([
+        getMediaDb().prepare(
+          "INSERT INTO media_account_recovery_links (user_id,telegram_chat_id,telegram_user_id,linked_at,updated_at) VALUES (?,?,?,?,datetime('now')) ON CONFLICT(user_id) DO UPDATE SET telegram_chat_id=excluded.telegram_chat_id,telegram_user_id=excluded.telegram_user_id,linked_at=excluded.linked_at,updated_at=datetime('now')"
+        ).bind(String(binding.user_id),chatId,telegramUserId,new Date().toISOString()),
+        getMediaDb().prepare("UPDATE media_recovery_binding_tokens SET used_at=datetime('now') WHERE id=?").bind(String(binding.id)),
+      ]);
+      await telegram("sendMessage",{
+        chat_id:chatId,
+        text:"✅ Telegram recovery is now connected to your Mkety Media account. If you ever forget your password, use “Forgot password” on the sign-in page and the secure reset link will be sent here.",
+      });
+      return;
+    }
     const proofMatch=payload.match(/^pay_(MKM-[A-Za-z0-9]+)$/i);
     if(proofMatch){
       const invoice=await invoiceByReference(proofMatch[1]);
