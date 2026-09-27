@@ -17,6 +17,8 @@ export default async function LoginPage({searchParams}:{searchParams:Promise<Rec
         <label>Password</label>
         <input type="password" name="password" autoComplete="current-password" required />
         <button className="btn" type="submit">Login</button>
+        {params.reset==="1"&&<div className="notice">Password updated. Sign in with your new password.</div>}
+        <p className="muted"><Link href="/forgot-password">Forgot password or lost access?</Link></p>
         <p className="muted">New to Mkety Media? <Link href="/signup">Create an account</Link>.</p>
       </form>
     </main>
