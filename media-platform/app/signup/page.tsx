@@ -13,6 +13,11 @@ export default async function SignupPage({searchParams}:{searchParams:Promise<Re
   if(portal.signupEnabled===false) return <main className="wrap"><div className="card form"><h1>Signups are currently paused</h1><p className="muted">Mkety Media is not accepting new self-service accounts right now.</p><Link className="btn" href="/">Back home</Link></div></main>;
   return <main className="wrap"><form className="card form" method="post" action="/api/auth/signup">
     <div className="auth-brand" aria-label="Mkety"></div><h1>Create your Mkety Media account</h1>
+    {params.error==="username"&&<div className="notice danger">That username is already in use. Choose another one or sign in if you already have an account.</div>}
+    {params.error==="invalid"&&<div className="notice danger">Please check your details and try again.</div>}
+    {params.error==="plan"&&<div className="notice danger">That plan is no longer available. Please choose another plan.</div>}
+    {params.error==="term"&&<div className="notice danger">That billing term is no longer available. Please choose another option.</div>}
+    {params.error==="rate"&&<div className="notice danger">Too many attempts. Please try again shortly.</div>}
     <label>Business / project name</label><input name="name" required maxLength={100}/>
     <label>Email</label><input type="email" name="email" required maxLength={254}/>
     <label>Username</label><input name="username" required minLength={3} maxLength={40} pattern="[A-Za-z0-9_-]+"/>
