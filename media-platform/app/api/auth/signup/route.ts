@@ -35,6 +35,8 @@ export async function POST(request: Request) {
   const plan=await db.prepare("SELECT * FROM media_plans WHERE code=? AND active=1 LIMIT 1").bind(planCode).first<any>();
   if(!plan) return NextResponse.redirect(new URL("/signup?error=plan",request.url),303);
 
+  const existingEmail=await db.prepare("SELECT id FROM media_users WHERE email=? COLLATE NOCASE LIMIT 1").bind(email).first();
+  if(existingEmail) return NextResponse.redirect(new URL("/login?notice=existing&email="+encodeURIComponent(email),request.url),303);
   const existing=await db.prepare("SELECT id FROM media_users WHERE username=? COLLATE NOCASE LIMIT 1").bind(username).first();
   if(existing) return NextResponse.redirect(new URL("/signup?error=username",request.url),303);
 
