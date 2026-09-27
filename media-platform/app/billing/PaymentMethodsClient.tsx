@@ -38,7 +38,7 @@ async function postForm(url:string,values:Record<string,string>){
     credentials:"same-origin",
   });
   const payload:any=await response.json().catch(()=>null);
-  if(!response.ok||!payload) throw new Error(payload?.error||"payment");
+  if(!response.ok||!payload) throw new Error(payload?.message||payload?.error||"payment");
   return payload;
 }
 
@@ -64,14 +64,16 @@ export default function PaymentMethodsClient({
   const [nowWidget,setNowWidget]=useState<{widgetUrl:string;hostedUrl:string}|null>(null);
   const [fwReady,setFwReady]=useState(false);
   const [koraReady,setKoraReady]=useState(false);
+  const [activeProvider,setActiveProvider]=useState<""|"now"|"flutterwave"|"kora">("");
 
   async function startNowPayments(){
-    setBusy("now"); setMessage("Preparing secure crypto checkout…");
+    setActiveProvider("now"); setBusy("now"); setMessage("Preparing secure crypto checkout…");
     try{
       const data=await postForm("/api/billing/nowpayments",{invoiceId,experience:"embedded"});
       setNowWidget({widgetUrl:String(data.widgetUrl),hostedUrl:String(data.hostedUrl)});
       setMessage("NOWPayments is ready below. Access activates only after Mkety verifies the signed payment notification.");
     }catch{
+      setActiveProvider("");
       setMessage("Could not prepare NOWPayments checkout. Please try again.");
     }finally{setBusy("");}
   }
@@ -79,7 +81,7 @@ export default function PaymentMethodsClient({
   async function startFlutterwave(){
     if(!email){setMessage("Enter an email address for the payment receipt.");return;}
     if(!fwReady||!window.FlutterwaveCheckout){setMessage("Flutterwave checkout is still loading. Please try again.");return;}
-    setBusy("flutterwave"); setMessage("Preparing secure Flutterwave checkout…");
+    setActiveProvider("flutterwave"); setBusy("flutterwave"); setMessage("Preparing secure Flutterwave checkout…");
     try{
       const data=await postForm("/api/billing/flutterwave",{invoiceId,email,currency});
       if(data.checkoutExperience==="inline"&&data.inline){
@@ -95,7 +97,7 @@ export default function PaymentMethodsClient({
           customer:{email:p.email,...(p.customerName?{name:p.customerName}:{})},
           meta:p.metadata,
           customizations:{title:"Mkety Media",description:"Secure Mkety Media payment"},
-          onclose:()=>setMessage("Checkout closed. No plan or quota is activated until Mkety verifies payment."),
+          onclose:()=>{setActiveProvider("");setMessage("Checkout closed. No plan or quota is activated until Mkety verifies payment.");},
         });
       }else if(data.checkoutUrl){
         setMessage("Inline checkout is temporarily unavailable. Opening Flutterwave secure checkout…");
@@ -103,15 +105,16 @@ export default function PaymentMethodsClient({
       }else{
         throw new Error("inline");
       }
-    }catch{
-      setMessage("Could not prepare Flutterwave checkout. Please try again.");
+    }catch(error){
+      setActiveProvider("");
+      setMessage(error instanceof Error&&error.message!=="payment"?error.message:"Could not prepare Flutterwave checkout. Please try again.");
     }finally{setBusy("");}
   }
 
   async function startKora(){
     if(!email){setMessage("Enter an email address for the payment receipt.");return;}
     if(!koraReady||!window.Korapay){setMessage("Kora checkout is still loading. Please try again.");return;}
-    setBusy("kora"); setMessage("Preparing secure Kora checkout…");
+    setActiveProvider("kora"); setBusy("kora"); setMessage("Preparing secure Kora checkout…");
     try{
       const p=await postForm("/api/billing/kora",{invoiceId,email});
       setMessage("Kora checkout is ready below.");
@@ -128,10 +131,11 @@ export default function PaymentMethodsClient({
         containerId:"mkety-media-kora-checkout",
         onSuccess:()=>window.location.assign(p.redirectPath),
         onPending:()=>setMessage("Payment is pending. Mkety will verify it before activating access."),
-        onFailed:()=>setMessage("The Kora payment was not completed. You can try again."),
-        onClose:()=>setMessage("Checkout closed. No plan or quota is activated until Mkety verifies payment."),
+        onFailed:()=>{setActiveProvider("");setMessage("The Kora payment was not completed. You can try again.");},
+        onClose:()=>{setActiveProvider("");setMessage("Checkout closed. No plan or quota is activated until Mkety verifies payment.");},
       });
     }catch{
+      setActiveProvider("");
       setMessage("Could not prepare Kora checkout. Please try again.");
     }finally{setBusy("");}
   }
@@ -141,43 +145,54 @@ export default function PaymentMethodsClient({
     {koraConfigured&&<Script src="https://korablobstorage.blob.core.windows.net/modal-bucket/korapay-collections.min.js" strategy="afterInteractive" onLoad={()=>setKoraReady(true)}/>}
 
     <div className="form" style={{marginTop:18}}>
-      {(flutterwaveConfigured||koraConfigured)&&
-        <label>Email for payment receipt
-          <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com"/>
-        </label>
-      }
-
-      <div className="toolbar" style={{alignItems:"flex-start"}}>
-        {nowPaymentsConfigured&&<div style={{minWidth:220}}>
-          <button type="button" className="btn secondary" disabled={busy==="now"} onClick={startNowPayments}>
-            {busy==="now"?"Preparing…":"Pay with crypto"}
-          </button>
-          <p className="muted">NOWPayments widget · stays on Mkety Media</p>
-        </div>}
-
-        {flutterwaveConfigured&&<div style={{minWidth:270}}>
-          <label>Flutterwave payment currency
-            <select value={currency} onChange={e=>setCurrency(e.target.value)}>
-              {currencies.map(([code,name])=><option key={code} value={code}>{code} — {name}</option>)}
-            </select>
+      {activeProvider===""&&<>
+        {(flutterwaveConfigured||koraConfigured)&&
+          <label>Email for payment receipt
+            <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com"/>
           </label>
-          <button type="button" className="btn" disabled={busy==="flutterwave"||!fwReady} onClick={startFlutterwave}>
-            {!fwReady?"Loading Flutterwave…":busy==="flutterwave"?"Preparing…":"Pay with Flutterwave"}
-          </button>
-          <p className="muted">Secure Flutterwave Inline opens over this page.</p>
-        </div>}
+        }
 
-        {koraConfigured&&<div style={{minWidth:220}}>
-          <button type="button" className="btn secondary" disabled={busy==="kora"||!koraReady} onClick={startKora}>
-            {!koraReady?"Loading Kora…":busy==="kora"?"Preparing…":"Pay with Kora"}
-          </button>
-          <p className="muted">Kora checkout embeds below.</p>
-        </div>}
-      </div>
+        <div className="toolbar" style={{alignItems:"flex-start"}}>
+          {nowPaymentsConfigured&&<div style={{minWidth:220}}>
+            <button type="button" className="btn secondary" disabled={busy==="now"} onClick={startNowPayments}>
+              {busy==="now"?"Preparing…":"Pay with crypto"}
+            </button>
+            <p className="muted">NOWPayments widget · stays on Mkety Media</p>
+          </div>}
+
+          {flutterwaveConfigured&&<div style={{minWidth:270}}>
+            <label>Flutterwave payment currency
+              <select value={currency} onChange={e=>setCurrency(e.target.value)}>
+                {currencies.map(([code,name])=><option key={code} value={code}>{code} — {name}</option>)}
+              </select>
+            </label>
+            <button type="button" className="btn" disabled={busy==="flutterwave"||!fwReady} onClick={startFlutterwave}>
+              {!fwReady?"Loading Flutterwave…":busy==="flutterwave"?"Preparing…":"Pay with Flutterwave"}
+            </button>
+            <p className="muted">Secure Flutterwave Inline opens over this page.</p>
+          </div>}
+
+          {koraConfigured&&<div style={{minWidth:220}}>
+            <button type="button" className="btn secondary" disabled={busy==="kora"||!koraReady} onClick={startKora}>
+              {!koraReady?"Loading Kora…":busy==="kora"?"Preparing…":"Pay with Kora"}
+            </button>
+            <p className="muted">Kora checkout embeds below.</p>
+          </div>}
+        </div>
+      </>}
+
+      {activeProvider!==""&&<div className="toolbar" style={{justifyContent:"space-between",alignItems:"center"}}>
+        <strong>{activeProvider==="now"?"Pay with crypto":activeProvider==="flutterwave"?"Pay with Flutterwave":"Pay with Kora"}</strong>
+        <button type="button" className="btn secondary" onClick={()=>{
+          setActiveProvider("");
+          setNowWidget(null);
+          setMessage("");
+        }}>Change payment method</button>
+      </div>}
 
       {message&&<div className="notice" style={{marginTop:12}}>{message}</div>}
 
-      {nowWidget&&<div style={{marginTop:18}}>
+      {activeProvider==="now"&&nowWidget&&<div style={{marginTop:18}}>
         <iframe
           src={nowWidget.widgetUrl}
           title="NOWPayments secure cryptocurrency checkout"
@@ -188,7 +203,7 @@ export default function PaymentMethodsClient({
         <p className="muted">If the widget does not load, <a href={nowWidget.hostedUrl} target="_blank" rel="noopener noreferrer">open NOWPayments securely</a>.</p>
       </div>}
 
-      {koraConfigured&&<div id="mkety-media-kora-checkout" style={{margin:"18px auto 0",minHeight:0,maxWidth:440,overflow:"hidden",borderRadius:16}}/>}
+      {activeProvider==="kora"&&koraConfigured&&<div id="mkety-media-kora-checkout" style={{margin:"18px auto 0",minHeight:0,maxWidth:440,overflow:"hidden",borderRadius:16}}/>}
 
       <p className="muted">Payment completion in a widget or modal does not activate service by itself. Mkety waits for provider webhook verification and server-side settlement.</p>
       <p className="muted">Mkety invoice value: USD {amountUsd.toFixed(2)}.</p>
