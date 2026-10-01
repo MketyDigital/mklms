@@ -35,6 +35,8 @@ test('settlement validates the locked invoice and stores payment metadata', asyn
   const migration = await read('db/migrations/020_managed_hosting_payment_settlement.sql');
   assert.match(settlement, /Settlement amount does not match the locked invoice/);
   assert.match(settlement, /priceCurrency\.trim\(\)\.toLowerCase\(\) !== "usd"/);
+  assert.match(settlement, /reconcileLegacyPendingInvoiceAmount/);
+  assert.match(repository, /payment_status = 'PENDING'[\s\S]*payment_id IS NULL[\s\S]*paid_at IS NULL/);
   assert.match(repository, /payment_id = COALESCE\(payment_id, \$3\)/);
   assert.match(repository, /settled_amount_usd = COALESCE\(settled_amount_usd, \$4\)/);
   assert.match(migration, /paid_at TIMESTAMPTZ/);
