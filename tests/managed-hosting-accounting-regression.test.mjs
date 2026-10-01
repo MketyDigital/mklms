@@ -56,3 +56,22 @@ test('paid or waived month displays zero amount due and prior paid month remains
   assert.match(page, /getLatestPaidMonth/);
   assert.match(repository, /WHERE payment_status = 'PAID'/);
 });
+
+
+test('managed-hosting recovery route requires admin auth and signed provider verification', async () => {
+  const route = await read('src/app/api/managed-hosting/reconcile/route.ts');
+  assert.match(route, /hasValidAdminSession/);
+  assert.match(route, /MKLMS_BILLING_SERVICE_URL/);
+  assert.match(route, /MKLMS_BILLING_INSTALLATION_ID/);
+  assert.match(route, /MKLMS_BILLING_SHARED_SECRET/);
+  assert.match(route, /v1\/reconcile/);
+  assert.match(route, /signBillingPayload/);
+});
+
+test('Starpips production release packages and deploys the shared billing worker without touching its secrets', async () => {
+  const workflow = await read('.github/workflows/release-starpips-production.yml');
+  assert.match(workflow, /workers\/billing\/wrangler\.jsonc --outdir \.generated\/starpips-release-billing-dry-run/);
+  assert.match(workflow, /Deploy shared managed-hosting billing Worker without changing secrets/);
+  assert.match(workflow, /wrangler deploy --config workers\/billing\/wrangler\.jsonc --x-provision=false/);
+  assert.doesNotMatch(workflow, /wrangler secret (put|bulk|delete).*billing/);
+});
