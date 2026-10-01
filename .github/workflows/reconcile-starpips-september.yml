@@ -1,0 +1,64 @@
+name: Reconcile Starpips September hosting payment
+
+on:
+  push:
+    branches:
+      - ops/reconcile-starpips-september
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      OPERATOR_KEY: ${{ secrets.MKETY_MANAGED_HOSTING_OPERATOR_KEY }}
+      ENDPOINT: https://academy.mkety.com/api/operator/hosting/customer
+    steps:
+      - name: Verify operator secret exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${OPERATOR_KEY:-}" || { echo "Missing MKETY_MANAGED_HOSTING_OPERATOR_KEY"; exit 1; }
+
+      - name: Load September billing state
+        id: load
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --silent --show-error --fail-with-body             --request POST "$ENDPOINT"             --header 'content-type: application/json'             --header "x-mklms-operator-key: $OPERATOR_KEY"             --data '{"installationId":"spf-mklms","action":"getMonth","monthKey":"2026-09"}'             > /tmp/month.json
+          jq -e '.ok == true' /tmp/month.json >/dev/null
+          status=$(jq -r '.result.month.paymentStatus // "PENDING"' /tmp/month.json)
+          floor=$(jq -r '.result.month.minimumFloorUsd // 15' /tmp/month.json)
+          note=$(jq -r '.result.month.operatorNote // ""' /tmp/month.json)
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "floor=$floor" >> "$GITHUB_OUTPUT"
+          printf '%s' "$note" > /tmp/operator-note.txt
+          echo "Current September status: $status"
+
+      - name: Mark September paid after platform-owner confirmation
+        if: steps.load.outputs.status != 'PAID'
+        shell: bash
+        env:
+          FLOOR: ${{ steps.load.outputs.floor }}
+        run: |
+          set -euo pipefail
+          existing_note=$(cat /tmp/operator-note.txt)
+          audit_note="Payment received; manually reconciled by platform owner after managed-hosting settlement recovery rollout."
+          if [ -n "$existing_note" ]; then
+            note="$existing_note | $audit_note"
+          else
+            note="$audit_note"
+          fi
+          jq -n             --arg installationId "spf-mklms"             --arg action "setMonth"             --arg monthKey "2026-09"             --argjson minimumFloorUsd "$FLOOR"             --arg paymentStatus "PAID"             --arg operatorNote "$note"             '{installationId:$installationId,action:$action,monthKey:$monthKey,minimumFloorUsd:$minimumFloorUsd,paymentStatus:$paymentStatus,operatorNote:$operatorNote}'             > /tmp/reconcile.json
+          curl --silent --show-error --fail-with-body             --request POST "$ENDPOINT"             --header 'content-type: application/json'             --header "x-mklms-operator-key: $OPERATOR_KEY"             --data @/tmp/reconcile.json             > /tmp/reconcile-response.json
+          jq -e '.ok == true' /tmp/reconcile-response.json >/dev/null
+
+      - name: Verify September is paid
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --silent --show-error --fail-with-body             --request POST "$ENDPOINT"             --header 'content-type: application/json'             --header "x-mklms-operator-key: $OPERATOR_KEY"             --data '{"installationId":"spf-mklms","action":"getMonth","monthKey":"2026-09"}'             > /tmp/verify.json
+          jq -e '.ok == true and .result.month.paymentStatus == "PAID"' /tmp/verify.json >/dev/null
+          echo "Starpips 2026-09 managed-hosting payment is PAID."
