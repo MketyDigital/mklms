@@ -129,12 +129,16 @@ jobs:
           npm run cf:build
           npx wrangler deploy --config ".generated/starpips/app.wrangler.jsonc" --dry-run --outdir .generated/starpips-release-app-dry-run --x-provision=false
           npx wrangler deploy --config ".generated/starpips/media.wrangler.jsonc" --dry-run --outdir .generated/starpips-release-media-dry-run --x-provision=false
+          npx wrangler deploy --dry-run --config workers/billing/wrangler.jsonc --outdir .generated/starpips-release-billing-dry-run
 
       - name: Deploy existing Starpips media Worker without changing secrets
         run: npx wrangler deploy --config ".generated/starpips/media.wrangler.jsonc" --x-provision=false
 
       - name: Deploy existing Starpips application Worker without changing secrets
         run: npx wrangler deploy --config ".generated/starpips/app.wrangler.jsonc" --x-provision=false
+
+      - name: Deploy shared managed-hosting billing Worker without changing secrets
+        run: npx wrangler deploy --config workers/billing/wrangler.jsonc --x-provision=false
 
       - name: Smoke test the existing Starpips SaaS hostname
         shell: bash
