@@ -7,6 +7,7 @@ import {
   isFreshBillingTimestamp,
   verifyBillingPayload,
 } from "@/features/hosting/server/billing-signature";
+import { getEffectiveManagedHostingPolicy } from "@/features/hosting/server/managed-hosting-policy";
 
 const settlementSchema = z.object({
   installationId: z.string().regex(/^[a-z0-9][a-z0-9-]{1,63}$/),
@@ -46,20 +47,41 @@ export async function POST(request: Request) {
   }
 
   const repository = new PostgresManagedHostingRepository();
-  const invoice = await repository.getMonthOverride(parsed.data.monthKey);
-  if (
-    !invoice ||
-    invoice.amountDueUsd == null ||
-    !invoice.dueAt ||
-    !invoice.graceEndsAt
-  ) {
-    return NextResponse.json({ ok: false, message: "Billing invoice is not finalized." }, { status: 409 });
-  }
   if (parsed.data.priceCurrency.trim().toLowerCase() !== "usd") {
     return NextResponse.json({ ok: false, message: "Unexpected settlement currency." }, { status: 409 });
   }
-  if (Math.abs(invoice.amountDueUsd - parsed.data.priceAmount) > 0.01) {
-    return NextResponse.json({ ok: false, message: "Settlement amount does not match the locked invoice." }, { status: 409 });
+
+  let invoice = await repository.getMonthOverride(parsed.data.monthKey);
+
+  // Compatibility for invoices created before migration 020: the billing Worker
+  // only reaches this point after verifying a NOWPayments "finished" IPN and the
+  // customer HMAC above. Use that trusted provider price to materialize/reconcile
+  // the old pending invoice exactly once; never rewrite a settled/waived invoice.
+  if (!invoice || invoice.amountDueUsd == null || !invoice.dueAt || !invoice.graceEndsAt) {
+    const effective = await getEffectiveManagedHostingPolicy(repository);
+    const [year, month] = parsed.data.monthKey.split("-").map(Number);
+    const monthEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+    const dayMs = 24 * 60 * 60 * 1000;
+    invoice = await repository.finalizeMonthInvoice({
+      monthKey: parsed.data.monthKey,
+      minimumFloorUsd: invoice?.minimumFloorUsd ?? effective.policy.minimumMonthlyFeeUsd,
+      amountDueUsd: parsed.data.priceAmount,
+      dueAt: new Date(monthEnd.getTime() + effective.dueDaysAfterMonthEnd * dayMs),
+      graceEndsAt: new Date(
+        monthEnd.getTime() + (effective.dueDaysAfterMonthEnd + effective.graceDays) * dayMs,
+      ),
+    });
+  }
+
+  if (Math.abs((invoice.amountDueUsd ?? 0) - parsed.data.priceAmount) > 0.01) {
+    const reconciled = await repository.reconcileLegacyPendingInvoiceAmount({
+      monthKey: parsed.data.monthKey,
+      trustedAmountUsd: parsed.data.priceAmount,
+    });
+    if (!reconciled || Math.abs((reconciled.amountDueUsd ?? 0) - parsed.data.priceAmount) > 0.01) {
+      return NextResponse.json({ ok: false, message: "Settlement amount does not match the locked invoice." }, { status: 409 });
+    }
+    invoice = reconciled;
   }
 
   const month = await repository.markMonthPaid({
