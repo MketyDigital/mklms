@@ -335,6 +335,40 @@ export class PostgresManagedHostingRepository {
     return mapMonthRow(result.rows[0]);
   }
 
+  async reconcileLegacyPendingInvoiceAmount(input: {
+    monthKey: string;
+    trustedAmountUsd: number;
+  }): Promise<ManagedHostingMonthOverride | null> {
+    const amountUsd = Math.max(0, Math.round(input.trustedAmountUsd * 100) / 100);
+    const result = await this.pool.query<{
+      month_key: string;
+      minimum_floor_usd: string | number;
+      operator_note: string | null;
+      payment_status: "PENDING" | "PAID" | "WAIVED";
+      amount_due_usd: string | number | null;
+      due_at: Date | string | null;
+      grace_ends_at: Date | string | null;
+      paid_at: Date | string | null;
+      payment_id: string | null;
+      settled_amount_usd: string | number | null;
+      settled_currency: string | null;
+    }>(
+      `UPDATE managed_hosting_months
+       SET amount_due_usd = $2,
+           updated_at = NOW()
+       WHERE month_key = $1
+         AND payment_status = 'PENDING'
+         AND payment_id IS NULL
+         AND paid_at IS NULL
+         AND settled_amount_usd IS NULL
+       RETURNING month_key, minimum_floor_usd, operator_note, payment_status,
+                 amount_due_usd, due_at, grace_ends_at,
+                 paid_at, payment_id, settled_amount_usd, settled_currency`,
+      [input.monthKey, amountUsd],
+    );
+    return result.rows[0] ? mapMonthRow(result.rows[0]) : null;
+  }
+
   async markMonthPaid(input: {
     monthKey: string;
     paymentId: string;
