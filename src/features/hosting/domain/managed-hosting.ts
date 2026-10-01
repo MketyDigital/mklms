@@ -32,6 +32,10 @@ export interface ManagedHostingMonthOverride {
   amountDueUsd?: number | null;
   dueAt?: Date | null;
   graceEndsAt?: Date | null;
+  paidAt?: Date | null;
+  paymentId?: string | null;
+  settledAmountUsd?: number | null;
+  settledCurrency?: string | null;
 }
 
 export type ManagedHostingStandingStatus =

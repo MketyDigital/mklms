@@ -101,13 +101,14 @@ R2 public access stays disabled. The app and media Worker may bind the same inst
 
 ## Database migrations
 
-Current numbered migrations are `001` through `019`.
+Current numbered migrations are `001` through `020`.
 
 Latest migrations:
 
 - `017_tenant_font_branding.sql` — persists tenant-selected font branding.
 - `018_certificate_visual_layout_and_starpips_calibration.sql` — certificate visual-layout support and Starpips calibration.
 - `019_managed_hosting_daily_ledger.sql` — managed-hosting daily usage ledger.
+- `020_managed_hosting_payment_settlement.sql` — immutable invoice settlement metadata for managed-hosting payments.
 
 Never edit an applied historical migration. Add a new numbered migration instead. Migration manifest/checksum tests must remain green.
 
@@ -129,7 +130,7 @@ The Starpips guard must remain fail-closed:
 - historical migrations must be present with matching checksums;
 - a release may not replay historical migrations;
 - historical releases may whitelist only the exact additive migrations approved for that release;
-- the current Starpips release guard explicitly verifies/applies additive migrations `018_certificate_visual_layout_and_starpips_calibration.sql` and `019_managed_hosting_daily_ledger.sql` when pending;
+- the current Starpips release guard explicitly verifies/applies additive migrations `018_certificate_visual_layout_and_starpips_calibration.sql`, `019_managed_hosting_daily_ledger.sql`, and `020_managed_hosting_payment_settlement.sql` when pending;
 - database verification must finish successfully before Worker deployment can start.
 
 Migration `017` was successfully applied and verified on Starpips during production release run `34248552737`; subsequent guarded releases must continue to use the exact migration allowlist in the release workflow.

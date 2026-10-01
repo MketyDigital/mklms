@@ -13,7 +13,7 @@ test('Starpips production release runs only from the deliberate production point
   assert.match(workflow, /GITHUB_SHA/);
 });
 
-test('Starpips release verifies historical migration history and applies only guarded 018 and 019 before code deploy', () => {
+test('Starpips release verifies historical migration history and applies only guarded 018 through 020 before code deploy', () => {
   const workflow = readFileSync(workflowPath, 'utf8');
   assert.doesNotMatch(workflow, /environment: database-migrations/);
   assert.match(workflow, /STARPIPS_DATABASE_URL/);
@@ -22,6 +22,7 @@ test('Starpips release verifies historical migration history and applies only gu
   assert.match(workflow, /starpips-migration-guard\.mjs apply/);
   assert.match(workflow, /018_certificate_visual_layout_and_starpips_calibration\.sql/);
   assert.match(workflow, /019_managed_hosting_daily_ledger\.sql/);
+  assert.match(workflow, /020_managed_hosting_payment_settlement\.sql/);
   assert.doesNotMatch(workflow, /npm run db:migrate/);
 });
 

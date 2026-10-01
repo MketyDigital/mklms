@@ -23,7 +23,9 @@ export function ManagedHostingPanel({
   usage,
   monthStart,
   monthOverride,
+  latestPaidMonth,
   operatorAdjustmentUsd = 0,
+  resolvedCurrentBalanceUsd,
   billingAutomationEnabled = false,
   displayTitle = "Managed Video Hosting & Streaming",
   displayDescription,
@@ -33,7 +35,9 @@ export function ManagedHostingPanel({
   usage: ManagedHostingUsageClientSummary;
   monthStart: Date;
   monthOverride?: ManagedHostingMonthOverride | null;
+  latestPaidMonth?: ManagedHostingMonthOverride | null;
   operatorAdjustmentUsd?: number;
+  resolvedCurrentBalanceUsd?: number | null;
   billingAutomationEnabled?: boolean;
   displayTitle?: string;
   displayDescription?: string | null;
@@ -59,9 +63,6 @@ export function ManagedHostingPanel({
     serviceAccess?.monthKey &&
     serviceAccess.amountDueUsd != null &&
     ["DUE", "OVERDUE", "RESTRICTED"].includes(serviceAccess.status);
-  const amountDueUsd = hasOutstandingInvoice
-    ? serviceAccess.amountDueUsd ?? 0
-    : currentBilling.amountDueUsd;
   const shownMonthKey = hasOutstandingInvoice ? serviceAccess?.monthKey ?? monthKey : monthKey;
   const status = hasOutstandingInvoice
     ? serviceAccess?.status ?? "DUE"
@@ -70,6 +71,12 @@ export function ManagedHostingPanel({
       : monthOverride?.paymentStatus === "WAIVED"
         ? "WAIVED"
         : "CURRENT";
+  const isSettled = status === "PAID" || status === "WAIVED";
+  const amountDueUsd = isSettled
+    ? 0
+    : hasOutstandingInvoice
+      ? serviceAccess.amountDueUsd ?? 0
+      : resolvedCurrentBalanceUsd ?? currentBilling.amountDueUsd;
   const isWarning = status === "OVERDUE" || status === "RESTRICTED";
   const activityBand = getStreamingActivityBand(usageSignals);
   const paymentWindow = resolveManagedHostingPaymentWindow(new Date());
@@ -91,7 +98,7 @@ export function ManagedHostingPanel({
         <CardContent className="space-y-4">
           <div className="rounded-lg border border-primary/40 bg-primary/5 p-4 sm:p-5">
             <p className="text-xs text-muted-foreground">{hasOutstandingInvoice ? `Invoice · ${shownMonthKey}` : `Current billing month · ${shownMonthKey}`}</p>
-            <p className="mt-1 text-sm font-medium">{hasOutstandingInvoice ? "Amount due" : "Current hosting balance"}</p>
+            <p className="mt-1 text-sm font-medium">{hasOutstandingInvoice || isSettled ? "Amount due" : "Current hosting balance"}</p>
             <p className="mt-1 text-3xl font-semibold">${amountDueUsd.toFixed(2)}</p>
             <div className="mt-4 flex flex-col gap-1 text-sm sm:flex-row sm:items-center sm:gap-3">
               <span className="text-muted-foreground">Streaming activity</span>
@@ -124,8 +131,21 @@ export function ManagedHostingPanel({
           ) : null}
           {policy.notice ? <p className="text-sm leading-6 text-muted-foreground">{policy.notice}</p> : null}
 
+          {latestPaidMonth && latestPaidMonth.monthKey !== shownMonthKey ? (
+            <div className="rounded-md border bg-muted/30 p-3 text-sm">
+              <p className="font-medium">Last payment · {latestPaidMonth.monthKey} · PAID</p>
+              <p className="mt-1 text-muted-foreground">
+                {latestPaidMonth.settledAmountUsd != null
+                  ? `${latestPaidMonth.settledAmountUsd.toFixed(2)} settled`
+                  : "Payment received and recorded."}
+              </p>
+            </div>
+          ) : null}
+
           {status === "PAID" ? (
-            <p className="text-sm font-medium">Payment received for this month.</p>
+            <p className="text-sm font-medium">
+              Payment received for this month{monthOverride?.settledAmountUsd != null ? ` · ${monthOverride.settledAmountUsd.toFixed(2)} settled` : ""}.
+            </p>
           ) : status === "WAIVED" ? (
             <p className="text-sm font-medium">Payment has been waived for this month.</p>
           ) : canPay && billingAutomationEnabled ? (

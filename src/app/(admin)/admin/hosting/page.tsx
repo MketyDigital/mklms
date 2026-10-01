@@ -30,18 +30,32 @@ export default async function AdminHostingPage() {
 
   let usage: Awaited<ReturnType<PostgresManagedHostingRepository["getCurrentMonthUsage"]>> | null = null;
   let monthOverride: ManagedHostingMonthOverride | null = null;
+  let latestPaidMonth: ManagedHostingMonthOverride | null = null;
   let serviceAccess: Awaited<ReturnType<typeof getManagedHostingServiceAccess>> | null = null;
   let operatorAdjustmentUsd = 0;
+  let resolvedCurrentBalanceUsd: number | null = null;
   let setupError: string | null = null;
 
   try {
     usage = await hostingRepository.getCurrentMonthUsage();
     const monthKey = getBillingMonthKey(usage.monthStart);
-    [monthOverride, serviceAccess, operatorAdjustmentUsd] = await Promise.all([
+    const [
+      currentMonthOverride,
+      currentServiceAccess,
+      currentOperatorAdjustmentUsd,
+      peakAutomaticBalanceUsd,
+      currentLatestPaidMonth,
+    ] = await Promise.all([
       hostingRepository.getMonthOverride(monthKey),
       getManagedHostingServiceAccess(hostingRepository),
       ledgerRepository.getMonthAdjustmentTotal(monthKey),
+      ledgerRepository.getMonthPeakAutomaticBalance(monthKey),
+      hostingRepository.getLatestPaidMonth(),
     ]);
+    monthOverride = currentMonthOverride;
+    latestPaidMonth = currentLatestPaidMonth;
+    serviceAccess = currentServiceAccess;
+    operatorAdjustmentUsd = currentOperatorAdjustmentUsd;
 
     const usageSignals = {
       courseWatchMinutesMeasured: usage.courseWatchMinutesMeasured,
@@ -54,11 +68,16 @@ export default async function AdminHostingPage() {
       monthlyMinimumFloorUsd: monthOverride?.minimumFloorUsd,
       operatorAdjustmentUsd: 0,
     });
+    const monotonicAutomaticBalanceUsd = Math.max(automatic.amountDueUsd, peakAutomaticBalanceUsd);
+    resolvedCurrentBalanceUsd = Math.max(
+      0,
+      Math.round((monotonicAutomaticBalanceUsd + operatorAdjustmentUsd) * 100) / 100,
+    );
     await ledgerRepository.recordDailySnapshot({
       measuredWatchMinutes: usage.courseWatchMinutesMeasured,
       estimatedLiveAudienceMinutes: usage.liveAudienceMinutesEstimated,
       streamingActivityBand: getStreamingActivityBand(usageSignals),
-      automaticBalanceUsd: automatic.amountDueUsd,
+      automaticBalanceUsd: monotonicAutomaticBalanceUsd,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
@@ -95,7 +114,9 @@ export default async function AdminHostingPage() {
             displayDescription={effective.displayDescription}
             monthStart={usage.monthStart}
             monthOverride={monthOverride}
+            latestPaidMonth={latestPaidMonth}
             operatorAdjustmentUsd={operatorAdjustmentUsd}
+            resolvedCurrentBalanceUsd={resolvedCurrentBalanceUsd}
             serviceAccess={serviceAccess}
             billingAutomationEnabled={billingAutomationEnabled}
             usage={{
