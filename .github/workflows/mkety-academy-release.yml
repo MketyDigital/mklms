@@ -47,3 +47,49 @@ jobs:
       MKLMS_MANAGED_HOSTING_OPERATOR_KEY: ${{ secrets.MKETY_MANAGED_HOSTING_OPERATOR_KEY }}
       R2_DIRECT_UPLOAD_ACCESS_KEY_ID: ${{ secrets.MKETY_R2_DIRECT_UPLOAD_ACCESS_KEY_ID }}
       R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY: ${{ secrets.MKETY_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY }}
+
+
+  billing-control:
+    if: github.ref_name == 'production/mkety-academy'
+    needs: production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      MKETY_MANAGED_HOSTING_OPERATOR_KEY: ${{ secrets.MKETY_MANAGED_HOSTING_OPERATOR_KEY }}
+    steps:
+      - name: Checkout exact Mkety production pointer
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Verify exact Mkety production pointer and operator secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_ACCOUNT_ID:-}"
+          test -n "${CLOUDFLARE_API_TOKEN:-}"
+          test -n "${MKETY_MANAGED_HOSTING_OPERATOR_KEY:-}"
+          git fetch origin production/mkety-academy:refs/remotes/origin/production/mkety-academy --force
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse origin/production/mkety-academy)" = "$GITHUB_SHA"
+
+      - name: Package shared billing Worker
+        run: npx wrangler deploy --dry-run --config workers/billing/wrangler.jsonc --outdir .billing-worker-mkety-release-dry-run
+
+      - name: Deploy shared billing Worker without changing existing secrets
+        run: npx wrangler deploy --config workers/billing/wrangler.jsonc --x-provision=false
+
+      - name: Update only the Mkety operator-control secret
+        shell: bash
+        run: printf '%s' "$MKETY_MANAGED_HOSTING_OPERATOR_KEY" | npx wrangler secret put MKETY_MANAGED_HOSTING_OPERATOR_KEY --config workers/billing/wrangler.jsonc

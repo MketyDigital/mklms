@@ -34,3 +34,16 @@ test('Mkety production alone wires the managed-hosting operator key into the app
   assert.match(production, /MKLMS_MANAGED_HOSTING_OPERATOR_KEY:\$operatorKey/);
   assert.doesNotMatch(preview, /MKLMS_MANAGED_HOSTING_OPERATOR_KEY/);
 });
+
+
+test('Mkety production deploys central billing control and updates only the operator-control secret', () => {
+  const wrapper = readFileSync('.github/workflows/mkety-academy-release.yml', 'utf8');
+  assert.match(wrapper, /billing-control:/);
+  assert.match(wrapper, /needs:\s*production/);
+  assert.match(wrapper, /workers\/billing\/wrangler\.jsonc/);
+  assert.match(wrapper, /secrets\.MKETY_MANAGED_HOSTING_OPERATOR_KEY/);
+  assert.match(wrapper, /wrangler secret put MKETY_MANAGED_HOSTING_OPERATOR_KEY/);
+  assert.doesNotMatch(wrapper, /wrangler secret (put|bulk|delete) NOWPAYMENTS_API_KEY/);
+  assert.doesNotMatch(wrapper, /wrangler secret (put|bulk|delete) NOWPAYMENTS_IPN_SECRET/);
+  assert.doesNotMatch(wrapper, /wrangler secret (put|bulk|delete) MKETY_BILLING_CUSTOMERS_JSON/);
+});

@@ -23,6 +23,7 @@ const env = {
   NOWPAYMENTS_API_KEY: 'legacy-api-key',
   NOWPAYMENTS_IPN_SECRET: 'legacy-ipn-secret',
   MKETY_BILLING_CUSTOMERS_JSON: JSON.stringify(customers),
+  MKETY_MANAGED_HOSTING_OPERATOR_KEY: 'operator-secret-1234567890',
 };
 
 test('checkout signature is deterministic and tampering fails', async () => {
@@ -178,4 +179,71 @@ test('reconciliation rejects a payment from another billing month', async () => 
     price_currency: 'usd',
   }), { status: 200, headers: { 'content-type': 'application/json' } }) });
   assert.equal(response.status, 409);
+});
+
+
+test('central operator endpoint rejects missing owner key', async () => {
+  const response = await billingWorker.fetch(new Request('https://billing.example/v1/operator', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ installationId: 'spf-mklms', action: 'getMonth', monthKey: '2026-09' }),
+  }), env, { fetch });
+  assert.equal(response.status, 403);
+});
+
+test('central operator forwards a signed customer command without database credentials', async () => {
+  const calls = [];
+  const response = await billingWorker.fetch(new Request('https://billing.example/v1/operator', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-mkety-operator-key': env.MKETY_MANAGED_HOSTING_OPERATOR_KEY,
+    },
+    body: JSON.stringify({ installationId: 'spf-mklms', action: 'getMonth', monthKey: '2026-09' }),
+  }), env, { fetch: async (...args) => {
+    calls.push(args);
+    return new Response(JSON.stringify({ ok: true, month: { monthKey: '2026-09', paymentStatus: 'PENDING' } }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }});
+  assert.equal(response.status, 200);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], 'https://customer.example/api/managed-hosting/operator');
+  assert.match(String(calls[0][1].headers['x-mkety-billing-signature']), /^[a-f0-9]{64}$/);
+  assert.doesNotMatch(JSON.stringify(calls[0][1]), /postgres|database_url|password/i);
+});
+
+test('central operator reconciliation still requires NOWPayments finished status for the selected installation and month', async () => {
+  const calls = [];
+  const response = await billingWorker.fetch(new Request('https://billing.example/v1/operator', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-mkety-operator-key': env.MKETY_MANAGED_HOSTING_OPERATOR_KEY,
+    },
+    body: JSON.stringify({
+      installationId: 'spf-mklms',
+      action: 'reconcilePayment',
+      monthKey: '2026-09',
+      paymentId: '12345',
+    }),
+  }), env, { fetch: async (...args) => {
+    calls.push(args);
+    if (String(args[0]).includes('api.nowpayments.io/v1/payment/12345')) {
+      return new Response(JSON.stringify({
+        order_id: createOrderId('spf-mklms', '2026-09', 'abc12345'),
+        payment_id: 12345,
+        payment_status: 'finished',
+        price_amount: 25,
+        price_currency: 'usd',
+        actually_paid: 25,
+        pay_currency: 'usdttrc20',
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }});
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).reconciled, true);
+  assert.equal(calls.length, 2);
 });
