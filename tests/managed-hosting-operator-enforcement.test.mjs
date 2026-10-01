@@ -103,3 +103,23 @@ test('non-payment restriction gates all hosted upload paths and protected paid m
   assert.doesNotMatch(paidZoomJoin, /managed-hosting-access|HOSTING_PAYMENT_REQUIRED/);
   assert.doesNotMatch(freePlayback, /managed-hosting-access|RESTRICTED|hosting payment/i);
 });
+
+
+test('central billing control preserves customer database isolation and requires billing HMAC at the customer boundary', async () => {
+  const customerRoute = await source('src/app/api/managed-hosting/operator/route.ts');
+  const ownerProxy = await source('src/app/api/operator/hosting/customer/route.ts');
+  const ownerPage = await source('src/app/operator/hosting/page.tsx');
+
+  assert.match(customerRoute, /MKLMS_BILLING_SHARED_SECRET/);
+  assert.match(customerRoute, /MKLMS_BILLING_INSTALLATION_ID/);
+  assert.match(customerRoute, /x-mkety-billing-signature/);
+  assert.match(customerRoute, /verifyBillingPayload/);
+  assert.match(customerRoute, /isFreshBillingTimestamp/);
+  assert.doesNotMatch(customerRoute, /isValidManagedHostingOperatorKey|hasValidAdminSession/);
+
+  assert.match(ownerProxy, /isValidManagedHostingOperatorKey/);
+  assert.match(ownerProxy, /v1\/operator/);
+  assert.match(ownerProxy, /x-mkety-operator-key/);
+  assert.match(ownerPage, /spf-mklms/);
+  assert.match(ownerPage, /reconcilePayment/);
+});
