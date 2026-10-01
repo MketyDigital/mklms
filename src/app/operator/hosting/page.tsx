@@ -39,7 +39,7 @@ export default function OperatorHostingPage() {
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [monthKey, setMonthKey] = useState("2026-09");
+  const [monthKey, setMonthKey] = useState(new Date().toISOString().slice(0, 7));
   const [monthFloor, setMonthFloor] = useState(15);
   const [monthStatus, setMonthStatus] = useState<"PENDING" | "PAID" | "WAIVED">("PENDING");
   const [monthNote, setMonthNote] = useState("");
