@@ -282,8 +282,7 @@ export class PostgresManagedHostingRepository {
          updated_at = NOW()
        RETURNING month_key, minimum_floor_usd, operator_note, payment_status,
                  amount_due_usd, due_at, grace_ends_at,
-                 paid_at, payment_id, settled_amount_usd, settled_currency,
-              paid_at, payment_id, settled_amount_usd, settled_currency`,
+                 paid_at, payment_id, settled_amount_usd, settled_currency`,
       [
         input.monthKey,
         Math.max(0, Math.round(input.minimumFloorUsd * 100) / 100),
@@ -325,8 +324,7 @@ export class PostgresManagedHostingRepository {
          updated_at = NOW()
        RETURNING month_key, minimum_floor_usd, operator_note, payment_status,
                  amount_due_usd, due_at, grace_ends_at,
-                 paid_at, payment_id, settled_amount_usd, settled_currency,
-              paid_at, payment_id, settled_amount_usd, settled_currency`,
+                 paid_at, payment_id, settled_amount_usd, settled_currency`,
       [
         input.monthKey,
         Math.max(0, Math.round(input.minimumFloorUsd * 100) / 100),
@@ -384,4 +382,5 @@ export class PostgresManagedHostingRepository {
     const existing = await this.getMonthOverride(input.monthKey);
     if (existing?.paymentStatus === "PAID") return existing;
     throw new Error("Managed-hosting invoice is not finalized or is not payable.");
-  }}
+  }
+}
