@@ -31,6 +31,10 @@ function mapMonthRow(row: {
   amount_due_usd?: string | number | null;
   due_at?: Date | string | null;
   grace_ends_at?: Date | string | null;
+  paid_at?: Date | string | null;
+  payment_id?: string | null;
+  settled_amount_usd?: string | number | null;
+  settled_currency?: string | null;
 }): ManagedHostingMonthOverride {
   return {
     monthKey: row.month_key,
@@ -40,6 +44,10 @@ function mapMonthRow(row: {
     amountDueUsd: row.amount_due_usd == null ? null : Number(row.amount_due_usd),
     dueAt: row.due_at ? new Date(row.due_at) : null,
     graceEndsAt: row.grace_ends_at ? new Date(row.grace_ends_at) : null,
+    paidAt: row.paid_at ? new Date(row.paid_at) : null,
+    paymentId: row.payment_id ?? null,
+    settledAmountUsd: row.settled_amount_usd == null ? null : Number(row.settled_amount_usd),
+    settledCurrency: row.settled_currency ?? null,
   };
 }
 
@@ -50,25 +58,32 @@ export class PostgresManagedHostingRepository {
     this.pool = pool;
   }
 
-  async getUsageForMonth(monthStart: Date): Promise<ManagedHostingUsageSummary> {
+  async getUsageForMonth(monthStart: Date, now = new Date()): Promise<ManagedHostingUsageSummary> {
     const start = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth(), 1));
     const nextMonth = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
+    const effectiveEnd = now < nextMonth ? now : nextMonth;
 
     const [course, live] = await Promise.all([
       this.pool.query<{ seconds: string | number }>(
         `SELECT COALESCE(SUM(credited_seconds), 0) AS seconds
          FROM media_watch_credits
          WHERE last_credited_at >= $1 AND last_credited_at < $2`,
-        [start, nextMonth],
+        [start, effectiveEnd],
       ),
       this.pool.query<{ audience_seconds: string | number }>(
-        `SELECT COALESCE(SUM(lb.expected_viewer_baseline * ls.duration_seconds), 0) AS audience_seconds
+        `SELECT COALESCE(SUM(
+           lb.expected_viewer_baseline *
+           LEAST(
+             ls.duration_seconds,
+             GREATEST(0, FLOOR(EXTRACT(EPOCH FROM ($2::timestamptz - ls.starts_at)))::bigint)
+           )
+         ), 0) AS audience_seconds
          FROM live_sessions ls
          JOIN live_batches lb ON lb.id = ls.batch_id
          WHERE ls.starts_at >= $1 AND ls.starts_at < $2
            AND ls.status = 'PUBLISHED'
            AND lb.viewer_display_mode = 'CONFIGURED_BASELINE'`,
-        [start, nextMonth],
+        [start, effectiveEnd],
       ),
     ]);
 
@@ -194,9 +209,14 @@ export class PostgresManagedHostingRepository {
       amount_due_usd: string | number | null;
       due_at: Date | string | null;
       grace_ends_at: Date | string | null;
+      paid_at: Date | string | null;
+      payment_id: string | null;
+      settled_amount_usd: string | number | null;
+      settled_currency: string | null;
     }>(
       `SELECT month_key, minimum_floor_usd, operator_note, payment_status,
-              amount_due_usd, due_at, grace_ends_at
+              amount_due_usd, due_at, grace_ends_at,
+              paid_at, payment_id, settled_amount_usd, settled_currency
        FROM managed_hosting_months
        WHERE month_key = $1
        LIMIT 1`,
@@ -214,9 +234,14 @@ export class PostgresManagedHostingRepository {
       amount_due_usd: string | number | null;
       due_at: Date | string | null;
       grace_ends_at: Date | string | null;
+      paid_at: Date | string | null;
+      payment_id: string | null;
+      settled_amount_usd: string | number | null;
+      settled_currency: string | null;
     }>(
       `SELECT month_key, minimum_floor_usd, operator_note, payment_status,
-              amount_due_usd, due_at, grace_ends_at
+              amount_due_usd, due_at, grace_ends_at,
+              paid_at, payment_id, settled_amount_usd, settled_currency
        FROM managed_hosting_months
        WHERE payment_status = 'PENDING' AND finalized_at IS NOT NULL
        ORDER BY month_key ASC
@@ -240,6 +265,10 @@ export class PostgresManagedHostingRepository {
       amount_due_usd: string | number | null;
       due_at: Date | string | null;
       grace_ends_at: Date | string | null;
+      paid_at: Date | string | null;
+      payment_id: string | null;
+      settled_amount_usd: string | number | null;
+      settled_currency: string | null;
     }>(
       `INSERT INTO managed_hosting_months (
          month_key, minimum_floor_usd, operator_note, payment_status,
@@ -252,7 +281,9 @@ export class PostgresManagedHostingRepository {
          finalized_at = COALESCE(managed_hosting_months.finalized_at, NOW()),
          updated_at = NOW()
        RETURNING month_key, minimum_floor_usd, operator_note, payment_status,
-                 amount_due_usd, due_at, grace_ends_at`,
+                 amount_due_usd, due_at, grace_ends_at,
+                 paid_at, payment_id, settled_amount_usd, settled_currency,
+              paid_at, payment_id, settled_amount_usd, settled_currency`,
       [
         input.monthKey,
         Math.max(0, Math.round(input.minimumFloorUsd * 100) / 100),
@@ -278,6 +309,10 @@ export class PostgresManagedHostingRepository {
       amount_due_usd: string | number | null;
       due_at: Date | string | null;
       grace_ends_at: Date | string | null;
+      paid_at: Date | string | null;
+      payment_id: string | null;
+      settled_amount_usd: string | number | null;
+      settled_currency: string | null;
     }>(
       `INSERT INTO managed_hosting_months (
          month_key, minimum_floor_usd, operator_note, payment_status, created_at, updated_at
@@ -289,7 +324,9 @@ export class PostgresManagedHostingRepository {
          payment_status = EXCLUDED.payment_status,
          updated_at = NOW()
        RETURNING month_key, minimum_floor_usd, operator_note, payment_status,
-                 amount_due_usd, due_at, grace_ends_at`,
+                 amount_due_usd, due_at, grace_ends_at,
+                 paid_at, payment_id, settled_amount_usd, settled_currency,
+              paid_at, payment_id, settled_amount_usd, settled_currency`,
       [
         input.monthKey,
         Math.max(0, Math.round(input.minimumFloorUsd * 100) / 100),
@@ -302,8 +339,12 @@ export class PostgresManagedHostingRepository {
 
   async markMonthPaid(input: {
     monthKey: string;
-    defaultMinimumFloorUsd: number;
+    paymentId: string;
+    settledAmountUsd: number;
+    settledCurrency: string;
+    paidAt?: Date;
   }): Promise<ManagedHostingMonthOverride> {
+    const paidAt = input.paidAt ?? new Date();
     const result = await this.pool.query<{
       month_key: string;
       minimum_floor_usd: string | number;
@@ -312,21 +353,35 @@ export class PostgresManagedHostingRepository {
       amount_due_usd: string | number | null;
       due_at: Date | string | null;
       grace_ends_at: Date | string | null;
+      paid_at: Date | string | null;
+      payment_id: string | null;
+      settled_amount_usd: string | number | null;
+      settled_currency: string | null;
     }>(
-      `INSERT INTO managed_hosting_months (
-         month_key, minimum_floor_usd, operator_note, payment_status, created_at, updated_at
-       ) VALUES ($1, $2, NULL, 'PAID', NOW(), NOW())
-       ON CONFLICT (month_key)
-       DO UPDATE SET
-         payment_status = 'PAID',
-         updated_at = NOW()
+      `UPDATE managed_hosting_months
+       SET payment_status = 'PAID',
+           paid_at = COALESCE(paid_at, $2),
+           payment_id = COALESCE(payment_id, $3),
+           settled_amount_usd = COALESCE(settled_amount_usd, $4),
+           settled_currency = COALESCE(settled_currency, $5),
+           updated_at = NOW()
+       WHERE month_key = $1
+         AND payment_status = 'PENDING'
+         AND finalized_at IS NOT NULL
        RETURNING month_key, minimum_floor_usd, operator_note, payment_status,
-                 amount_due_usd, due_at, grace_ends_at`,
+                 amount_due_usd, due_at, grace_ends_at,
+                 paid_at, payment_id, settled_amount_usd, settled_currency`,
       [
         input.monthKey,
-        Math.max(0, Math.round(input.defaultMinimumFloorUsd * 100) / 100),
+        paidAt,
+        input.paymentId.slice(0, 128),
+        Math.max(0, Math.round(input.settledAmountUsd * 100) / 100),
+        input.settledCurrency.trim().toUpperCase().slice(0, 16),
       ],
     );
-    return mapMonthRow(result.rows[0]);
-  }
-}
+    if (result.rows[0]) return mapMonthRow(result.rows[0]);
+
+    const existing = await this.getMonthOverride(input.monthKey);
+    if (existing?.paymentStatus === "PAID") return existing;
+    throw new Error("Managed-hosting invoice is not finalized or is not payable.");
+  }}
