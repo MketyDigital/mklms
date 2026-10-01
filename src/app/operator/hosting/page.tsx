@@ -34,45 +34,61 @@ const defaults: PolicyForm = {
 
 export default function OperatorHostingPage() {
   const [operatorKey, setOperatorKey] = useState("");
+  const [installationId, setInstallationId] = useState("spf-mklms");
   const [policy, setPolicy] = useState<PolicyForm>(defaults);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [monthKey, setMonthKey] = useState(new Date().toISOString().slice(0, 7));
+  const [monthKey, setMonthKey] = useState("2026-09");
   const [monthFloor, setMonthFloor] = useState(15);
   const [monthStatus, setMonthStatus] = useState<"PENDING" | "PAID" | "WAIVED">("PENDING");
   const [monthNote, setMonthNote] = useState("");
+  const [monthAdjustmentTotal, setMonthAdjustmentTotal] = useState(0);
   const [dailyAdjustment, setDailyAdjustment] = useState(0);
   const [dailyAdjustmentReason, setDailyAdjustmentReason] = useState("");
-  const [monthAdjustmentTotal, setMonthAdjustmentTotal] = useState(0);
+  const [paymentId, setPaymentId] = useState("");
 
-  async function loadPolicy() {
+  async function command(body: Record<string, unknown>) {
+    const response = await fetch("/api/operator/hosting/customer", {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        "content-type": "application/json",
+        "x-mklms-operator-key": operatorKey,
+      },
+      body: JSON.stringify({ installationId, ...body }),
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok) {
+      throw new Error(payload?.message ?? "Billing command failed.");
+    }
+    return payload.result ?? payload;
+  }
+
+  async function unlock() {
     setBusy(true);
     setMessage(null);
     try {
-      const response = await fetch("/api/operator/hosting/policy", {
-        cache: "no-store",
-        headers: { "x-mklms-operator-key": operatorKey },
-      });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok || !payload?.policy) throw new Error(payload?.message ?? "Could not load operator policy.");
+      const result = await command({ action: "getPolicy" });
+      const p = result.policy;
+      if (!p) throw new Error("Customer billing policy was not returned.");
       setPolicy({
-        enabled: Boolean(payload.policy.enabled),
-        minimumMonthlyFeeUsd: Number(payload.policy.minimumMonthlyFeeUsd),
-        maximumMonthlyFeeUsd: Number(payload.policy.maximumMonthlyFeeUsd),
-        displayTitle: String(payload.policy.displayTitle ?? defaults.displayTitle),
-        displayDescription: String(payload.policy.displayDescription ?? ""),
-        notice: String(payload.policy.notice ?? ""),
-        overdueWarning: String(payload.policy.overdueWarning ?? ""),
-        dueDaysAfterMonthEnd: Number(payload.policy.dueDaysAfterMonthEnd ?? 5),
-        graceDays: Number(payload.policy.graceDays ?? 5),
-        enforcementEnabled: Boolean(payload.policy.enforcementEnabled),
+        enabled: Boolean(p.enabled),
+        minimumMonthlyFeeUsd: Number(p.minimumMonthlyFeeUsd),
+        maximumMonthlyFeeUsd: Number(p.maximumMonthlyFeeUsd),
+        displayTitle: String(p.displayTitle ?? defaults.displayTitle),
+        displayDescription: String(p.displayDescription ?? ""),
+        notice: String(p.notice ?? ""),
+        overdueWarning: String(p.overdueWarning ?? ""),
+        dueDaysAfterMonthEnd: Number(p.dueDaysAfterMonthEnd ?? 5),
+        graceDays: Number(p.graceDays ?? 5),
+        enforcementEnabled: Boolean(p.enforcementEnabled),
       });
       setLoaded(true);
-      setMessage("Mkety operator controls unlocked.");
+      setMessage("Connected to " + installationId + " billing controls.");
     } catch (error) {
       setLoaded(false);
-      setMessage(error instanceof Error ? error.message : "Could not load operator policy.");
+      setMessage(error instanceof Error ? error.message : "Could not unlock customer billing.");
     } finally {
       setBusy(false);
     }
@@ -83,16 +99,10 @@ export default function OperatorHostingPage() {
     setBusy(true);
     setMessage(null);
     try {
-      const response = await fetch("/api/operator/hosting/policy", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-mklms-operator-key": operatorKey },
-        body: JSON.stringify(policy),
-      });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok || !payload?.ok) throw new Error(payload?.message ?? "Could not save operator policy.");
-      setMessage("Managed-hosting policy saved.");
+      await command({ action: "setPolicy", ...policy });
+      setMessage("Billing policy saved for " + installationId + ".");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not save operator policy.");
+      setMessage(error instanceof Error ? error.message : "Could not save policy.");
     } finally {
       setBusy(false);
     }
@@ -102,25 +112,15 @@ export default function OperatorHostingPage() {
     setBusy(true);
     setMessage(null);
     try {
-      const [monthResponse, adjustmentResponse] = await Promise.all([
-        fetch(`/api/operator/hosting/month?monthKey=${encodeURIComponent(monthKey)}`, {
-          cache: "no-store",
-          headers: { "x-mklms-operator-key": operatorKey },
-        }),
-        fetch(`/api/operator/hosting/adjustment?monthKey=${encodeURIComponent(monthKey)}`, {
-          cache: "no-store",
-          headers: { "x-mklms-operator-key": operatorKey },
-        }),
+      const [monthResult, adjustmentResult] = await Promise.all([
+        command({ action: "getMonth", monthKey }),
+        command({ action: "getAdjustments", monthKey }),
       ]);
-      const monthPayload = await monthResponse.json().catch(() => null);
-      const adjustmentPayload = await adjustmentResponse.json().catch(() => null);
-      if (!monthResponse.ok || !monthPayload?.ok) throw new Error(monthPayload?.message ?? "Could not load month.");
-      if (!adjustmentResponse.ok || !adjustmentPayload?.ok) throw new Error(adjustmentPayload?.message ?? "Could not load adjustments.");
-      setMonthFloor(Number(monthPayload.month?.minimumFloorUsd ?? policy.minimumMonthlyFeeUsd));
-      setMonthStatus(monthPayload.month?.paymentStatus ?? "PENDING");
-      setMonthNote(String(monthPayload.month?.operatorNote ?? ""));
-      setMonthAdjustmentTotal(Number(adjustmentPayload.totalAdjustmentUsd ?? 0));
-      setMessage(`Loaded ${monthKey}.`);
+      setMonthFloor(Number(monthResult.month?.minimumFloorUsd ?? policy.minimumMonthlyFeeUsd));
+      setMonthStatus(monthResult.month?.paymentStatus ?? "PENDING");
+      setMonthNote(String(monthResult.month?.operatorNote ?? ""));
+      setMonthAdjustmentTotal(Number(adjustmentResult.totalAdjustmentUsd ?? 0));
+      setMessage("Loaded " + installationId + " · " + monthKey + ".");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not load month.");
     } finally {
@@ -133,19 +133,14 @@ export default function OperatorHostingPage() {
     setBusy(true);
     setMessage(null);
     try {
-      const response = await fetch("/api/operator/hosting/month", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-mklms-operator-key": operatorKey },
-        body: JSON.stringify({
-          monthKey,
-          minimumFloorUsd: monthFloor,
-          paymentStatus: monthStatus,
-          operatorNote: monthNote,
-        }),
+      await command({
+        action: "setMonth",
+        monthKey,
+        minimumFloorUsd: monthFloor,
+        paymentStatus: monthStatus,
+        operatorNote: monthNote,
       });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok || !payload?.ok) throw new Error(payload?.message ?? "Could not save month.");
-      setMessage(`Monthly billing saved for ${monthKey}.`);
+      setMessage("Saved " + installationId + " · " + monthKey + " as " + monthStatus + ".");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not save month.");
     } finally {
@@ -153,23 +148,33 @@ export default function OperatorHostingPage() {
     }
   }
 
-  async function saveDailyAdjustment(event: FormEvent) {
+  async function saveAdjustment(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
     setMessage(null);
     try {
-      const response = await fetch("/api/operator/hosting/adjustment", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-mklms-operator-key": operatorKey },
-        body: JSON.stringify({ amountUsd: dailyAdjustment, reason: dailyAdjustmentReason }),
-      });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok || !payload?.ok) throw new Error(payload?.message ?? "Could not save today's adjustment.");
+      await command({ action: "addAdjustment", amountUsd: dailyAdjustment, reason: dailyAdjustmentReason });
       setDailyAdjustmentReason("");
-      setMessage("Today's billing adjustment saved. Automatic streaming accrual continues normally from the resulting balance.");
+      setMessage("Today's adjustment saved for " + installationId + ".");
       await loadMonth();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not save today's adjustment.");
+      setMessage(error instanceof Error ? error.message : "Could not save adjustment.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reconcilePayment(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await command({ action: "reconcilePayment", monthKey, paymentId });
+      if (!result.reconciled) throw new Error("Payment was not reconciled.");
+      setMessage("NOWPayments payment " + paymentId + " verified as finished and applied.");
+      await loadMonth();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not reconcile payment.");
     } finally {
       setBusy(false);
     }
@@ -182,12 +187,18 @@ export default function OperatorHostingPage() {
           <CardHeader>
             <CardTitle>Managed Hosting Operator</CardTitle>
             <CardDescription>
-              Commercial pricing controls are available only from the trusted Mkety production installation and require the separate operator key.
+              Central Mkety owner controls. Customer databases remain isolated behind signed billing-service commands.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <label className="block space-y-1 text-sm">
+              <span>Billing installation ID</span>
+              <Input value={installationId} onChange={(event) => setInstallationId(event.target.value.trim())} placeholder="spf-mklms" />
+            </label>
             <Input type="password" value={operatorKey} onChange={(event) => setOperatorKey(event.target.value)} placeholder="Managed-hosting operator key" autoComplete="off" />
-            <Button className="w-full sm:w-auto" onClick={() => void loadPolicy()} disabled={busy || !operatorKey}>{busy ? "Checking…" : "Unlock operator controls"}</Button>
+            <Button className="w-full sm:w-auto" onClick={() => void unlock()} disabled={busy || !operatorKey || !installationId}>
+              {busy ? "Checking…" : "Unlock customer billing"}
+            </Button>
             {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
           </CardContent>
         </Card>
@@ -199,65 +210,66 @@ export default function OperatorHostingPage() {
     <main className="mx-auto w-full max-w-3xl space-y-6 px-3 py-6 sm:p-6">
       <Card>
         <CardHeader>
-          <CardTitle>Managed Hosting Policy</CardTitle>
-          <CardDescription>
-            Private Mkety commercial controls. Tenant admins only see their hosting balance, streaming activity, billing period and payment state.
-          </CardDescription>
+          <CardTitle>{installationId}</CardTitle>
+          <CardDescription>Central platform-owner billing control for the selected managed installation.</CardDescription>
         </CardHeader>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Managed Hosting Policy</CardTitle></CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={savePolicy}>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={policy.enabled} onChange={(event) => setPolicy({ ...policy, enabled: event.target.checked })} /> Managed hosting enabled</label>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={policy.enabled} onChange={(e) => setPolicy({ ...policy, enabled: e.target.checked })} /> Managed hosting enabled</label>
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="space-y-1 text-sm"><span>Monthly minimum (USD)</span><Input type="number" min="0" step="0.01" value={policy.minimumMonthlyFeeUsd} onChange={(event) => setPolicy({ ...policy, minimumMonthlyFeeUsd: Number(event.target.value) })} /></label>
-              <label className="space-y-1 text-sm"><span>Monthly maximum (USD)</span><Input type="number" min="0" step="0.01" value={policy.maximumMonthlyFeeUsd} onChange={(event) => setPolicy({ ...policy, maximumMonthlyFeeUsd: Number(event.target.value) })} /></label>
+              <label className="space-y-1 text-sm"><span>Monthly minimum (USD)</span><Input type="number" min="0" step="0.01" value={policy.minimumMonthlyFeeUsd} onChange={(e) => setPolicy({ ...policy, minimumMonthlyFeeUsd: Number(e.target.value) })} /></label>
+              <label className="space-y-1 text-sm"><span>Monthly maximum (USD)</span><Input type="number" min="0" step="0.01" value={policy.maximumMonthlyFeeUsd} onChange={(e) => setPolicy({ ...policy, maximumMonthlyFeeUsd: Number(e.target.value) })} /></label>
             </div>
-            <label className="block space-y-1 text-sm"><span>Tenant billing title</span><Input value={policy.displayTitle} onChange={(event) => setPolicy({ ...policy, displayTitle: event.target.value })} /></label>
-            <label className="block space-y-1 text-sm"><span>Description</span><textarea className="min-h-20 w-full rounded-md border bg-background p-3" value={policy.displayDescription} onChange={(event) => setPolicy({ ...policy, displayDescription: event.target.value })} /></label>
-            <label className="block space-y-1 text-sm"><span>General billing notice</span><textarea className="min-h-20 w-full rounded-md border bg-background p-3" value={policy.notice} onChange={(event) => setPolicy({ ...policy, notice: event.target.value })} /></label>
-            <label className="block space-y-1 text-sm"><span>Overdue warning</span><textarea className="min-h-20 w-full rounded-md border bg-background p-3" value={policy.overdueWarning} onChange={(event) => setPolicy({ ...policy, overdueWarning: event.target.value })} /></label>
+            <label className="block space-y-1 text-sm"><span>Tenant billing title</span><Input value={policy.displayTitle} onChange={(e) => setPolicy({ ...policy, displayTitle: e.target.value })} /></label>
+            <label className="block space-y-1 text-sm"><span>Description</span><textarea className="min-h-20 w-full rounded-md border bg-background p-3" value={policy.displayDescription} onChange={(e) => setPolicy({ ...policy, displayDescription: e.target.value })} /></label>
+            <label className="block space-y-1 text-sm"><span>General billing notice</span><textarea className="min-h-20 w-full rounded-md border bg-background p-3" value={policy.notice} onChange={(e) => setPolicy({ ...policy, notice: e.target.value })} /></label>
+            <label className="block space-y-1 text-sm"><span>Overdue warning</span><textarea className="min-h-20 w-full rounded-md border bg-background p-3" value={policy.overdueWarning} onChange={(e) => setPolicy({ ...policy, overdueWarning: e.target.value })} /></label>
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="space-y-1 text-sm"><span>Payment due days after month end</span><Input type="number" min="0" max="31" value={policy.dueDaysAfterMonthEnd} onChange={(event) => setPolicy({ ...policy, dueDaysAfterMonthEnd: Number(event.target.value) })} /></label>
-              <label className="space-y-1 text-sm"><span>Grace period (days)</span><Input type="number" min="0" max="31" value={policy.graceDays} onChange={(event) => setPolicy({ ...policy, graceDays: Number(event.target.value) })} /></label>
+              <label className="space-y-1 text-sm"><span>Due days after month end</span><Input type="number" min="0" max="31" value={policy.dueDaysAfterMonthEnd} onChange={(e) => setPolicy({ ...policy, dueDaysAfterMonthEnd: Number(e.target.value) })} /></label>
+              <label className="space-y-1 text-sm"><span>Grace period (days)</span><Input type="number" min="0" max="31" value={policy.graceDays} onChange={(e) => setPolicy({ ...policy, graceDays: Number(e.target.value) })} /></label>
             </div>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={policy.enforcementEnabled} onChange={(event) => setPolicy({ ...policy, enforcementEnabled: event.target.checked })} /> Restrict hosted paid-video services after grace period</label>
-            <Button className="w-full sm:w-auto" type="submit" disabled={busy}>{busy ? "Saving…" : "Save hosting policy"}</Button>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={policy.enforcementEnabled} onChange={(e) => setPolicy({ ...policy, enforcementEnabled: e.target.checked })} /> Enforce after grace period</label>
+            <Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save customer policy"}</Button>
           </form>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Today’s Adjustment</CardTitle>
-          <CardDescription>
-            Increase or correct today’s hosting balance once. The automatic usage-sensitive calculation continues normally on following days; this adjustment is stored in the audit ledger and is not repeated automatically.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form className="space-y-4" onSubmit={saveDailyAdjustment}>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="space-y-1 text-sm"><span>Today’s adjustment (USD)</span><Input type="number" step="0.01" value={dailyAdjustment} onChange={(event) => setDailyAdjustment(Number(event.target.value))} /></label>
-              <div className="rounded-md border bg-muted/30 p-3 text-sm"><p className="text-xs text-muted-foreground">Adjustments this month</p><p className="mt-1 text-xl font-semibold">${monthAdjustmentTotal.toFixed(2)}</p></div>
-            </div>
-            <label className="block space-y-1 text-sm"><span>Reason</span><Input required minLength={3} value={dailyAdjustmentReason} onChange={(event) => setDailyAdjustmentReason(event.target.value)} placeholder="Reason for today's adjustment" /></label>
-            <Button className="w-full sm:w-auto" type="submit" disabled={busy || !dailyAdjustmentReason.trim()}>{busy ? "Saving…" : "Apply today's adjustment"}</Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Monthly Override</CardTitle>
-          <CardDescription>Set a specific monthly floor, internal note, or payment status. Streaming usage can still produce a higher charge.</CardDescription>
-        </CardHeader>
+        <CardHeader><CardTitle>Monthly Billing</CardTitle><CardDescription>Load and control a customer billing month.</CardDescription></CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={saveMonth}>
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="space-y-1 text-sm"><span>Month</span><Input type="month" value={monthKey} onChange={(event) => setMonthKey(event.target.value)} /></label>
-              <label className="space-y-1 text-sm"><span>Monthly minimum / floor (USD)</span><Input type="number" min="0" step="0.01" value={monthFloor} onChange={(event) => setMonthFloor(Number(event.target.value))} /></label>
+              <label className="space-y-1 text-sm"><span>Month</span><Input type="month" value={monthKey} onChange={(e) => setMonthKey(e.target.value)} /></label>
+              <label className="space-y-1 text-sm"><span>Monthly floor (USD)</span><Input type="number" min="0" step="0.01" value={monthFloor} onChange={(e) => setMonthFloor(Number(e.target.value))} /></label>
             </div>
-            <label className="block space-y-1 text-sm"><span>Payment status</span><select className="h-9 w-full rounded-md border bg-background px-3" value={monthStatus} onChange={(event) => setMonthStatus(event.target.value as typeof monthStatus)}><option value="PENDING">Pending</option><option value="PAID">Paid</option><option value="WAIVED">Waived</option></select></label>
-            <label className="block space-y-1 text-sm"><span>Internal operator note</span><Input value={monthNote} onChange={(event) => setMonthNote(event.target.value)} /></label>
-            <div className="grid gap-2 sm:flex"><Button className="w-full sm:w-auto" type="button" variant="outline" onClick={() => void loadMonth()} disabled={busy}>Load month</Button><Button className="w-full sm:w-auto" type="submit" disabled={busy}>{busy ? "Saving…" : "Save month"}</Button></div>
+            <label className="block space-y-1 text-sm"><span>Payment status</span><select className="h-9 w-full rounded-md border bg-background px-3" value={monthStatus} onChange={(e) => setMonthStatus(e.target.value as typeof monthStatus)}><option value="PENDING">Pending</option><option value="PAID">Paid</option><option value="WAIVED">Waived</option></select></label>
+            <label className="block space-y-1 text-sm"><span>Internal operator note</span><Input value={monthNote} onChange={(e) => setMonthNote(e.target.value)} /></label>
+            <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" onClick={() => void loadMonth()} disabled={busy}>Load month</Button><Button type="submit" disabled={busy}>Save month</Button></div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>NOWPayments Reconciliation</CardTitle><CardDescription>Verifies directly with NOWPayments. Only a finished payment belonging to this installation and month is applied.</CardDescription></CardHeader>
+        <CardContent>
+          <form className="space-y-4" onSubmit={reconcilePayment}>
+            <label className="block space-y-1 text-sm"><span>NOWPayments payment ID</span><Input required value={paymentId} onChange={(e) => setPaymentId(e.target.value.trim())} /></label>
+            <Button type="submit" disabled={busy || !paymentId}>{busy ? "Verifying…" : "Verify and reconcile"}</Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Today's Adjustment</CardTitle><CardDescription>Current month adjustment total: \${monthAdjustmentTotal.toFixed(2)}</CardDescription></CardHeader>
+        <CardContent>
+          <form className="space-y-4" onSubmit={saveAdjustment}>
+            <Input type="number" step="0.01" value={dailyAdjustment} onChange={(e) => setDailyAdjustment(Number(e.target.value))} />
+            <Input required minLength={3} value={dailyAdjustmentReason} onChange={(e) => setDailyAdjustmentReason(e.target.value)} placeholder="Reason" />
+            <Button type="submit" disabled={busy || !dailyAdjustmentReason.trim()}>Apply adjustment</Button>
           </form>
         </CardContent>
       </Card>
