@@ -16,6 +16,8 @@ import {
 } from "@/features/hosting/server/billing-signature";
 import { getEffectiveManagedHostingPolicy } from "@/features/hosting/server/managed-hosting-policy";
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 export async function POST() {
   if (!(await hasValidAdminSession())) {
     return NextResponse.json({ ok: false, message: "Unauthorized." }, { status: 401 });
@@ -50,6 +52,7 @@ export async function POST() {
 
   let monthKey: string;
   let amountUsd: number;
+  let currentMonthInvoice: { minimumFloorUsd: number; dueAt: Date; graceEndsAt: Date } | null = null;
 
   // Old unpaid invoices remain payable even before the current month's
   // checkout window; the window only prevents paying an unfinished month.
@@ -77,9 +80,10 @@ export async function POST() {
 
     const usage = await repository.getCurrentMonthUsage();
     monthKey = getBillingMonthKey(usage.monthStart);
-    const [monthOverride, operatorAdjustmentUsd] = await Promise.all([
+    const [monthOverride, operatorAdjustmentUsd, peakAutomaticBalanceUsd] = await Promise.all([
       repository.getMonthOverride(monthKey),
       ledgerRepository.getMonthAdjustmentTotal(monthKey),
+      ledgerRepository.getMonthPeakAutomaticBalance(monthKey),
     ]);
     if (monthOverride?.paymentStatus === "PAID") {
       return NextResponse.json({ ok: false, message: "This month is already paid." }, { status: 409 });
@@ -96,13 +100,34 @@ export async function POST() {
       },
       policy,
       monthlyMinimumFloorUsd: monthOverride?.minimumFloorUsd,
-      operatorAdjustmentUsd,
+      operatorAdjustmentUsd: 0,
       now,
     });
-    if (billing.amountDueUsd <= 0) {
+    const monotonicAutomaticBalanceUsd = Math.max(billing.amountDueUsd, peakAutomaticBalanceUsd);
+    amountUsd = Math.max(
+      0,
+      Math.round((monotonicAutomaticBalanceUsd + operatorAdjustmentUsd) * 100) / 100,
+    );
+    if (amountUsd <= 0) {
       return NextResponse.json({ ok: false, message: "There is no amount due." }, { status: 409 });
     }
-    amountUsd = billing.amountDueUsd;
+
+    const monthEnd = new Date(Date.UTC(
+      usage.monthStart.getUTCFullYear(),
+      usage.monthStart.getUTCMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999,
+    ));
+    currentMonthInvoice = {
+      minimumFloorUsd: monthOverride?.minimumFloorUsd ?? policy.minimumMonthlyFeeUsd,
+      dueAt: new Date(monthEnd.getTime() + effective.dueDaysAfterMonthEnd * DAY_MS),
+      graceEndsAt: new Date(
+        monthEnd.getTime() + (effective.dueDaysAfterMonthEnd + effective.graceDays) * DAY_MS,
+      ),
+    };
   }
 
   const timestamp = Math.floor(Date.now() / 1000);
@@ -136,6 +161,22 @@ export async function POST() {
       { ok: false, message: payload?.message ?? "Could not create payment invoice." },
       { status: 502 },
     );
+  }
+
+  if (currentMonthInvoice) {
+    const locked = await repository.finalizeMonthInvoice({
+      monthKey,
+      minimumFloorUsd: currentMonthInvoice.minimumFloorUsd,
+      amountDueUsd: amountUsd,
+      dueAt: currentMonthInvoice.dueAt,
+      graceEndsAt: currentMonthInvoice.graceEndsAt,
+    });
+    if (locked.amountDueUsd == null || Math.abs(locked.amountDueUsd - amountUsd) > 0.01) {
+      return NextResponse.json(
+        { ok: false, message: "A different invoice amount is already locked for this billing month. Reload and try again." },
+        { status: 409 },
+      );
+    }
   }
 
   return NextResponse.json({ ok: true, invoiceUrl: payload.invoiceUrl, monthKey, amountUsd });
