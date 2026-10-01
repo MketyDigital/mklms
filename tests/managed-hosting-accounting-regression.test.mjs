@@ -16,8 +16,11 @@ test('daily automatic billing balance cannot move backwards within a month', asy
   const ledger = await read('src/features/hosting/repositories/postgres-managed-hosting-ledger.repository.ts');
   const page = await read('src/app/(admin)/admin/hosting/page.tsx');
   const checkout = await read('src/app/api/managed-hosting/checkout/route.ts');
+  assert.match(ledger, /calculationVersion = "streaming-v3"/);
+  assert.match(ledger, /WHEN managed_hosting_daily_ledger\.calculation_version = EXCLUDED\.calculation_version/);
   assert.match(ledger, /GREATEST\([\s\S]*automatic_balance_usd/);
   assert.match(ledger, /getMonthPeakAutomaticBalance/);
+  assert.match(ledger, /AND calculation_version = \$2/);
   assert.match(page, /Math\.max\(automatic\.amountDueUsd, peakAutomaticBalanceUsd\)/);
   assert.match(checkout, /Math\.max\(billing\.amountDueUsd, peakAutomaticBalanceUsd\)/);
 });
@@ -43,8 +46,13 @@ test('settlement validates the locked invoice and stores payment metadata', asyn
   assert.match(migration, /CREATE UNIQUE INDEX IF NOT EXISTS managed_hosting_months_payment_id_idx/);
 });
 
-test('paid or waived month displays zero amount due', async () => {
+test('paid or waived month displays zero amount due and prior paid month remains visible after rollover', async () => {
   const panel = await read('src/features/hosting/components/managed-hosting-panel.tsx');
+  const page = await read('src/app/(admin)/admin/hosting/page.tsx');
+  const repository = await read('src/features/hosting/repositories/postgres-managed-hosting.repository.ts');
   assert.match(panel, /const isSettled = status === "PAID" \|\| status === "WAIVED"/);
   assert.match(panel, /const amountDueUsd = isSettled[\s\S]*\? 0/);
+  assert.match(panel, /Last payment/);
+  assert.match(page, /getLatestPaidMonth/);
+  assert.match(repository, /WHERE payment_status = 'PAID'/);
 });
