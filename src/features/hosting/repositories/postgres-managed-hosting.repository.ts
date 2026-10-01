@@ -225,6 +225,31 @@ export class PostgresManagedHostingRepository {
     return result.rows[0] ? mapMonthRow(result.rows[0]) : null;
   }
 
+  async getLatestPaidMonth(): Promise<ManagedHostingMonthOverride | null> {
+    const result = await this.pool.query<{
+      month_key: string;
+      minimum_floor_usd: string | number;
+      operator_note: string | null;
+      payment_status: "PENDING" | "PAID" | "WAIVED";
+      amount_due_usd: string | number | null;
+      due_at: Date | string | null;
+      grace_ends_at: Date | string | null;
+      paid_at: Date | string | null;
+      payment_id: string | null;
+      settled_amount_usd: string | number | null;
+      settled_currency: string | null;
+    }>(
+      `SELECT month_key, minimum_floor_usd, operator_note, payment_status,
+              amount_due_usd, due_at, grace_ends_at,
+              paid_at, payment_id, settled_amount_usd, settled_currency
+       FROM managed_hosting_months
+       WHERE payment_status = 'PAID'
+       ORDER BY month_key DESC
+       LIMIT 1`,
+    );
+    return result.rows[0] ? mapMonthRow(result.rows[0]) : null;
+  }
+
   async getOldestOutstandingInvoice(): Promise<ManagedHostingMonthOverride | null> {
     const result = await this.pool.query<{
       month_key: string;
