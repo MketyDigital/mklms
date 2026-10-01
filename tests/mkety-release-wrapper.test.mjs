@@ -47,3 +47,15 @@ test('Mkety production deploys central billing control and updates only the oper
   assert.doesNotMatch(wrapper, /wrangler secret (put|bulk|delete) NOWPAYMENTS_IPN_SECRET/);
   assert.doesNotMatch(wrapper, /wrangler secret (put|bulk|delete) MKETY_BILLING_CUSTOMERS_JSON/);
 });
+
+
+test('Mkety billing-control derives and wires the deployed billing Worker URL into the Mkety app', () => {
+  const wrapper = readFileSync('.github/workflows/mkety-academy-release.yml', 'utf8');
+  assert.match(wrapper, /workers\/subdomain/);
+  assert.match(wrapper, /mkety-managed-hosting-billing\.\$subdomain\.workers\.dev/);
+  assert.match(wrapper, /MKETY_APP_WORKER=mklms-mkety-academy/);
+  assert.match(wrapper, /wrangler secret put MKLMS_BILLING_SERVICE_URL --name "\$MKETY_APP_WORKER"/);
+  assert.doesNotMatch(wrapper, /wrangler secret (put|bulk|delete) NOWPAYMENTS_API_KEY/);
+  assert.doesNotMatch(wrapper, /wrangler secret (put|bulk|delete) NOWPAYMENTS_IPN_SECRET/);
+  assert.doesNotMatch(wrapper, /wrangler secret (put|bulk|delete) MKETY_BILLING_CUSTOMERS_JSON/);
+});
