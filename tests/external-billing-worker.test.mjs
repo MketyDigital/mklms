@@ -117,3 +117,65 @@ test('IPN fails closed without signature and only finished triggers settlement',
   assert.equal(confirmed.status, 200);
   assert.equal(confirmedCalls.length, 0);
 });
+
+
+test('signed reconciliation verifies NOWPayments finished status before settlement', async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const body = {
+    installationId: 'spf-mklms',
+    monthKey: '2026-09',
+    paymentId: '12345',
+    timestamp: now,
+    nonce: 'reconcile123',
+  };
+  const canonical = JSON.stringify(Object.fromEntries(Object.entries(body).sort(([left], [right]) => left.localeCompare(right))));
+  const signature = await signHmacHex('sha256', customers['spf-mklms'].sharedSecret, canonical);
+  const calls = [];
+  const response = await billingWorker.fetch(new Request('https://billing.example/v1/reconcile', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...body, signature }),
+  }), env, { fetch: async (...args) => {
+    calls.push(args);
+    if (String(args[0]).includes('api.nowpayments.io/v1/payment/12345')) {
+      return new Response(JSON.stringify({
+        order_id: createOrderId('spf-mklms', '2026-09', 'abc12345'),
+        payment_id: 12345,
+        payment_status: 'finished',
+        price_amount: 25,
+        price_currency: 'usd',
+        actually_paid: 25,
+        pay_currency: 'usdttrc20',
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }});
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).reconciled, true);
+  assert.equal(calls.length, 2);
+});
+
+test('reconciliation rejects a payment from another billing month', async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const body = {
+    installationId: 'spf-mklms',
+    monthKey: '2026-09',
+    paymentId: '12345',
+    timestamp: now,
+    nonce: 'reconcile123',
+  };
+  const canonical = JSON.stringify(Object.fromEntries(Object.entries(body).sort(([left], [right]) => left.localeCompare(right))));
+  const signature = await signHmacHex('sha256', customers['spf-mklms'].sharedSecret, canonical);
+  const response = await billingWorker.fetch(new Request('https://billing.example/v1/reconcile', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...body, signature }),
+  }), env, { fetch: async () => new Response(JSON.stringify({
+    order_id: createOrderId('spf-mklms', '2026-08', 'abc12345'),
+    payment_id: 12345,
+    payment_status: 'finished',
+    price_amount: 25,
+    price_currency: 'usd',
+  }), { status: 200, headers: { 'content-type': 'application/json' } }) });
+  assert.equal(response.status, 409);
+});

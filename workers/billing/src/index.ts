@@ -139,6 +139,106 @@ async function handleInvoice(request: Request, env: Env, runtimeFetch: typeof fe
   return json({ ok: true, invoiceUrl: providerPayload.invoice_url, orderId });
 }
 
+async function deliverSettlement(
+  customer: CustomerConfig,
+  settlement: Record<string, unknown>,
+  runtimeFetch: typeof fetch,
+): Promise<Response> {
+  const settlementSignature = await signHmacHex(
+    "sha256",
+    customer.sharedSecret,
+    canonicalSettlementPayload(settlement),
+  );
+  let response: Response | null = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    response = await runtimeFetch(customer.settlementUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-mkety-billing-signature": settlementSignature,
+      },
+      body: JSON.stringify(settlement),
+    });
+    if (response.ok) return response;
+  }
+  return response ?? new Response(null, { status: 502 });
+}
+
+async function handleReconcile(request: Request, env: Env, runtimeFetch: typeof fetch): Promise<Response> {
+  if (!env.NOWPAYMENTS_API_KEY) return json({ ok: false, message: "Billing provider is not configured." }, 503);
+
+  let customers: Record<string, CustomerConfig>;
+  try {
+    customers = parseCustomers(env);
+  } catch {
+    return json({ ok: false, message: "Billing customer registry is not configured." }, 503);
+  }
+
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body) return json({ ok: false, message: "Invalid reconciliation request." }, 400);
+
+  const installationId = typeof body.installationId === "string" ? body.installationId : "";
+  const monthKey = body.monthKey;
+  const paymentId = typeof body.paymentId === "string" ? body.paymentId.trim() : "";
+  const timestamp = Number(body.timestamp);
+  const nonce = typeof body.nonce === "string" ? body.nonce : "";
+  const signature = typeof body.signature === "string" ? body.signature : "";
+  const customer = customers[installationId];
+
+  if (
+    !customer ||
+    !validMonthKey(monthKey) ||
+    !/^[A-Za-z0-9_-]{1,128}$/.test(paymentId) ||
+    !Number.isInteger(timestamp) || Math.abs(Math.floor(Date.now() / 1000) - timestamp) > 300 ||
+    !/^[A-Za-z0-9_-]{8,64}$/.test(nonce)
+  ) {
+    return json({ ok: false, message: "Invalid reconciliation request." }, 400);
+  }
+
+  const canonical = JSON.stringify(sortObjectDeep({ installationId, monthKey, paymentId, timestamp, nonce }));
+  if (!(await verifyHmacHex("sha256", customer.sharedSecret, canonical, signature))) {
+    return json({ ok: false, message: "Unauthorized reconciliation request." }, 401);
+  }
+
+  const providerResponse = await runtimeFetch(`https://api.nowpayments.io/v1/payment/${encodeURIComponent(paymentId)}`, {
+    method: "GET",
+    headers: { "x-api-key": env.NOWPAYMENTS_API_KEY },
+  });
+  const provider = (await providerResponse.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!providerResponse.ok || !provider) {
+    return json({ ok: false, message: "Could not verify payment with NOWPayments." }, 502);
+  }
+
+  const order = parseOrderId(provider.order_id);
+  if (!order || order.installationId !== installationId || order.monthKey !== monthKey) {
+    return json({ ok: false, message: "Payment does not belong to this billing month." }, 409);
+  }
+  if (String(provider.payment_status ?? "") !== "finished") {
+    return json({ ok: false, message: `NOWPayments status is ${String(provider.payment_status ?? "unknown")}, not finished.` }, 409);
+  }
+
+  const settlement = {
+    installationId,
+    monthKey,
+    paymentId: String(provider.payment_id ?? paymentId),
+    paymentStatus: "finished",
+    priceAmount: Number(provider.price_amount ?? 0),
+    priceCurrency: String(provider.price_currency ?? "usd"),
+    actuallyPaid: Number(provider.actually_paid ?? provider.pay_amount ?? 0),
+    payCurrency: String(provider.pay_currency ?? ""),
+    timestamp: Math.floor(Date.now() / 1000),
+  };
+  if (!Number.isFinite(settlement.priceAmount) || settlement.priceAmount <= 0) {
+    return json({ ok: false, message: "NOWPayments returned an invalid finished payment." }, 409);
+  }
+
+  const settlementResponse = await deliverSettlement(customer, settlement, runtimeFetch);
+  if (!settlementResponse.ok) {
+    return json({ ok: false, message: "Verified payment could not be applied to the installation." }, 502);
+  }
+  return json({ ok: true, reconciled: true, status: "finished" });
+}
+
 async function handleIpn(request: Request, env: Env, runtimeFetch: typeof fetch): Promise<Response> {
   if (!env.NOWPAYMENTS_IPN_SECRET) {
     return json({ ok: false, message: "IPN verification is not configured." }, 503);
@@ -186,20 +286,7 @@ async function handleIpn(request: Request, env: Env, runtimeFetch: typeof fetch)
     return json({ ok: false, message: "Invalid finished payment." }, 400);
   }
 
-  const settlementSignature = await signHmacHex(
-    "sha256",
-    customer.sharedSecret,
-    canonicalSettlementPayload(settlement),
-  );
-
-  const settlementResponse = await runtimeFetch(customer.settlementUrl, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-mkety-billing-signature": settlementSignature,
-    },
-    body: JSON.stringify(settlement),
-  });
+  const settlementResponse = await deliverSettlement(customer, settlement, runtimeFetch);
 
   if (!settlementResponse.ok) {
     return json({ ok: false, message: "Customer settlement failed." }, 502);
@@ -214,6 +301,7 @@ export default {
     const url = new URL(request.url);
     if (request.method !== "POST") return json({ ok: false, message: "Method not allowed." }, 405);
     if (url.pathname === "/v1/invoices") return handleInvoice(request, env, runtimeFetch);
+    if (url.pathname === "/v1/reconcile") return handleReconcile(request, env, runtimeFetch);
     if (url.pathname === "/webhooks/nowpayments") return handleIpn(request, env, runtimeFetch);
     return json({ ok: false, message: "Not found." }, 404);
   },
