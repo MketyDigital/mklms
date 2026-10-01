@@ -80,7 +80,21 @@ export async function POST(request: Request) {
     if (!input.success || input.data.maximumMonthlyFeeUsd < input.data.minimumMonthlyFeeUsd) {
       return NextResponse.json({ ok: false, message: "Invalid hosting policy." }, { status: 400 });
     }
-    return NextResponse.json({ ok: true, policy: await repository.upsertOperatorPolicy(input.data) });
+    return NextResponse.json({
+      ok: true,
+      policy: await repository.upsertOperatorPolicy({
+        enabled: input.data.enabled,
+        minimumMonthlyFeeUsd: input.data.minimumMonthlyFeeUsd,
+        maximumMonthlyFeeUsd: input.data.maximumMonthlyFeeUsd,
+        displayTitle: input.data.displayTitle,
+        displayDescription: input.data.displayDescription ?? null,
+        notice: input.data.notice ?? null,
+        overdueWarning: input.data.overdueWarning ?? null,
+        dueDaysAfterMonthEnd: input.data.dueDaysAfterMonthEnd,
+        graceDays: input.data.graceDays,
+        enforcementEnabled: input.data.enforcementEnabled,
+      }),
+    });
   }
 
   if (parsed.data.action === "getMonth") {
