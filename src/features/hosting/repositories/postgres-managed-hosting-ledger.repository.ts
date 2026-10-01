@@ -67,7 +67,10 @@ export class PostgresManagedHostingLedgerRepository {
          measured_watch_minutes = EXCLUDED.measured_watch_minutes,
          estimated_live_audience_minutes = EXCLUDED.estimated_live_audience_minutes,
          streaming_activity_band = EXCLUDED.streaming_activity_band,
-         automatic_balance_usd = EXCLUDED.automatic_balance_usd,
+         automatic_balance_usd = GREATEST(
+           managed_hosting_daily_ledger.automatic_balance_usd,
+           EXCLUDED.automatic_balance_usd
+         ),
          calculation_version = EXCLUDED.calculation_version,
          updated_at = NOW()
        RETURNING billing_date, month_key, measured_watch_minutes,
@@ -116,6 +119,16 @@ export class PostgresManagedHostingLedgerRepository {
       [billingDate, monthKey, amountUsd, reason],
     );
     return mapRow(result.rows[0]);
+  }
+
+  async getMonthPeakAutomaticBalance(monthKey = getBillingMonthKey()): Promise<number> {
+    const result = await this.pool.query<{ peak: string | number }>(
+      `SELECT COALESCE(MAX(automatic_balance_usd), 0) AS peak
+       FROM managed_hosting_daily_ledger
+       WHERE month_key = $1`,
+      [monthKey],
+    );
+    return Math.round(Number(result.rows[0]?.peak ?? 0) * 100) / 100;
   }
 
   async getMonthAdjustmentTotal(monthKey = getBillingMonthKey()): Promise<number> {
