@@ -7,7 +7,6 @@ import {
   isFreshBillingTimestamp,
   verifyBillingPayload,
 } from "@/features/hosting/server/billing-signature";
-import { getEffectiveManagedHostingPolicy } from "@/features/hosting/server/managed-hosting-policy";
 
 const settlementSchema = z.object({
   installationId: z.string().regex(/^[a-z0-9][a-z0-9-]{1,63}$/),
@@ -47,10 +46,27 @@ export async function POST(request: Request) {
   }
 
   const repository = new PostgresManagedHostingRepository();
-  const effective = await getEffectiveManagedHostingPolicy(repository);
+  const invoice = await repository.getMonthOverride(parsed.data.monthKey);
+  if (
+    !invoice ||
+    invoice.amountDueUsd == null ||
+    !invoice.dueAt ||
+    !invoice.graceEndsAt
+  ) {
+    return NextResponse.json({ ok: false, message: "Billing invoice is not finalized." }, { status: 409 });
+  }
+  if (parsed.data.priceCurrency.trim().toLowerCase() !== "usd") {
+    return NextResponse.json({ ok: false, message: "Unexpected settlement currency." }, { status: 409 });
+  }
+  if (Math.abs(invoice.amountDueUsd - parsed.data.priceAmount) > 0.01) {
+    return NextResponse.json({ ok: false, message: "Settlement amount does not match the locked invoice." }, { status: 409 });
+  }
+
   const month = await repository.markMonthPaid({
     monthKey: parsed.data.monthKey,
-    defaultMinimumFloorUsd: effective.policy.minimumMonthlyFeeUsd,
+    paymentId: parsed.data.paymentId,
+    settledAmountUsd: parsed.data.priceAmount,
+    settledCurrency: parsed.data.priceCurrency,
   });
 
   return NextResponse.json({ ok: true, month });
