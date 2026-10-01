@@ -90,6 +90,21 @@ jobs:
       - name: Deploy shared billing Worker without changing existing secrets
         run: npx wrangler deploy --config workers/billing/wrangler.jsonc --x-provision=false
 
-      - name: Update only the Mkety operator-control secret
+      - name: Resolve deployed central billing service URL
         shell: bash
-        run: printf '%s' "$MKETY_MANAGED_HOSTING_OPERATOR_KEY" | npx wrangler secret put MKETY_MANAGED_HOSTING_OPERATOR_KEY --config workers/billing/wrangler.jsonc
+        run: |
+          set -euo pipefail
+          curl --silent --show-error --fail-with-body --request GET             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain"             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" > /tmp/account-subdomain.json
+          jq -e '.success == true' /tmp/account-subdomain.json >/dev/null
+          subdomain=$(jq -r '.result.subdomain' /tmp/account-subdomain.json)
+          test -n "$subdomain"
+          echo "BILLING_SERVICE_URL=https://mkety-managed-hosting-billing.$subdomain.workers.dev/" >> "$GITHUB_ENV"
+          echo "MKETY_APP_WORKER=mklms-mkety-academy" >> "$GITHUB_ENV"
+          rm -f /tmp/account-subdomain.json
+
+      - name: Update only central billing control configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$MKETY_MANAGED_HOSTING_OPERATOR_KEY" | npx wrangler secret put MKETY_MANAGED_HOSTING_OPERATOR_KEY --config workers/billing/wrangler.jsonc
+          printf '%s' "$BILLING_SERVICE_URL" | npx wrangler secret put MKLMS_BILLING_SERVICE_URL --name "$MKETY_APP_WORKER"
