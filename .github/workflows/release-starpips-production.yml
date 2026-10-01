@@ -52,18 +52,21 @@ jobs:
           node scripts/starpips-migration-guard.mjs verify
           018_certificate_visual_layout_and_starpips_calibration.sql
           019_managed_hosting_daily_ledger.sql
+          020_managed_hosting_payment_settlement.sql
 
-      - name: Apply only guarded additive Starpips migrations 018 and 019 when pending
+      - name: Apply only guarded additive Starpips migrations 018 through 020 when pending
         run: >-
           node scripts/starpips-migration-guard.mjs apply
           018_certificate_visual_layout_and_starpips_calibration.sql
           019_managed_hosting_daily_ledger.sql
+          020_managed_hosting_payment_settlement.sql
 
-      - name: Verify Starpips migrations 018 and 019 are current
+      - name: Verify Starpips migrations 018 through 020 are current
         run: >-
           node scripts/starpips-migration-guard.mjs verify
           018_certificate_visual_layout_and_starpips_calibration.sql
           019_managed_hosting_daily_ledger.sql
+          020_managed_hosting_payment_settlement.sql
 
   release:
     needs: migrate
