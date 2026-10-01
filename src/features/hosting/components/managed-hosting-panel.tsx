@@ -23,6 +23,7 @@ export function ManagedHostingPanel({
   usage,
   monthStart,
   monthOverride,
+  latestPaidMonth,
   operatorAdjustmentUsd = 0,
   resolvedCurrentBalanceUsd,
   billingAutomationEnabled = false,
@@ -34,6 +35,7 @@ export function ManagedHostingPanel({
   usage: ManagedHostingUsageClientSummary;
   monthStart: Date;
   monthOverride?: ManagedHostingMonthOverride | null;
+  latestPaidMonth?: ManagedHostingMonthOverride | null;
   operatorAdjustmentUsd?: number;
   resolvedCurrentBalanceUsd?: number | null;
   billingAutomationEnabled?: boolean;
@@ -128,6 +130,17 @@ export function ManagedHostingPanel({
             </p>
           ) : null}
           {policy.notice ? <p className="text-sm leading-6 text-muted-foreground">{policy.notice}</p> : null}
+
+          {latestPaidMonth && latestPaidMonth.monthKey !== shownMonthKey ? (
+            <div className="rounded-md border bg-muted/30 p-3 text-sm">
+              <p className="font-medium">Last payment · {latestPaidMonth.monthKey} · PAID</p>
+              <p className="mt-1 text-muted-foreground">
+                {latestPaidMonth.settledAmountUsd != null
+                  ? `${latestPaidMonth.settledAmountUsd.toFixed(2)} settled`
+                  : "Payment received and recorded."}
+              </p>
+            </div>
+          ) : null}
 
           {status === "PAID" ? (
             <p className="text-sm font-medium">
