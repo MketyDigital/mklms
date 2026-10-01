@@ -30,6 +30,7 @@ export default async function AdminHostingPage() {
 
   let usage: Awaited<ReturnType<PostgresManagedHostingRepository["getCurrentMonthUsage"]>> | null = null;
   let monthOverride: ManagedHostingMonthOverride | null = null;
+  let latestPaidMonth: ManagedHostingMonthOverride | null = null;
   let serviceAccess: Awaited<ReturnType<typeof getManagedHostingServiceAccess>> | null = null;
   let operatorAdjustmentUsd = 0;
   let resolvedCurrentBalanceUsd: number | null = null;
@@ -38,13 +39,21 @@ export default async function AdminHostingPage() {
   try {
     usage = await hostingRepository.getCurrentMonthUsage();
     const monthKey = getBillingMonthKey(usage.monthStart);
-    const [currentMonthOverride, currentServiceAccess, currentOperatorAdjustmentUsd, peakAutomaticBalanceUsd] = await Promise.all([
+    const [
+      currentMonthOverride,
+      currentServiceAccess,
+      currentOperatorAdjustmentUsd,
+      peakAutomaticBalanceUsd,
+      currentLatestPaidMonth,
+    ] = await Promise.all([
       hostingRepository.getMonthOverride(monthKey),
       getManagedHostingServiceAccess(hostingRepository),
       ledgerRepository.getMonthAdjustmentTotal(monthKey),
       ledgerRepository.getMonthPeakAutomaticBalance(monthKey),
+      hostingRepository.getLatestPaidMonth(),
     ]);
     monthOverride = currentMonthOverride;
+    latestPaidMonth = currentLatestPaidMonth;
     serviceAccess = currentServiceAccess;
     operatorAdjustmentUsd = currentOperatorAdjustmentUsd;
 
@@ -105,6 +114,7 @@ export default async function AdminHostingPage() {
             displayDescription={effective.displayDescription}
             monthStart={usage.monthStart}
             monthOverride={monthOverride}
+            latestPaidMonth={latestPaidMonth}
             operatorAdjustmentUsd={operatorAdjustmentUsd}
             resolvedCurrentBalanceUsd={resolvedCurrentBalanceUsd}
             serviceAccess={serviceAccess}
