@@ -264,7 +264,7 @@ export default function OperatorHostingPage() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Today's Adjustment</CardTitle><CardDescription>Current month adjustment total: \${monthAdjustmentTotal.toFixed(2)}</CardDescription></CardHeader>
+        <CardHeader><CardTitle>Today&apos;s Adjustment</CardTitle><CardDescription>Current month adjustment total: \${monthAdjustmentTotal.toFixed(2)}</CardDescription></CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={saveAdjustment}>
             <Input type="number" step="0.01" value={dailyAdjustment} onChange={(e) => setDailyAdjustment(Number(e.target.value))} />
