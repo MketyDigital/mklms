@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/app-layout";
@@ -105,6 +106,9 @@ export default async function AdminHostingPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             View your current managed video-hosting balance, streaming activity, payment status and payment notices.
           </p>
+          <Link href="/admin/hosting/recover-payment" className="mt-2 inline-block text-sm underline">
+            Payment completed but still pending? Verify it here
+          </Link>
         </div>
 
         {usage ? (
