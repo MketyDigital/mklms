@@ -68,8 +68,18 @@ export async function POST(request: Request) {
       partSizeBytes: authorization.partSizeBytes,
     });
   } catch (error) {
+    const requestId = request.headers.get("cf-ray")?.trim() || crypto.randomUUID();
+    const details = error instanceof Error
+      ? { errorName: error.name, errorMessage: error.message }
+      : { errorName: "UnknownError", errorMessage: "Unknown upload preparation failure" };
+    console.error("Streaming Storage upload session creation failed", { requestId, ...details });
     return NextResponse.json(
-      { ok: false, message: error instanceof Error ? error.message : "Could not authorize the R2 upload." },
+      {
+        ok: false,
+        code: "UPLOAD_SESSION_FAILED",
+        requestId,
+        message: "Streaming Storage could not start an upload session. Please try again shortly.",
+      },
       { status: 503 },
     );
   }
