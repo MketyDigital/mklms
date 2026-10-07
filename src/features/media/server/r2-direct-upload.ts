@@ -12,7 +12,7 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 export const MAX_DIRECT_UPLOAD_BYTES = 50 * 1024 * 1024 * 1024;
-export const MULTIPART_THRESHOLD_BYTES = 512 * 1024 * 1024;
+export const MULTIPART_THRESHOLD_BYTES = 128 * 1024 * 1024;
 export const MULTIPART_PART_SIZE_BYTES = 64 * 1024 * 1024;
 const MEDIA_KEY_PATTERN = /^media\/[0-9a-f-]{36}\.mp4$/i;
 
