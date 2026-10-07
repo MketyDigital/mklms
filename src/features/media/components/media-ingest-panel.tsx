@@ -106,14 +106,14 @@ export function MediaIngestPanel({
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Manual-safe path for the first videos</CardTitle>
-          <CardDescription>This reaches exactly the same final R2 playback layout as the future automation and avoids making tomorrow&apos;s class depend on untested paid orchestration.</CardDescription>
+          <CardDescription>This reaches the same final Streaming Storage playback layout as the future automation and avoids making tomorrow&apos;s class depend on untested paid orchestration.</CardDescription>
         </CardHeader>
         <CardContent>
           <ol className="space-y-3 text-sm">
             <li><strong>1. Upload source to private OCI Object Storage.</strong> Use OCI Console, CLI, or a short-lived PAR. Do not upload the source through the application.</li>
             <li><strong>2. Run one Media Flow job.</strong> Standard H264, HLS, chosen ABR rungs. Use the source object and a unique output prefix.</li>
             <li><strong>3. Wait for Succeeded.</strong> Verify the output folder contains the HLS master playlist, variant playlists and segments before copying anything.</li>
-            <li><strong>4. Copy the completed output prefix to Streaming Storage.</strong> Use rclone or S3-compatible tooling. OCI public egress includes a large free monthly allowance, while R2 ingress is not billed as egress.</li>
+            <li><strong>4. Copy the completed output prefix to Streaming Storage.</strong> Use rclone or S3-compatible tooling. Incoming media transfers do not add a separate transfer fee.</li>
             <li><strong>5. Verify Streaming Storage before deleting OCI files.</strong> Confirm master playlist and referenced segments exist in Streaming Storage and play correctly.</li>
             <li><strong>6. Register the Streaming Storage master path in Media Library.</strong> Example: <code>live/free-class-2026/day-1/master.m3u8</code>. Then attach that media asset to the live session.</li>
           </ol>
