@@ -38,15 +38,25 @@ export function MediaUploadPanel() {
   const [progress, setProgress] = useState<number | null>(null);
 
   async function uploadSingle(file: File, authorization: SingleUploadAuthorization) {
-    const uploadResponse = await fetch(authorization.uploadUrl, {
-      method: "PUT",
-      headers: { "Content-Type": "video/mp4" },
-      body: file,
-    });
-    if (!uploadResponse.ok) {
-      throw new Error(`R2 rejected the upload (${uploadResponse.status}). The file was not registered.`);
+    let lastError: Error | null = null;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const uploadResponse = await fetch(authorization.uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": "video/mp4" },
+          body: file,
+        });
+        if (!uploadResponse.ok) {
+          throw new Error(`R2 rejected the upload (${uploadResponse.status}). The file was not registered.`);
+        }
+        setProgress(100);
+        return;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error("Direct R2 upload failed.");
+        if (attempt < 3) await sleep(750 * 2 ** (attempt - 1));
+      }
     }
-    setProgress(100);
+    throw lastError ?? new Error("Direct R2 upload failed.");
   }
 
   async function uploadMultipart(file: File, authorization: MultipartUploadAuthorization) {
@@ -105,15 +115,21 @@ export function MediaUploadPanel() {
 
     try {
       let nextPart = 0;
+      let fatalError: Error | null = null;
       const workers = Array.from({ length: Math.min(3, partCount) }, async () => {
-        while (true) {
+        while (!fatalError) {
           const partIndex = nextPart;
           nextPart += 1;
           if (partIndex >= partCount) return;
-          await uploadPart(partIndex);
+          try {
+            await uploadPart(partIndex);
+          } catch (error) {
+            fatalError = error instanceof Error ? error : new Error("Multipart upload failed.");
+          }
         }
       });
       await Promise.all(workers);
+      if (fatalError) throw fatalError;
 
       const completeResponse = await fetch("/api/admin/media/direct-upload/complete", {
         method: "POST",
@@ -191,6 +207,7 @@ export function MediaUploadPanel() {
         body: JSON.stringify({
           title,
           objectKey: authorization.objectKey,
+          sizeBytes: file.size,
           durationSeconds,
         }),
       });
