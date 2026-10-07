@@ -21,10 +21,11 @@ test('preparation errors preserve rate-limit and hosting restriction guidance', 
 test('storage preparation failures include a stable diagnosis and request reference without leaking internals', () => {
   const message = getUploadPreparationMessage(
     503,
-    { code: 'UPLOAD_SESSION_FAILED', requestId: 'cf-ray-123', message: 'Internal raw storage details' },
+    { code: 'UPLOAD_SESSION_FAILED', detailCode: 'AccessDenied', requestId: 'cf-ray-123', message: 'Internal raw storage details' },
   );
   assert.match(message, /Streaming Storage/i);
   assert.match(message, /cf-ray-123/);
+  assert.match(message, /AccessDenied/);
   assert.doesNotMatch(message, /Internal raw storage details/);
 });
 
