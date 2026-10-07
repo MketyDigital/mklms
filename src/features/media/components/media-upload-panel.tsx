@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { uploadBlobWithProgress } from "@/features/media/components/upload-transport";
 
 interface SingleUploadAuthorization {
   ok: true;
@@ -38,31 +39,33 @@ export function MediaUploadPanel() {
   const [progress, setProgress] = useState<number | null>(null);
 
   async function uploadSingle(file: File, authorization: SingleUploadAuthorization) {
-    let lastError: Error | null = null;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
-        const uploadResponse = await fetch(authorization.uploadUrl, {
-          method: "PUT",
-          headers: { "Content-Type": "video/mp4" },
-          body: file,
-        });
-        if (!uploadResponse.ok) {
-          throw new Error(`R2 rejected the upload (${uploadResponse.status}). The file was not registered.`);
-        }
-        setProgress(100);
+        await uploadBlobWithProgress(
+          authorization.uploadUrl,
+          file,
+          (loadedBytes, totalBytes) => {
+            if (totalBytes > 0) setProgress(Math.min(99, Math.floor((loadedBytes / totalBytes) * 100)));
+          },
+          "video/mp4",
+        );
+        setProgress(99);
         return;
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error("Direct R2 upload failed.");
+      } catch {
         if (attempt < 3) await sleep(750 * 2 ** (attempt - 1));
       }
     }
-    throw lastError ?? new Error("Direct R2 upload failed.");
+    throw new Error("The file transfer did not finish.");
   }
 
   async function uploadMultipart(file: File, authorization: MultipartUploadAuthorization) {
     const partCount = Math.ceil(file.size / authorization.partSizeBytes);
     const completed: Array<{ partNumber: number; etag: string }> = new Array(partCount);
-    let completedBytes = 0;
+    const partBytesInProgress = new Array<number>(partCount).fill(0);
+    const reportProgress = () => {
+      const transferredBytes = partBytesInProgress.reduce((total, bytes) => total + bytes, 0);
+      setProgress(Math.min(99, Math.floor((transferredBytes / file.size) * 100)));
+    };
 
     const uploadPart = async (partIndex: number) => {
       const partNumber = partIndex + 1;
@@ -73,6 +76,8 @@ export function MediaUploadPanel() {
       let lastError: Error | null = null;
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         try {
+          partBytesInProgress[partIndex] = 0;
+          reportProgress();
           const signResponse = await fetch("/api/admin/media/direct-upload/part", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -89,28 +94,29 @@ export function MediaUploadPanel() {
             throw new Error(signed?.message ?? `Could not authorize video part ${partNumber}.`);
           }
 
-          const partResponse = await fetch(signed.uploadUrl, {
-            method: "PUT",
+          const partResponse = await uploadBlobWithProgress(
+            signed.uploadUrl,
             body,
-          });
-          if (!partResponse.ok) {
-            throw new Error(`R2 rejected video part ${partNumber} (${partResponse.status}).`);
-          }
-          const etag = partResponse.headers.get("ETag") ?? partResponse.headers.get("etag");
+            (loadedBytes) => {
+              partBytesInProgress[partIndex] = loadedBytes;
+              reportProgress();
+            },
+          );
+          const etag = partResponse.etag;
           if (!etag) {
-            throw new Error("R2 uploaded a video part but did not expose its ETag. Check the installation R2 CORS contract.");
+            throw new Error("The portal could not verify the uploaded video part.");
           }
 
           completed[partIndex] = { partNumber, etag };
-          completedBytes += body.size;
-          setProgress(Math.min(99, Math.floor((completedBytes / file.size) * 100)));
+          partBytesInProgress[partIndex] = body.size;
+          reportProgress();
           return;
         } catch (error) {
           lastError = error instanceof Error ? error : new Error("Multipart upload failed.");
           if (attempt < 3) await sleep(500 * 2 ** (attempt - 1));
         }
       }
-      throw lastError ?? new Error(`Could not upload video part ${partNumber}.`);
+      throw new Error(`Could not transfer video part ${partNumber}.`);
     };
 
     try {
@@ -144,9 +150,9 @@ export function MediaUploadPanel() {
         | { ok?: boolean; message?: string }
         | null;
       if (!completeResponse.ok || !completedUpload?.ok) {
-        throw new Error(completedUpload?.message ?? "R2 could not complete the multipart video upload.");
+        throw new Error("The video transfer could not be completed.");
       }
-      setProgress(100);
+      setProgress(99);
     } catch (error) {
       await fetch("/api/admin/media/direct-upload/abort", {
         method: "POST",
@@ -167,17 +173,20 @@ export function MediaUploadPanel() {
     const file = formData.get("file");
 
     if (!(file instanceof File) || !title) {
+      setProgress(null);
       setMessage("Choose an MP4 file and enter a title.");
       return;
     }
     if (!file.name.toLowerCase().endsWith(".mp4")) {
+      setProgress(null);
       setMessage("Only MP4 video files are supported.");
       return;
     }
 
     setBusy(true);
-    setMessage(null);
+    setMessage("Preparing Streaming Storage upload…");
     setProgress(0);
+    let failureStage: "preparing" | "transferring" | "saving" = "preparing";
     try {
       const initiateResponse = await fetch("/api/admin/media/direct-upload/initiate", {
         method: "POST",
@@ -191,16 +200,19 @@ export function MediaUploadPanel() {
       });
       const authorization = (await initiateResponse.json().catch(() => null)) as UploadAuthorization | null;
       if (!initiateResponse.ok || !authorization?.ok) {
-        throw new Error(authorization && "message" in authorization ? authorization.message ?? "Could not prepare the private R2 upload." : "Could not prepare the private R2 upload.");
+        throw new Error("Could not prepare the upload.");
       }
 
+      failureStage = "transferring";
+      setMessage(authorization.mode === "multipart" ? "Uploading to Streaming Storage in retryable parts…" : "Uploading to Streaming Storage…");
       if (authorization.mode === "single") {
         await uploadSingle(file, authorization);
       } else {
-        setMessage("Large video detected. Uploading securely in retryable parts…");
         await uploadMultipart(file, authorization);
       }
 
+      failureStage = "saving";
+      setMessage("Transfer complete. Confirming save in the media library…");
       const finalizeResponse = await fetch("/api/admin/media/direct-upload/finalize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -213,13 +225,20 @@ export function MediaUploadPanel() {
       });
       const finalized = (await finalizeResponse.json().catch(() => null)) as { ok?: boolean; message?: string } | null;
       if (!finalizeResponse.ok || !finalized?.ok) {
-        throw new Error(finalized?.message ?? "The MP4 reached R2 but could not be added to the media library.");
+        throw new Error("The video transfer could not be confirmed in the media library.");
       }
 
-      setMessage("MP4 uploaded directly to private R2 and added to the media library.");
+      setProgress(100);
+      setMessage("Upload complete and saved to the media library.");
       router.refresh();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not upload media.");
+    } catch {
+      if (failureStage === "preparing") {
+        setMessage("Could not prepare the upload. Please try again.");
+      } else if (failureStage === "transferring") {
+        setMessage("The upload did not finish. Check your connection and try again.");
+      } else {
+        setMessage("The video transferred, but the portal could not confirm that it was saved. Refresh the media library before retrying.");
+      }
     } finally {
       setBusy(false);
     }
@@ -230,7 +249,7 @@ export function MediaUploadPanel() {
       <CardHeader>
         <CardTitle className="text-base">Upload protected MP4</CardTitle>
         <CardDescription>
-          Uploads go directly from your browser to the installation&apos;s private R2 bucket. Large videos are automatically split into retryable parts so the application Worker never has to proxy the video bytes.
+          Uploads go directly from your browser to the installation&apos;s private Streaming Storage. Large videos are sent in retryable parts, while smaller videos transfer in one stream.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -249,10 +268,10 @@ export function MediaUploadPanel() {
             <span className="block text-xs text-muted-foreground">Supports MP4 videos up to 50 GB. Large files use automatic multipart upload and retry failed parts.</span>
           </label>
 
-          {progress !== null && busy ? (
+          {progress !== null ? (
             <div className="space-y-1 md:col-span-2" aria-live="polite">
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Upload progress</span>
+                <span>Streaming Storage upload</span>
                 <span>{progress}%</span>
               </div>
               <progress className="h-2 w-full" max={100} value={progress} />
