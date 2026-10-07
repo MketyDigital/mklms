@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 
+import { normalizeUploadDiagnosticFailure } from '../src/features/media/server/direct-upload-diagnostic.ts';
+
 const read = (path) => fs.readFileSync(path, 'utf8');
 
 test('streaming storage diagnostic is admin-only and uses the production multipart flow', () => {
@@ -28,6 +30,25 @@ test('diagnostic failure normalization only returns safe fields', () => {
   assert.match(diagnostic, /storageRequestId/);
   assert.doesNotMatch(diagnostic, /message:\s*error\.message/);
   assert.doesNotMatch(diagnostic, /secretAccessKey\s*:/);
+});
+
+test('diagnostic normalization omits raw provider messages and credential-like values', () => {
+  const error = Object.assign(new Error('signed canonical request includes hidden data'), {
+    name: 'SignatureDoesNotMatch',
+    secretAccessKey: 'must-not-escape',
+    $metadata: { httpStatusCode: 403, requestId: 'storage-req-42' },
+  });
+  const result = normalizeUploadDiagnosticFailure(error, 'start');
+
+  assert.deepEqual(result, {
+    ok: false,
+    stage: 'start',
+    detailCode: 'SignatureDoesNotMatch',
+    httpStatusCode: 403,
+    storageRequestId: 'storage-req-42',
+  });
+  assert.equal(JSON.stringify(result).includes('must-not-escape'), false);
+  assert.equal(JSON.stringify(result).includes('canonical request'), false);
 });
 
 test('multipart upload retries preserve visible progress and explain the retry', () => {
