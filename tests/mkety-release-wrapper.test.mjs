@@ -42,6 +42,9 @@ test('Mkety production deploys central billing control and updates only the oper
   assert.match(wrapper, /needs:\s*production/);
   assert.match(wrapper, /workers\/billing\/wrangler\.jsonc/);
   assert.match(wrapper, /secrets\.MKETY_MANAGED_HOSTING_OPERATOR_KEY/);
+  assert.match(wrapper, /billing-changes/);
+  assert.match(wrapper, /github\.event\.before/);
+  assert.match(wrapper, /if: steps\.billing-changes\.outputs\.changed == 'true'/);
   assert.match(wrapper, /wrangler secret put MKETY_MANAGED_HOSTING_OPERATOR_KEY/);
   assert.doesNotMatch(wrapper, /wrangler secret (put|bulk|delete) NOWPAYMENTS_API_KEY/);
   assert.doesNotMatch(wrapper, /wrangler secret (put|bulk|delete) NOWPAYMENTS_IPN_SECRET/);

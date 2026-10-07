@@ -84,13 +84,33 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(git rev-parse origin/production/mkety-academy)" = "$GITHUB_SHA"
 
+      - name: Detect whether billing-control surface changed
+        id: billing-changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          before="${{ github.event.before }}"
+          changed=false
+          if git cat-file -e "$before^{commit}" 2>/dev/null; then
+            if ! git diff --quiet "$before" "$GITHUB_SHA" -- workers/billing .github/workflows/mkety-academy-release.yml; then
+              changed=true
+            fi
+          else
+            changed=true
+          fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          echo "billing_control_changed=$changed"
+
       - name: Package shared billing Worker
+        if: steps.billing-changes.outputs.changed == 'true'
         run: npx wrangler deploy --dry-run --config workers/billing/wrangler.jsonc --outdir .billing-worker-mkety-release-dry-run
 
       - name: Deploy shared billing Worker without changing existing secrets
+        if: steps.billing-changes.outputs.changed == 'true'
         run: npx wrangler deploy --config workers/billing/wrangler.jsonc --x-provision=false
 
       - name: Resolve deployed central billing service URL
+        if: steps.billing-changes.outputs.changed == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -103,6 +123,7 @@ jobs:
           rm -f /tmp/account-subdomain.json
 
       - name: Update only central billing control configuration
+        if: steps.billing-changes.outputs.changed == 'true'
         shell: bash
         run: |
           set -euo pipefail
