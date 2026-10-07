@@ -107,3 +107,13 @@ test('production promotion workflow still moves only selected production pointer
   assert.match(source, /release_sha:/);
   assert.match(source, /PROMOTE/);
 });
+
+
+test('generic production release skips unchanged media workers', () => {
+  const source = readFileSync('.github/workflows/deploy-installation-production.yml', 'utf8');
+  assert.match(source, /MEDIA_CHANGED/);
+  assert.match(source, /github\.event\.before/);
+  assert.match(source, /deploy\/installations\/\$INSTALLATION_ID\.json/);
+  assert.match(source, /if: env\.MEDIA_CHANGED == 'true'/);
+  assert.match(source, /Deploy production media Worker only when its release surface changed/);
+});
