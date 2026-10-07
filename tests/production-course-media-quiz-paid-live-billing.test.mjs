@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 
+import { MULTIPART_THRESHOLD_BYTES } from '../src/features/media/server/r2-direct-upload.ts';
+
 import {
   calculateManagedHostingAmountDue,
   normalizeManagedHostingPolicy,
@@ -72,6 +74,12 @@ test('admin media uses a direct-to-R2 initiate PUT finalize handshake and server
   assert.doesNotMatch(panel, /api\/admin\/media\/upload["']/);
 });
 
+test('300 MB videos stay on the retryable multipart path instead of restarting one full request', () => {
+  const megabyte = 1024 * 1024;
+  assert.ok(100 * megabyte <= MULTIPART_THRESHOLD_BYTES);
+  assert.ok(300 * megabyte > MULTIPART_THRESHOLD_BYTES);
+});
+
 test('admin class-video upload supports resilient universal direct R2 multipart uploads', () => {
   const initiate = read('src/app/api/admin/media/direct-upload/initiate/route.ts');
   const finalize = read('src/app/api/admin/media/direct-upload/finalize/route.ts');
@@ -83,7 +91,7 @@ test('admin class-video upload supports resilient universal direct R2 multipart 
   const transport = read('src/features/media/components/upload-transport.ts');
 
   assert.match(helper, /MAX_DIRECT_UPLOAD_BYTES\s*=\s*50 \* 1024 \* 1024 \* 1024/);
-  assert.match(helper, /MULTIPART_THRESHOLD_BYTES\s*=\s*4 \* 1024 \* 1024 \* 1024/);
+  assert.match(helper, /MULTIPART_THRESHOLD_BYTES\s*=\s*128 \* 1024 \* 1024/);
   assert.match(helper, /CreateMultipartUploadCommand/);
   assert.match(helper, /UploadPartCommand/);
   assert.match(helper, /CompleteMultipartUploadCommand/);
