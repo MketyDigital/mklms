@@ -77,6 +77,7 @@ export async function POST(request: Request) {
       {
         ok: false,
         code: "UPLOAD_SESSION_FAILED",
+        detailCode: details.errorName,
         requestId,
         message: "Streaming Storage could not start an upload session. Please try again shortly.",
       },
