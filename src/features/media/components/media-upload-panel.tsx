@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { uploadBlobWithProgress } from "@/features/media/components/upload-transport";
+import { getUploadPreparationMessage } from "@/features/media/components/upload-errors";
 
 interface SingleUploadAuthorization {
   ok: true;
@@ -28,7 +29,7 @@ interface MultipartUploadAuthorization {
 type UploadAuthorization =
   | SingleUploadAuthorization
   | MultipartUploadAuthorization
-  | { ok?: false; message?: string };
+  | { ok?: false; code?: string; message?: string; requestId?: string };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -198,7 +199,14 @@ export function MediaUploadPanel() {
       });
       const authorization = (await initiateResponse.json().catch(() => null)) as UploadAuthorization | null;
       if (!initiateResponse.ok || !authorization?.ok) {
-        throw new Error("Could not prepare the upload.");
+        const requestId = authorization?.requestId ?? initiateResponse.headers.get("cf-ray") ?? undefined;
+        throw new Error(
+          getUploadPreparationMessage(initiateResponse.status, {
+            code: authorization?.code,
+            message: authorization?.message,
+            requestId,
+          }),
+        );
       }
 
       failureStage = "transferring";
@@ -229,9 +237,11 @@ export function MediaUploadPanel() {
       setProgress(100);
       setMessage("Upload complete and saved to the media library.");
       router.refresh();
-    } catch {
+    } catch (error) {
       if (failureStage === "preparing") {
-        setMessage("Could not prepare the upload. Please try again.");
+        setMessage(error instanceof Error
+          ? error.message
+          : getUploadPreparationMessage(0, {}));
       } else if (failureStage === "transferring") {
         setMessage("The upload did not finish. Check your connection and try again.");
       } else {
