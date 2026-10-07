@@ -70,6 +70,11 @@ function getClient(config: DirectR2Config): S3Client {
     region: "auto",
     endpoint: config.endpoint,
     forcePathStyle: true,
+    // Cloudflare R2 does not support the AWS SDK's optional flexible-checksum
+    // headers on UploadPart. Only calculate/validate checksums when the API
+    // operation requires them so presigned multipart PUTs stay R2-compatible.
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
     credentials: {
       accessKeyId: config.accessKeyId,
       secretAccessKey: config.secretAccessKey,
