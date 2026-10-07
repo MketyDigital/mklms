@@ -29,8 +29,12 @@ test('Starpips release verifies historical migration history and applies only gu
 test('Starpips release deploys existing Workers without rotating or deleting live secrets', () => {
   const workflow = readFileSync(workflowPath, 'utf8');
   assert.match(workflow, /generate-installation-config\.mjs starpips/);
+  assert.match(workflow, /MEDIA_CHANGED/);
+  assert.match(workflow, /if: env\.MEDIA_CHANGED == 'true'/);
   assert.match(workflow, /npx wrangler deploy --config ".generated\/starpips\/media\.wrangler\.jsonc"/);
   assert.match(workflow, /npx wrangler deploy --config ".generated\/starpips\/app\.wrangler\.jsonc"/);
+  assert.match(workflow, /BILLING_CHANGED/);
+  assert.match(workflow, /if: env\.BILLING_CHANGED == 'true'/);
   assert.doesNotMatch(workflow, /wrangler secret (put|bulk|delete)/i);
   assert.doesNotMatch(workflow, /secrets\.(MKLMS_ADMIN_ACCESS_KEY|MKLMS_ADMIN_SESSION_SECRET|MKLMS_MEDIA_SIGNING_SECRET)/);
   assert.doesNotMatch(workflow, /secrets\.STARPIPS_(ADMIN_ACCESS_KEY|ADMIN_SESSION_SECRET|MEDIA_SIGNING_SECRET)/);
