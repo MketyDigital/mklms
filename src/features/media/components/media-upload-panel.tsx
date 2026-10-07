@@ -239,9 +239,11 @@ export function MediaUploadPanel() {
       router.refresh();
     } catch (error) {
       if (failureStage === "preparing") {
-        setMessage(error instanceof Error
-          ? error.message
-          : getUploadPreparationMessage(0, {}));
+        setMessage(error instanceof TypeError
+          ? getUploadPreparationMessage(0, {})
+          : error instanceof Error
+            ? error.message
+            : getUploadPreparationMessage(0, {}));
       } else if (failureStage === "transferring") {
         setMessage("The upload did not finish. Check your connection and try again.");
       } else {
