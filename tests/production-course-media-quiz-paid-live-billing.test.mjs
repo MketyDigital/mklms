@@ -79,6 +79,7 @@ test('admin class-video upload supports resilient universal direct R2 multipart 
   const panel = read('src/features/media/components/media-upload-panel.tsx');
 
   assert.match(helper, /MAX_DIRECT_UPLOAD_BYTES\s*=\s*50 \* 1024 \* 1024 \* 1024/);
+  assert.match(helper, /MULTIPART_THRESHOLD_BYTES\s*=\s*4 \* 1024 \* 1024 \* 1024/);
   assert.match(helper, /CreateMultipartUploadCommand/);
   assert.match(helper, /UploadPartCommand/);
   assert.match(helper, /CompleteMultipartUploadCommand/);
