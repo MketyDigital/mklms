@@ -38,6 +38,34 @@ export function MediaUploadPanel() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
+  const [storageCheckBusy, setStorageCheckBusy] = useState(false);
+  const [storageCheckMessage, setStorageCheckMessage] = useState<string | null>(null);
+
+  async function checkStreamingStorage() {
+    setStorageCheckBusy(true);
+    setStorageCheckMessage("Checking Streaming Storage upload sessions…");
+    try {
+      const response = await fetch("/api/admin/media/direct-upload/check", { method: "POST" });
+      const result = (await response.json().catch(() => null)) as
+        | { ok?: boolean; stage?: string; detailCode?: string; httpStatusCode?: number | null; reference?: string | null }
+        | null;
+      if (response.ok && result?.ok) {
+        setStorageCheckMessage("Streaming Storage can start and clean up multipart upload sessions.");
+      } else if (response.status === 401) {
+        setStorageCheckMessage("Your admin session expired. Sign in again and retry the check.");
+      } else {
+        const stage = result?.stage === "cleanup" ? "session cleanup" : "session start";
+        const code = result?.detailCode ? ` (${result.detailCode})` : "";
+        const status = result?.httpStatusCode ? ` — status ${result.httpStatusCode}` : "";
+        const reference = result?.reference ? ` Reference: ${result.reference}.` : "";
+        setStorageCheckMessage(`Streaming Storage check failed during ${stage}${code}${status}.${reference}`);
+      }
+    } catch {
+      setStorageCheckMessage("Could not reach the portal to check Streaming Storage. Check your connection and retry.");
+    } finally {
+      setStorageCheckBusy(false);
+    }
+  }
 
   async function uploadSingle(file: File, authorization: SingleUploadAuthorization) {
     for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -63,9 +91,11 @@ export function MediaUploadPanel() {
     const partCount = Math.ceil(file.size / authorization.partSizeBytes);
     const completed: Array<{ partNumber: number; etag: string }> = new Array(partCount);
     const partBytesInProgress = new Array<number>(partCount).fill(0);
+    let highestProgress = 0;
     const reportProgress = () => {
       const transferredBytes = partBytesInProgress.reduce((total, bytes) => total + bytes, 0);
-      setProgress(Math.min(99, Math.floor((transferredBytes / file.size) * 100)));
+      highestProgress = Math.max(highestProgress, Math.min(99, Math.floor((transferredBytes / file.size) * 100)));
+      setProgress(highestProgress);
     };
 
     const uploadPart = async (partIndex: number) => {
@@ -112,7 +142,10 @@ export function MediaUploadPanel() {
           reportProgress();
           return;
         } catch {
-          if (attempt < 3) await sleep(500 * 2 ** (attempt - 1));
+          if (attempt < 3) {
+            setMessage(`Retrying video part ${partNumber} (attempt ${attempt + 1} of 3)…`);
+            await sleep(500 * 2 ** (attempt - 1));
+          }
         }
       }
       throw new Error(`Could not transfer video part ${partNumber}.`);
@@ -265,6 +298,12 @@ export function MediaUploadPanel() {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <Button type="button" variant="outline" onClick={checkStreamingStorage} disabled={busy || storageCheckBusy}>
+            {storageCheckBusy ? "Checking…" : "Check Streaming Storage"}
+          </Button>
+          {storageCheckMessage ? <p className="text-sm text-muted-foreground" aria-live="polite">{storageCheckMessage}</p> : null}
+        </div>
         <form action={submit} className="grid gap-4 md:grid-cols-2">
           <label className="space-y-1.5 text-sm">
             <span className="font-medium">Title</span>
@@ -297,7 +336,7 @@ export function MediaUploadPanel() {
           ) : null}
 
           <div className="md:col-span-2">
-            <Button type="submit" disabled={busy}>
+            <Button type="submit" disabled={busy || storageCheckBusy}>
               <Upload className="mr-1.5 size-4" />
               {busy ? "Uploading…" : "Upload MP4"}
             </Button>
