@@ -92,7 +92,7 @@ jobs:
           before="${{ github.event.before }}"
           changed=false
           if git cat-file -e "$before^{commit}" 2>/dev/null; then
-            if ! git diff --quiet "$before" "$GITHUB_SHA" -- workers/billing .github/workflows/mkety-academy-release.yml; then
+            if ! git diff --quiet "$before" "$GITHUB_SHA" -- workers/billing; then
               changed=true
             fi
           else
