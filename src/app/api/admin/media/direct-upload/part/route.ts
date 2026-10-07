@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
-import { consumeDistributedRateLimit, getRequestClientKey, rateLimitHeaders } from "@/lib/security/rate-limit";
 
 import { createDirectR2MultipartPartAuthorization } from "@/features/media/server/r2-direct-upload";
 
@@ -15,10 +14,6 @@ const schema = z.object({
 export async function POST(request: Request) {
   if (!(await hasValidAdminSession())) {
     return NextResponse.json({ ok: false, message: "Unauthorized." }, { status: 401 });
-  }
-  const limit = await consumeDistributedRateLimit("ADMIN_RATE_LIMITER", getRequestClientKey(request, "admin-upload-part"));
-  if (!limit.allowed) {
-    return NextResponse.json({ ok: false, message: "Too many upload requests. Please try again shortly." }, { status: 429, headers: rateLimitHeaders(limit) });
   }
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
