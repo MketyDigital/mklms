@@ -73,7 +73,6 @@ export function MediaUploadPanel() {
       const end = Math.min(file.size, start + authorization.partSizeBytes);
       const body = file.slice(start, end);
 
-      let lastError: Error | null = null;
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         try {
           partBytesInProgress[partIndex] = 0;
@@ -111,8 +110,7 @@ export function MediaUploadPanel() {
           partBytesInProgress[partIndex] = body.size;
           reportProgress();
           return;
-        } catch (error) {
-          lastError = error instanceof Error ? error : new Error("Multipart upload failed.");
+        } catch {
           if (attempt < 3) await sleep(500 * 2 ** (attempt - 1));
         }
       }
