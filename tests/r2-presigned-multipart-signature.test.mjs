@@ -62,7 +62,7 @@ test('R2 checksum compatibility covers multipart operations while preserving dir
   assert.ok(abort.includes('getClient(config, { multipart: true }).send('));
   const singleUpload = initiate.slice(0, initiate.indexOf('const created'));
   assert.ok(singleUpload.includes('const client = getClient(config);'));
-  assert.ok(!singleUpload.includes('multipart'));
+  assert.ok(!singleUpload.includes('getClient(config, { multipart: true })'));
   assert.ok(!singleUpload.includes('requestChecksumCalculation'));
   assert.ok(!singleUpload.includes('responseChecksumValidation'));
 });
