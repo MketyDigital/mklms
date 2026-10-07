@@ -69,15 +69,15 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const requestId = request.headers.get("cf-ray")?.trim() || crypto.randomUUID();
-    const details = error instanceof Error
-      ? { errorName: error.name, errorMessage: error.message }
-      : { errorName: "UnknownError", errorMessage: "Unknown upload preparation failure" };
-    console.error("Streaming Storage upload session creation failed", { requestId, ...details });
+    const rawErrorName = error instanceof Error ? error.name : "UnknownError";
+    const errorName = /^[A-Za-z0-9_-]{1,80}$/.test(rawErrorName) ? rawErrorName : "UnknownError";
+    const errorMessage = error instanceof Error ? error.message : "Unknown upload preparation failure";
+    console.error("Streaming Storage upload session creation failed", { requestId, errorName, errorMessage });
     return NextResponse.json(
       {
         ok: false,
         code: "UPLOAD_SESSION_FAILED",
-        detailCode: details.errorName,
+        detailCode: errorName,
         requestId,
         message: "Streaming Storage could not start an upload session. Please try again shortly.",
       },
