@@ -10,6 +10,7 @@ import { consumeDistributedRateLimit, getRequestClientKey, rateLimitHeaders } fr
 const schema = z.object({
   title: z.string().trim().min(1).max(300),
   objectKey: z.string().min(1).max(500),
+  sizeBytes: z.number().int().positive().optional(),
   durationSeconds: z.number().int().positive().nullable().optional(),
 });
 
@@ -47,7 +48,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    await verifyDirectR2Object(parsed.data.objectKey);
+    const verified = await verifyDirectR2Object(parsed.data.objectKey);
+    if (parsed.data.sizeBytes && verified.contentLength !== parsed.data.sizeBytes) {
+      throw new Error("The uploaded R2 object size does not match the selected video. Please retry the upload.");
+    }
     const asset = await new PostgresAdminMediaRepository().createAsset({
       title: parsed.data.title,
       provider: "private-storage",
