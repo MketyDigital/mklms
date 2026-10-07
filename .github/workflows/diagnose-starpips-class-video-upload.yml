@@ -1,0 +1,49 @@
+name: Diagnose Starpips class-video upload
+
+on:
+  push:
+    branches:
+      - fix/starpips-class-video-r2-upload-2026-10-07
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      APP_WORKER: mklms
+      R2_BUCKET: spf-media
+    steps:
+      - name: Verify Cloudflare credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+
+      - name: Inspect live Worker binding names only
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --silent --show-error --fail-with-body             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$APP_WORKER/settings"             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" >/tmp/settings.json
+          jq -e '.success == true' /tmp/settings.json >/dev/null
+          echo "Live mklms binding names/types:"
+          jq -r '.result.bindings[]? | [.name,.type] | @tsv' /tmp/settings.json | sort
+          rm -f /tmp/settings.json
+
+      - name: Inspect live R2 CORS
+        shell: bash
+        run: |
+          set -euo pipefail
+          status=$(curl --silent --show-error --output /tmp/cors.json --write-out '%{http_code}'             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/$R2_BUCKET/cors"             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          echo "R2 CORS HTTP status: $status"
+          if [ "$status" = "200" ]; then
+            jq -e '.success == true' /tmp/cors.json >/dev/null
+            jq '.result' /tmp/cors.json
+          else
+            jq -r '.errors[]?.message // empty' /tmp/cors.json
+          fi
+          rm -f /tmp/cors.json
