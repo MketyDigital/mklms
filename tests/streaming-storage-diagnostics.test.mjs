@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 
-import { normalizeUploadDiagnosticFailure } from '../src/features/media/server/direct-upload-diagnostic.ts';
+import { normalizeUploadDiagnosticFailure } from '../src/features/media/server/upload-diagnostic.ts';
 
 const read = (path) => fs.readFileSync(path, 'utf8');
 
@@ -23,7 +23,7 @@ test('streaming storage diagnostic is admin-only and uses the production multipa
 });
 
 test('diagnostic failure normalization only returns safe fields', () => {
-  const diagnostic = read('src/features/media/server/direct-upload-diagnostic.ts');
+  const diagnostic = read('src/features/media/server/upload-diagnostic.ts');
 
   assert.match(diagnostic, /export function normalizeUploadDiagnosticFailure/);
   assert.match(diagnostic, /httpStatusCode/);
