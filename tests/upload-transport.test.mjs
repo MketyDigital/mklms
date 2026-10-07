@@ -103,3 +103,10 @@ test('upload panel uses Streaming Storage wording and reports transfer and save 
   assert.match(panel, /Upload complete and saved to the media library/);
   assert.doesNotMatch(panel, /R2|Cloudflare/i);
 });
+
+test('admin media ingest copy uses Streaming Storage terminology', () => {
+  const panel = readFileSync('src/features/media/components/media-ingest-panel.tsx', 'utf8');
+  assert.match(panel, /Streaming Storage/);
+  assert.doesNotMatch(panel, />[^<]*\\bR2\\b[^<]*</);
+  assert.doesNotMatch(panel, />[^<]*Cloudflare[^<]*</i);
+});
