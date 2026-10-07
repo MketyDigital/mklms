@@ -65,16 +65,22 @@ function getConfig(): DirectR2Config {
   return { bucket, endpoint: url.toString(), accessKeyId, secretAccessKey };
 }
 
-function getClient(config: DirectR2Config): S3Client {
+function getClient(
+  config: DirectR2Config,
+  options?: { multipartUploadPart?: boolean },
+): S3Client {
   return new S3Client({
     region: "auto",
     endpoint: config.endpoint,
     forcePathStyle: true,
-    // Cloudflare R2 does not support the AWS SDK's optional flexible-checksum
-    // headers on UploadPart. Only calculate/validate checksums when the API
-    // operation requires them so presigned multipart PUTs stay R2-compatible.
-    requestChecksumCalculation: "WHEN_REQUIRED",
-    responseChecksumValidation: "WHEN_REQUIRED",
+    ...(options?.multipartUploadPart
+      ? {
+          // R2 does not support these optional checksum headers on UploadPart.
+          // Keep this compatibility setting off the regular PutObject signing path.
+          requestChecksumCalculation: "WHEN_REQUIRED" as const,
+          responseChecksumValidation: "WHEN_REQUIRED" as const,
+        }
+      : {}),
     credentials: {
       accessKeyId: config.accessKeyId,
       secretAccessKey: config.secretAccessKey,
@@ -176,7 +182,7 @@ export async function createDirectR2MultipartPartAuthorization(input: {
   const config = getConfig();
   const ttlSeconds = 1800;
   const uploadUrl = await getSignedUrl(
-    getClient(config),
+    getClient(config, { multipartUploadPart: true }),
     new UploadPartCommand({
       Bucket: config.bucket,
       Key: input.objectKey,

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import test from 'node:test';
 
 import { S3Client, UploadPartCommand } from '@aws-sdk/client-s3';
@@ -38,4 +39,20 @@ test('R2 multipart presigned UploadPart omits unsupported flexible-checksum para
   assert.equal(url.searchParams.has('x-amz-checksum-crc32c'), false);
   assert.equal(url.searchParams.has('x-amz-checksum-sha1'), false);
   assert.equal(url.searchParams.has('x-amz-checksum-sha256'), false);
+});
+
+test('R2 checksum compatibility is scoped to multipart part signing, preserving direct PutObject signing', () => {
+  const helper = fs.readFileSync('src/features/media/server/r2-direct-upload.ts', 'utf8');
+  const directStart = helper.indexOf('export async function createDirectR2UploadAuthorization');
+  const partStart = helper.indexOf('export async function createDirectR2MultipartPartAuthorization');
+  const completeStart = helper.indexOf('export async function completeDirectR2MultipartUpload');
+  assert.ok(directStart >= 0 && partStart > directStart && completeStart > partStart);
+
+  const directSigning = helper.slice(directStart, partStart);
+  const multipartPartSigning = helper.slice(partStart, completeStart);
+  assert.match(helper, /function getClient\(\s*config: DirectR2Config,\s*options\?: \{ multipartUploadPart\?: boolean \},?\s*\): S3Client/);
+  assert.match(helper, /options\?\.multipartUploadPart[\s\S]*requestChecksumCalculation: "WHEN_REQUIRED"/);
+  assert.match(multipartPartSigning, /getClient\(config, \{ multipartUploadPart: true \}\)/);
+  assert.match(directSigning, /getClient\(config\)/);
+  assert.doesNotMatch(directSigning, /multipartUploadPart|requestChecksumCalculation|responseChecksumValidation/);
 });
