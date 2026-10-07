@@ -199,12 +199,13 @@ export function MediaUploadPanel() {
       });
       const authorization = (await initiateResponse.json().catch(() => null)) as UploadAuthorization | null;
       if (!initiateResponse.ok || !authorization?.ok) {
-        const requestId = authorization?.requestId ?? initiateResponse.headers.get("cf-ray") ?? undefined;
+        const failure = authorization?.ok === false ? authorization : null;
+        const requestId = failure?.requestId ?? initiateResponse.headers.get("cf-ray") ?? undefined;
         throw new Error(
           getUploadPreparationMessage(initiateResponse.status, {
-            code: authorization?.code,
-            detailCode: authorization?.detailCode,
-            message: authorization?.message,
+            code: failure?.code,
+            detailCode: failure?.detailCode,
+            message: failure?.message,
             requestId,
           }),
         );
