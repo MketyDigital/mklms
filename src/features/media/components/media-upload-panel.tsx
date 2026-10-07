@@ -68,20 +68,27 @@ export function MediaUploadPanel() {
   }
 
   async function uploadSingle(file: File, authorization: SingleUploadAuthorization) {
+    let highestProgress = 0;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
         await uploadBlobWithProgress(
           authorization.uploadUrl,
           file,
           (loadedBytes, totalBytes) => {
-            if (totalBytes > 0) setProgress(Math.min(99, Math.floor((loadedBytes / totalBytes) * 100)));
+            if (totalBytes > 0) {
+              highestProgress = Math.max(highestProgress, Math.min(99, Math.floor((loadedBytes / totalBytes) * 100)));
+              setProgress(highestProgress);
+            }
           },
           "video/mp4",
         );
         setProgress(99);
         return;
       } catch {
-        if (attempt < 3) await sleep(750 * 2 ** (attempt - 1));
+        if (attempt < 3) {
+          setMessage(`Retrying upload (attempt ${attempt + 1} of 3)…`);
+          await sleep(750 * 2 ** (attempt - 1));
+        }
       }
     }
     throw new Error("The file transfer did not finish.");
@@ -233,7 +240,7 @@ export function MediaUploadPanel() {
       const authorization = (await initiateResponse.json().catch(() => null)) as UploadAuthorization | null;
       if (!initiateResponse.ok || !authorization?.ok) {
         const failure = authorization?.ok === false ? authorization : null;
-        const requestId = failure?.requestId ?? initiateResponse.headers.get("cf-ray") ?? undefined;
+        const requestId = failure?.requestId;
         throw new Error(
           getUploadPreparationMessage(initiateResponse.status, {
             code: failure?.code,
