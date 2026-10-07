@@ -57,6 +57,7 @@ jobs:
           echo "APP_WORKER=$(jq -r '.appWorker' "$MANIFEST_PATH")" >> "$GITHUB_ENV"
           echo "MEDIA_WORKER=$(jq -r '.mediaWorker' "$MANIFEST_PATH")" >> "$GITHUB_ENV"
           echo "PUBLIC_DOMAIN=$(jq -r '.publicDomain' "$MANIFEST_PATH")" >> "$GITHUB_ENV"
+          echo "R2_BUCKET=$(jq -r '.r2Bucket' "$MANIFEST_PATH")" >> "$GITHUB_ENV"
           echo "DOMAIN_MODE=$(jq -r '.domain.mode' "$MANIFEST_PATH")" >> "$GITHUB_ENV"
           node --input-type=module <<'NODE'
           import { appendFileSync } from 'node:fs';
@@ -92,6 +93,8 @@ jobs:
           test "$(jq -r '.success' "$deployments_file")" = "true"
           echo "Application Worker deployments are readable."
           jq -r '"Deployment count: \(.result.deployments | length)"' "$deployments_file"
+          jq -r '"Latest application deployment: \([.result.deployments[]?] | sort_by(.created_on // .created_at // "") | last | (.created_on // .created_at // "unknown"))"' "$deployments_file"
+          jq -r '"Upload and storage binding types: \([.result.bindings[]? | select((.name // "") | test("DIRECT_UPLOAD|STORAGE|R2"; "i")) | "\(.name)=\(.type)"] | join(", "))"' "$settings_file"
 
       - name: Read and verify media Worker safely
         shell: bash
@@ -118,6 +121,78 @@ jobs:
           test "$(jq -r '.success' "$deployments_file")" = "true"
           echo "Media Worker deployments are readable."
           jq -r '"Deployment count: \(.result.deployments | length)"' "$deployments_file"
+
+      - name: Read bucket CORS and latest media object metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          cors_file="$(mktemp)"
+          objects_file="$(mktemp)"
+          response_file="$(mktemp)"
+          trap 'rm -f "$cors_file" "$objects_file" "$response_file"' EXIT
+
+          curl --fail-with-body --silent --show-error --request GET \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/r2/buckets/${R2_BUCKET}/cors" \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --output "$cors_file"
+          test "$(jq -r '.success' "$cors_file")" = "true"
+          echo "Streaming upload CORS rules:"
+          jq -r '.result.rules[]? | "origins=\(.allowed.origins | join(",")); methods=\(.allowed.methods | join(",")); headers=\(.allowed.headers | join(",")); exposed=\(.exposeHeaders // [] | join(","))"' "$cors_file"
+          cors_ok="$(node --input-type=module - "$cors_file" "$PUBLIC_DOMAIN" <<'NODE'
+          import { readFileSync } from "node:fs";
+          const [path, domain] = process.argv.slice(2);
+          const rules = JSON.parse(readFileSync(path, "utf8")).result?.rules ?? [];
+          const origin = `https://${domain}`;
+          const allows = (list, value) => Array.isArray(list) && (list.includes("*") || list.includes(value));
+          const valid = rules.some((rule) =>
+            allows(rule.allowed?.origins, origin) &&
+            allows(rule.allowed?.methods, "PUT") &&
+            (allows(rule.allowed?.headers, "content-type") || allows(rule.allowed?.headers, "Content-Type")) &&
+            (Array.isArray(rule.exposeHeaders) && rule.exposeHeaders.some((header) => header.toLowerCase() === "etag"))
+          );
+          console.log(valid ? "true" : "false");
+          NODE
+          )"
+
+          : > "$objects_file"
+          cursor=""
+          page=0
+          while [ "$page" -lt 100 ]; do
+            page=$((page + 1))
+            if [ -n "$cursor" ]; then
+              curl --fail-with-body --silent --show-error --request GET --get \
+                "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/r2/buckets/${R2_BUCKET}/objects" \
+                --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                --header "Content-Type: application/json" \
+                --data-urlencode "prefix=media/" --data-urlencode "per_page=1000" --data-urlencode "cursor=${cursor}" \
+                --output "$response_file"
+            else
+              curl --fail-with-body --silent --show-error --request GET --get \
+                "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/r2/buckets/${R2_BUCKET}/objects" \
+                --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                --header "Content-Type: application/json" \
+                --data-urlencode "prefix=media/" --data-urlencode "per_page=1000" \
+                --output "$response_file"
+            fi
+            test "$(jq -r '.success' "$response_file")" = "true"
+            jq -c '.result[]? | {key, size, uploaded, last_modified}' "$response_file" >> "$objects_file"
+            truncated="$(jq -r '.result_info.is_truncated // false' "$response_file")"
+            [ "$truncated" = "true" ] || break
+            cursor="$(jq -r '.result_info.cursor // empty' "$response_file")"
+            [ -n "$cursor" ] || break
+          done
+          node --input-type=module - "$objects_file" <<'NODE'
+          import { readFileSync } from "node:fs";
+          const rows = readFileSync(process.argv[2], "utf8").split("\n").filter(Boolean).map(JSON.parse);
+          const latest = rows.sort((a, b) => Date.parse(b.uploaded ?? b.last_modified ?? 0) - Date.parse(a.uploaded ?? a.last_modified ?? 0))[0];
+          console.log(`Media objects under media/: ${rows.length}`);
+          if (latest) console.log(`Latest media object: key=${latest.key}; size=${latest.size}; uploaded=${latest.uploaded ?? latest.last_modified ?? "unknown"}`);
+          else console.log("Latest media object: none found under media/.");
+          NODE
+          echo "Direct streaming upload CORS contract valid: $cors_ok"
+          test "$cors_ok" = "true"
+          test "$page" -lt 100
 
       - name: Read and verify SaaS Custom Hostname and Worker route
         if: env.DOMAIN_MODE == 'saas-custom-hostname'
@@ -151,7 +226,7 @@ jobs:
             --header "Content-Type: application/json" \
             --output "$routes_file"
 
-          node --input-type=module "$hostname_file" "$routes_file" <<'NODE'
+          node --input-type=module - "$hostname_file" "$routes_file" <<'NODE'
           import { readFileSync } from 'node:fs';
           import { loadConcreteInstallation } from './scripts/installation-config.mjs';
           import { loadSaasPlatform } from './scripts/saas-platform.mjs';
