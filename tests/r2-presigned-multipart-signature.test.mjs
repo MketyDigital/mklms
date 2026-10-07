@@ -41,7 +41,6 @@ test('R2 multipart presigned UploadPart omits unsupported flexible-checksum para
   assert.equal(url.searchParams.has('x-amz-checksum-sha256'), false);
 });
 
-
 test('R2 checksum compatibility is scoped to multipart part signing, preserving direct PutObject signing', () => {
   const helper = fs.readFileSync('src/features/media/server/r2-direct-upload.ts', 'utf8');
   const directStart = helper.indexOf('export async function createDirectR2UploadAuthorization');
