@@ -97,7 +97,7 @@ test('admin class-video upload supports resilient universal direct R2 multipart 
   assert.match(finalize, /verified\.contentLength !== parsed\.data\.sizeBytes/);
   assert.match(panel, /Math\.ceil\(file\.size \/ authorization\.partSizeBytes\)/);
   assert.match(panel, /attempt <= 3/);
-  assert.match(panel, /partResponse\\.etag/);
+  assert.match(panel, /partResponse\.etag/);
   assert.match(transport, /getResponseHeader\(["\x27]ETag["\x27]\)/);
   assert.match(panel, /direct-upload\/complete/);
   assert.match(panel, /direct-upload\/abort/);
