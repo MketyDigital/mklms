@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { uploadBlobWithProgress } from '../src/features/media/components/upload-transport.ts';
 
@@ -71,7 +72,7 @@ test('upload transport reports transferred bytes and returns response headers', 
     xhr.emit('load');
 
     const response = await upload;
-    assert.deepEqual(progress, [{ loaded: 5, total: 11 }, { loaded: 5, total: 11 }]);
+    assert.deepEqual(progress, [{ loaded: 5, total: 11 }]);
     assert.equal(response.etag, '"part-etag"');
   } finally {
     globalThis.XMLHttpRequest = previous;
@@ -93,4 +94,12 @@ test('upload transport rejects failed HTTP responses without exposing provider d
   } finally {
     globalThis.XMLHttpRequest = previous;
   }
+});
+
+test('upload panel uses Streaming Storage wording and reports transfer and save states', () => {
+  const panel = readFileSync('src/features/media/components/media-upload-panel.tsx', 'utf8');
+  assert.match(panel, /Streaming Storage/);
+  assert.match(panel, /Confirming save in the media library/);
+  assert.match(panel, /Upload complete and saved to the media library/);
+  assert.doesNotMatch(panel, /R2|Cloudflare/i);
 });
