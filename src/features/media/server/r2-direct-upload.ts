@@ -1,13 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
   HeadObjectCommand,
   PutObjectCommand,
   S3Client,
+  UploadPartCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
-const MAX_DIRECT_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024;
+export const MAX_DIRECT_UPLOAD_BYTES = 50 * 1024 * 1024 * 1024;
+export const MULTIPART_THRESHOLD_BYTES = 128 * 1024 * 1024;
+export const MULTIPART_PART_SIZE_BYTES = 64 * 1024 * 1024;
 const MEDIA_KEY_PATTERN = /^media\/[0-9a-f-]{36}\.mp4$/i;
 
 interface DirectR2Config {
@@ -88,6 +94,12 @@ function validateUploadedObject(contentType: string, contentLength: number) {
   return { exists: true as const, contentType, contentLength };
 }
 
+function assertUploadSize(sizeBytes: number) {
+  if (!Number.isInteger(sizeBytes) || sizeBytes < 1 || sizeBytes > MAX_DIRECT_UPLOAD_BYTES) {
+    throw new Error("The selected MP4 has an invalid or unsupported file size. Direct upload supports files up to 50 GB.");
+  }
+}
+
 export function isValidDirectMediaObjectKey(objectKey: string): boolean {
   return MEDIA_KEY_PATTERN.test(objectKey);
 }
@@ -95,33 +107,126 @@ export function isValidDirectMediaObjectKey(objectKey: string): boolean {
 export async function createDirectR2UploadAuthorization(input: {
   contentType: string;
   sizeBytes: number;
-}): Promise<{ uploadUrl: string; objectKey: string; expiresAt: Date }> {
+}): Promise<
+  | { mode: "single"; uploadUrl: string; objectKey: string; expiresAt: Date }
+  | { mode: "multipart"; uploadId: string; objectKey: string; partSizeBytes: number }
+> {
   if (input.contentType !== "video/mp4") {
     throw new Error("Only MP4 video files can be uploaded directly.");
   }
-  if (!Number.isInteger(input.sizeBytes) || input.sizeBytes < 1 || input.sizeBytes > MAX_DIRECT_UPLOAD_BYTES) {
-    throw new Error("The selected MP4 has an invalid or unsupported file size. Direct single-file upload supports up to 5 GB.");
-  }
+  assertUploadSize(input.sizeBytes);
 
   const config = getConfig();
   const client = getClient(config);
   const objectKey = `media/${randomUUID()}.mp4`;
-  const ttlSeconds = 900;
-  const uploadUrl = await getSignedUrl(
-    client,
-    new PutObjectCommand({
+
+  if (input.sizeBytes <= MULTIPART_THRESHOLD_BYTES) {
+    const ttlSeconds = 1800;
+    const uploadUrl = await getSignedUrl(
+      client,
+      new PutObjectCommand({
+        Bucket: config.bucket,
+        Key: objectKey,
+        ContentType: "video/mp4",
+      }),
+      { expiresIn: ttlSeconds },
+    );
+    return {
+      mode: "single",
+      uploadUrl,
+      objectKey,
+      expiresAt: new Date(Date.now() + ttlSeconds * 1000),
+    };
+  }
+
+  const created = await client.send(
+    new CreateMultipartUploadCommand({
       Bucket: config.bucket,
       Key: objectKey,
       ContentType: "video/mp4",
     }),
+  );
+  if (!created.UploadId) {
+    throw new Error("R2 did not create a multipart upload session.");
+  }
+  return {
+    mode: "multipart",
+    uploadId: created.UploadId,
+    objectKey,
+    partSizeBytes: MULTIPART_PART_SIZE_BYTES,
+  };
+}
+
+export async function createDirectR2MultipartPartAuthorization(input: {
+  objectKey: string;
+  uploadId: string;
+  partNumber: number;
+}): Promise<{ uploadUrl: string; expiresAt: Date }> {
+  if (!isValidDirectMediaObjectKey(input.objectKey)) {
+    throw new Error("Invalid media object reference.");
+  }
+  if (!input.uploadId || !Number.isInteger(input.partNumber) || input.partNumber < 1 || input.partNumber > 10000) {
+    throw new Error("Invalid multipart upload part.");
+  }
+  const config = getConfig();
+  const ttlSeconds = 1800;
+  const uploadUrl = await getSignedUrl(
+    getClient(config),
+    new UploadPartCommand({
+      Bucket: config.bucket,
+      Key: input.objectKey,
+      UploadId: input.uploadId,
+      PartNumber: input.partNumber,
+    }),
     { expiresIn: ttlSeconds },
   );
+  return { uploadUrl, expiresAt: new Date(Date.now() + ttlSeconds * 1000) };
+}
 
-  return {
-    uploadUrl,
-    objectKey,
-    expiresAt: new Date(Date.now() + ttlSeconds * 1000),
-  };
+export async function completeDirectR2MultipartUpload(input: {
+  objectKey: string;
+  uploadId: string;
+  parts: Array<{ partNumber: number; etag: string }>;
+}) {
+  if (!isValidDirectMediaObjectKey(input.objectKey) || !input.uploadId) {
+    throw new Error("Invalid multipart upload reference.");
+  }
+  if (input.parts.length < 1 || input.parts.length > 10000) {
+    throw new Error("Invalid multipart upload completion.");
+  }
+  const normalized = [...input.parts]
+    .sort((a, b) => a.partNumber - b.partNumber)
+    .map((part, index) => {
+      if (part.partNumber !== index + 1 || !part.etag) {
+        throw new Error("Multipart upload parts are incomplete.");
+      }
+      return { PartNumber: part.partNumber, ETag: part.etag };
+    });
+
+  const config = getConfig();
+  await getClient(config).send(
+    new CompleteMultipartUploadCommand({
+      Bucket: config.bucket,
+      Key: input.objectKey,
+      UploadId: input.uploadId,
+      MultipartUpload: { Parts: normalized },
+    }),
+  );
+}
+
+export async function abortDirectR2MultipartUpload(input: {
+  objectKey: string;
+  uploadId: string;
+}) {
+  if (!isValidDirectMediaObjectKey(input.objectKey) || !input.uploadId) return;
+  const config = getConfig();
+  await getClient(config).send(
+    new AbortMultipartUploadCommand({
+      Bucket: config.bucket,
+      Key: input.objectKey,
+      UploadId: input.uploadId,
+    }),
+  );
 }
 
 export async function verifyDirectR2Object(objectKey: string): Promise<{
@@ -133,9 +238,6 @@ export async function verifyDirectR2Object(objectKey: string): Promise<{
     throw new Error("Invalid media object reference.");
   }
 
-  // On Cloudflare, verify through the already-bound private bucket. This avoids
-  // making successful browser uploads depend on the presigning credential also
-  // having HEAD/read permission, while keeping the S3 fallback portable.
   const cloudflareBucket = await getCloudflareBucket();
   if (cloudflareBucket) {
     const object = await cloudflareBucket.head(objectKey);

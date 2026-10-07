@@ -69,6 +69,36 @@ test('admin media uses a direct-to-R2 initiate PUT finalize handshake and server
   assert.doesNotMatch(panel, /api\/admin\/media\/upload["']/);
 });
 
+test('admin class-video upload supports resilient universal direct R2 multipart uploads', () => {
+  const initiate = read('src/app/api/admin/media/direct-upload/initiate/route.ts');
+  const finalize = read('src/app/api/admin/media/direct-upload/finalize/route.ts');
+  const part = read('src/app/api/admin/media/direct-upload/part/route.ts');
+  const complete = read('src/app/api/admin/media/direct-upload/complete/route.ts');
+  const abort = read('src/app/api/admin/media/direct-upload/abort/route.ts');
+  const helper = read('src/features/media/server/r2-direct-upload.ts');
+  const panel = read('src/features/media/components/media-upload-panel.tsx');
+
+  assert.match(helper, /MAX_DIRECT_UPLOAD_BYTES\s*=\s*50 \* 1024 \* 1024 \* 1024/);
+  assert.match(helper, /CreateMultipartUploadCommand/);
+  assert.match(helper, /UploadPartCommand/);
+  assert.match(helper, /CompleteMultipartUploadCommand/);
+  assert.match(helper, /AbortMultipartUploadCommand/);
+  assert.match(helper, /APP_STORAGE_BUCKET/);
+  assert.match(helper, /HeadObjectCommand/);
+  assert.match(initiate, /mode:\s*"multipart"/);
+  assert.match(part, /createDirectR2MultipartPartAuthorization/);
+  assert.match(complete, /completeDirectR2MultipartUpload/);
+  assert.match(abort, /abortDirectR2MultipartUpload/);
+  assert.match(finalize, /verified\.contentLength !== parsed\.data\.sizeBytes/);
+  assert.match(panel, /Math\.ceil\(file\.size \/ authorization\.partSizeBytes\)/);
+  assert.match(panel, /attempt <= 3/);
+  assert.match(panel, /partResponse\.headers\.get\("ETag"\)/);
+  assert.match(panel, /direct-upload\/complete/);
+  assert.match(panel, /direct-upload\/abort/);
+  assert.match(panel, /sizeBytes:\s*file\.size/);
+  assert.doesNotMatch(panel, /file\.type !== "video\/mp4"/);
+});
+
 test('migration 013 adds first-class quizzes and paid-course live without altering free-live tables', () => {
   assert.ok(fs.existsSync('db/migrations/013_quizzes_and_paid_course_live.sql'));
   const migration = read('db/migrations/013_quizzes_and_paid_course_live.sql');

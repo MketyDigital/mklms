@@ -51,11 +51,21 @@ export async function POST(request: Request) {
       contentType: parsed.data.contentType,
       sizeBytes: parsed.data.sizeBytes,
     });
+    if (authorization.mode === "single") {
+      return NextResponse.json({
+        ok: true,
+        mode: "single",
+        uploadUrl: authorization.uploadUrl,
+        objectKey: authorization.objectKey,
+        expiresAt: authorization.expiresAt.toISOString(),
+      });
+    }
     return NextResponse.json({
       ok: true,
-      uploadUrl: authorization.uploadUrl,
+      mode: "multipart",
+      uploadId: authorization.uploadId,
       objectKey: authorization.objectKey,
-      expiresAt: authorization.expiresAt.toISOString(),
+      partSizeBytes: authorization.partSizeBytes,
     });
   } catch (error) {
     return NextResponse.json(
