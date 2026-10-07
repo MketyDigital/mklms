@@ -1,8 +1,3 @@
-export interface UploadProgress {
-  loadedBytes: number;
-  totalBytes: number;
-}
-
 export interface UploadResponse {
   etag: string | null;
 }
