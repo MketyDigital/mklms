@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: release-starpips-production
@@ -20,6 +21,7 @@ jobs:
       PRODUCTION_BRANCH: production/starpips
       DATABASE_URL: ${{ secrets.STARPIPS_DATABASE_URL }}
       DATABASE_SSL: ${{ secrets.STARPIPS_DATABASE_SSL }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout exact Starpips production pointer
         uses: actions/checkout@v4
@@ -32,8 +34,34 @@ jobs:
         with:
           node-version: 24
 
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
+      - name: Locate successful exact-source CI lockfile
+        id: lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_sha="$GITHUB_SHA"
+          runs_file="$(mktemp)"
+          trap 'rm -f "$runs_file"' EXIT
+          api="https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/phase1-ci.yml/runs?branch=main&status=success&per_page=100"
+          curl --silent --show-error --fail-with-body "$api" \
+            -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' > "$runs_file"
+          if ! jq -e --arg sha "$source_sha" '.workflow_runs | any(.head_sha == $sha and .conclusion == "success")' "$runs_file" >/dev/null; then
+            source_sha="$(git rev-parse "$GITHUB_SHA^")"
+          fi
+          run_id="$(jq -er --arg sha "$source_sha" '[.workflow_runs[] | select(.head_sha == $sha and .conclusion == "success")] | sort_by(.run_started_at) | last | .id' "$runs_file")"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Download lockfile from exact-source CI
+        uses: actions/download-artifact@v4
+        with:
+          name: package-lock
+          path: .
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.lockfile.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Install dependencies from verified CI lockfile
+        run: npm ci --no-audit --no-fund
 
       - name: Verify exact Starpips production pointer before database access
         shell: bash
@@ -77,6 +105,7 @@ jobs:
       PRODUCTION_BRANCH: production/starpips
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout exact selected release
         uses: actions/checkout@v4
@@ -89,8 +118,34 @@ jobs:
         with:
           node-version: 24
 
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
+      - name: Locate successful exact-source CI lockfile
+        id: lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_sha="$GITHUB_SHA"
+          runs_file="$(mktemp)"
+          trap 'rm -f "$runs_file"' EXIT
+          api="https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/phase1-ci.yml/runs?branch=main&status=success&per_page=100"
+          curl --silent --show-error --fail-with-body "$api" \
+            -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' > "$runs_file"
+          if ! jq -e --arg sha "$source_sha" '.workflow_runs | any(.head_sha == $sha and .conclusion == "success")' "$runs_file" >/dev/null; then
+            source_sha="$(git rev-parse "$GITHUB_SHA^")"
+          fi
+          run_id="$(jq -er --arg sha "$source_sha" '[.workflow_runs[] | select(.head_sha == $sha and .conclusion == "success")] | sort_by(.run_started_at) | last | .id' "$runs_file")"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Download lockfile from exact-source CI
+        uses: actions/download-artifact@v4
+        with:
+          name: package-lock
+          path: .
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.lockfile.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Install dependencies from verified CI lockfile
+        run: npm ci --no-audit --no-fund
 
       - name: Verify Starpips manifest and production pointer
         shell: bash
