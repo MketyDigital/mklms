@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 import {
   HeadObjectCommand,
   PutObjectCommand,
@@ -14,6 +15,15 @@ interface DirectR2Config {
   endpoint: string;
   accessKeyId: string;
   secretAccessKey: string;
+}
+
+interface R2HeadObjectLike {
+  size?: number;
+  httpMetadata?: { contentType?: string };
+}
+
+interface R2HeadBucketLike {
+  head(key: string): Promise<R2HeadObjectLike | null>;
 }
 
 function getConfig(): DirectR2Config {
@@ -61,6 +71,23 @@ function getClient(config: DirectR2Config): S3Client {
   });
 }
 
+async function getCloudflareBucket(): Promise<R2HeadBucketLike | null> {
+  try {
+    const context = await getCloudflareContext({ async: true });
+    const env = context.env as unknown as { APP_STORAGE_BUCKET?: R2HeadBucketLike };
+    return env.APP_STORAGE_BUCKET ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function validateUploadedObject(contentType: string, contentLength: number) {
+  if (contentType !== "video/mp4" || !Number.isFinite(contentLength) || contentLength < 1) {
+    throw new Error("The uploaded R2 object is missing or is not a valid MP4 upload.");
+  }
+  return { exists: true as const, contentType, contentLength };
+}
+
 export function isValidDirectMediaObjectKey(objectKey: string): boolean {
   return MEDIA_KEY_PATTERN.test(objectKey);
 }
@@ -106,16 +133,27 @@ export async function verifyDirectR2Object(objectKey: string): Promise<{
     throw new Error("Invalid media object reference.");
   }
 
+  // On Cloudflare, verify through the already-bound private bucket. This avoids
+  // making successful browser uploads depend on the presigning credential also
+  // having HEAD/read permission, while keeping the S3 fallback portable.
+  const cloudflareBucket = await getCloudflareBucket();
+  if (cloudflareBucket) {
+    const object = await cloudflareBucket.head(objectKey);
+    if (!object) {
+      throw new Error("The uploaded R2 object was not found.");
+    }
+    return validateUploadedObject(
+      object.httpMetadata?.contentType ?? "",
+      Number(object.size ?? 0),
+    );
+  }
+
   const config = getConfig();
   const result = await getClient(config).send(
     new HeadObjectCommand({ Bucket: config.bucket, Key: objectKey }),
   );
-  const contentType = result.ContentType ?? "";
-  const contentLength = Number(result.ContentLength ?? 0);
-
-  if (contentType !== "video/mp4" || !Number.isFinite(contentLength) || contentLength < 1) {
-    throw new Error("The uploaded R2 object is missing or is not a valid MP4 upload.");
-  }
-
-  return { exists: true, contentType, contentLength };
+  return validateUploadedObject(
+    result.ContentType ?? "",
+    Number(result.ContentLength ?? 0),
+  );
 }
