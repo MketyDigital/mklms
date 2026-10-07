@@ -60,11 +60,14 @@ test('admin media uses a direct-to-R2 initiate PUT finalize handshake and server
   const initiate = read('src/app/api/admin/media/direct-upload/initiate/route.ts');
   const finalize = read('src/app/api/admin/media/direct-upload/finalize/route.ts');
   const panel = read('src/features/media/components/media-upload-panel.tsx');
+  const transport = read('src/features/media/components/upload-transport.ts');
   assert.match(initiate, /media\//);
   assert.doesNotMatch(initiate, /body\.bucket|body\.objectKey|body\.key/);
   assert.match(finalize, /verifyDirectR2Object/);
   assert.match(panel, /direct-upload\/initiate/);
-  assert.match(panel, /method:\s*["']PUT["']/);
+  assert.match(panel, /uploadBlobWithProgress/);
+  assert.match(transport, /request\.open\(["\x27]PUT["\x27], url\)/);
+  assert.match(transport, /getResponseHeader\(["\x27]ETag["\x27]\)/);
   assert.match(panel, /direct-upload\/finalize/);
   assert.doesNotMatch(panel, /api\/admin\/media\/upload["']/);
 });
@@ -77,6 +80,7 @@ test('admin class-video upload supports resilient universal direct R2 multipart 
   const abort = read('src/app/api/admin/media/direct-upload/abort/route.ts');
   const helper = read('src/features/media/server/r2-direct-upload.ts');
   const panel = read('src/features/media/components/media-upload-panel.tsx');
+  const transport = read('src/features/media/components/upload-transport.ts');
 
   assert.match(helper, /MAX_DIRECT_UPLOAD_BYTES\s*=\s*50 \* 1024 \* 1024 \* 1024/);
   assert.match(helper, /MULTIPART_THRESHOLD_BYTES\s*=\s*4 \* 1024 \* 1024 \* 1024/);
@@ -93,7 +97,8 @@ test('admin class-video upload supports resilient universal direct R2 multipart 
   assert.match(finalize, /verified\.contentLength !== parsed\.data\.sizeBytes/);
   assert.match(panel, /Math\.ceil\(file\.size \/ authorization\.partSizeBytes\)/);
   assert.match(panel, /attempt <= 3/);
-  assert.match(panel, /partResponse\.headers\.get\("ETag"\)/);
+  assert.match(panel, /partResponse\.etag/);
+  assert.match(transport, /getResponseHeader\(["\x27]ETag["\x27]\)/);
   assert.match(panel, /direct-upload\/complete/);
   assert.match(panel, /direct-upload\/abort/);
   assert.match(panel, /sizeBytes:\s*file\.size/);
