@@ -50,7 +50,7 @@ test('R2 checksum compatibility is scoped to multipart part signing, preserving 
 
   const directSigning = helper.slice(directStart, partStart);
   const multipartPartSigning = helper.slice(partStart, completeStart);
-  assert.match(helper, /function getClient\(config: DirectR2Config, options\?: \{ multipartUploadPart\?: boolean \}\)/);
+  assert.match(helper, /function getClient\(\s*config: DirectR2Config,\s*options\?: \{ multipartUploadPart\?: boolean \},?\s*\): S3Client/);
   assert.match(helper, /options\?\.multipartUploadPart[\s\S]*requestChecksumCalculation: "WHEN_REQUIRED"/);
   assert.match(multipartPartSigning, /getClient\(config, \{ multipartUploadPart: true \}\)/);
   assert.match(directSigning, /getClient\(config\)/);
