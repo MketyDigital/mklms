@@ -29,7 +29,7 @@ interface MultipartUploadAuthorization {
 type UploadAuthorization =
   | SingleUploadAuthorization
   | MultipartUploadAuthorization
-  | { ok?: false; code?: string; message?: string; requestId?: string };
+  | { ok?: false; code?: string; detailCode?: string; message?: string; requestId?: string };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -203,6 +203,7 @@ export function MediaUploadPanel() {
         throw new Error(
           getUploadPreparationMessage(initiateResponse.status, {
             code: authorization?.code,
+            detailCode: authorization?.detailCode,
             message: authorization?.message,
             requestId,
           }),
