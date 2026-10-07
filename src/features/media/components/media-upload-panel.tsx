@@ -30,7 +30,9 @@ export function MediaUploadPanel() {
       setMessage("Choose an MP4 file and enter a title.");
       return;
     }
-    if (file.type !== "video/mp4" || !file.name.toLowerCase().endsWith(".mp4")) {
+    // Some browsers provide an empty/generic MIME type for a valid .mp4 file.
+    // The signed request still pins the actual upload Content-Type to video/mp4.
+    if (!file.name.toLowerCase().endsWith(".mp4")) {
       setMessage("Only MP4 video files are supported.");
       return;
     }
@@ -59,7 +61,7 @@ export function MediaUploadPanel() {
         body: file,
       });
       if (!uploadResponse.ok) {
-        throw new Error(`R2 rejected the upload (${uploadResponse.status}). Check the bucket CORS and direct-upload credentials.`);
+        throw new Error(`R2 rejected the upload (${uploadResponse.status}). The file was not registered.`);
       }
 
       const finalizeResponse = await fetch("/api/admin/media/direct-upload/finalize", {
