@@ -79,7 +79,10 @@ test('admin class-video upload supports resilient universal direct R2 multipart 
   const panel = read('src/features/media/components/media-upload-panel.tsx');
 
   assert.match(helper, /MAX_DIRECT_UPLOAD_BYTES\s*=\s*50 \* 1024 \* 1024 \* 1024/);
-  assert.match(helper, /MULTIPART_THRESHOLD_BYTES\s*=\s*4 \* 1024 \* 1024 \* 1024/);
+  assert.match(helper, /MULTIPART_THRESHOLD_BYTES\s*=\s*100 \* 1024 \* 1024/);
+  const multipartThresholdBytes = 100 * 1024 * 1024;
+  assert.ok(300 * 1024 * 1024 > multipartThresholdBytes, "300 MB Starpips videos must use retryable multipart upload");
+  assert.ok(500 * 1024 * 1024 > multipartThresholdBytes, "500 MB Starpips videos must use retryable multipart upload");
   assert.match(helper, /CreateMultipartUploadCommand/);
   assert.match(helper, /UploadPartCommand/);
   assert.match(helper, /CompleteMultipartUploadCommand/);
