@@ -7,6 +7,7 @@ class FakeXMLHttpRequest {
   static instances = [];
 
   uploadListeners = new Map();
+  upload = { addEventListener: (name, listener) => this.uploadListeners.set(name, listener) };
   listeners = new Map();
   headers = {};
   status = 0;
@@ -65,7 +66,6 @@ test('upload transport reports transferred bytes and returns response headers', 
     assert.equal(xhr.headers['Content-Type'], 'video/mp4');
     assert.equal(xhr.sentBody, body);
 
-    xhr.uploadListeners.set('progress', (event) => progress.push({ loaded: event.loaded, total: event.total }));
     xhr.emitProgress(5, 11);
     xhr.status = 200;
     xhr.emit('load');
