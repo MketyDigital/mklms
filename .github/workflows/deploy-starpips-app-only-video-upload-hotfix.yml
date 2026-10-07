@@ -1,0 +1,83 @@
+name: Deploy Starpips app-only video upload hotfix
+
+on:
+  push:
+    branches:
+      - hotfix/starpips-app-only-video-upload-2026-10-07
+
+permissions:
+  contents: read
+
+concurrency:
+  group: starpips-app-only-video-upload-hotfix
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      RELEASE_SHA: fa54a9e619744963c5363c99f502d7ce3a4c9e92
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Checkout exact verified main release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Verify exact main release and Starpips application target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_ACCOUNT_ID:-}" || { echo "Missing CLOUDFLARE_ACCOUNT_ID"; exit 1; }
+          test -n "${CLOUDFLARE_API_TOKEN:-}" || { echo "Missing CLOUDFLARE_API_TOKEN"; exit 1; }
+          git fetch origin main:refs/remotes/origin/main --force
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          test "$(git rev-parse origin/main)" = "$RELEASE_SHA" || {
+            echo "Main moved after verification; refusing app-only deployment."
+            exit 1
+          }
+          npm run installation:validate
+          node --input-type=module <<'NODE'
+          import { loadConcreteInstallation } from './scripts/installation-config.mjs';
+          const { manifest } = await loadConcreteInstallation('starpips');
+          if (manifest.appWorker !== 'mklms') throw new Error('Unexpected Starpips application Worker.');
+          if (manifest.mediaWorker !== 'mklms-media-delivery') throw new Error('Unexpected Starpips media Worker.');
+          if (manifest.publicDomain !== 'learn.starpipsforex.com') throw new Error('Unexpected Starpips public hostname.');
+          if (manifest.r2Bucket !== 'spf-media') throw new Error('Unexpected Starpips R2 bucket.');
+          NODE
+
+      - name: Generate Starpips application configuration
+        run: node scripts/generate-installation-config.mjs starpips
+
+      - name: Build and package Starpips application Worker only
+        shell: bash
+        env:
+          DATABASE_URL: postgresql://build:build@127.0.0.1:5432/mklms
+          MKLMS_ADMIN_ACCESS_KEY: build-admin
+          MKLMS_ADMIN_SESSION_SECRET: build-session
+        run: |
+          set -euo pipefail
+          npm run cf:build
+          npx wrangler deploy --config ".generated/starpips/app.wrangler.jsonc" --dry-run --outdir .generated/starpips-app-only-dry-run --x-provision=false
+
+      - name: Deploy Starpips application Worker only without changing secrets
+        run: npx wrangler deploy --config ".generated/starpips/app.wrangler.jsonc" --x-provision=false
+
+      - name: Smoke test Starpips application hostname
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --silent --show-error --fail --retry 8 --retry-delay 5 --retry-all-errors "https://learn.starpipsforex.com/login" >/dev/null
+          curl --silent --show-error --fail --retry 8 --retry-delay 5 --retry-all-errors "https://learn.starpipsforex.com/" >/dev/null
+          echo "Starpips app-only production hotfix smoke checks passed for $RELEASE_SHA"
