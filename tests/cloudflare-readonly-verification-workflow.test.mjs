@@ -43,6 +43,18 @@ test('Cloudflare verification understands SaaS custom hostnames and exact Worker
   assert.match(workflow, /workers\/routes/);
   assert.match(workflow, /PUBLIC_DOMAIN/);
   assert.match(workflow, /APP_WORKER/);
+  assert.match(workflow, /node --input-type=module - "\$hostname_file" "\$routes_file" <<'NODE'/);
   assert.doesNotMatch(workflow, /saas-origin\.mkety\.com/);
   assert.doesNotMatch(workflow, /dnsZone|DNS_ZONE/);
+});
+
+test('Cloudflare verification reports Starpips bucket CORS and latest media object metadata read-only', () => {
+  const workflow = readFileSync(workflowPath, 'utf8');
+  assert.match(workflow, /R2_BUCKET=.*r2Bucket/);
+  assert.match(workflow, /r2\/buckets\/\$\{R2_BUCKET\}\/cors/);
+  assert.match(workflow, /r2\/buckets\/\$\{R2_BUCKET\}\/objects/);
+  assert.match(workflow, /prefix=media\//);
+  assert.match(workflow, /last_modified/);
+  assert.match(workflow, /Access-Control-Allow-Origin|CORS/);
+  assert.doesNotMatch(workflow, /--request\s+(POST|PUT|PATCH|DELETE)|-X\s+(POST|PUT|PATCH|DELETE)/);
 });
