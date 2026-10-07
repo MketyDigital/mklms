@@ -130,6 +130,22 @@ jobs:
             exit 1
           }
 
+      - name: Detect whether the installation media release surface changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          before="${{ github.event.before }}"
+          media_changed=false
+          if git cat-file -e "$before^{commit}" 2>/dev/null; then
+            if ! git diff --quiet "$before" "$RELEASE_SHA" -- workers/media-delivery scripts/generate-installation-config.mjs "deploy/installations/$INSTALLATION_ID.json"; then
+              media_changed=true
+            fi
+          else
+            media_changed=true
+          fi
+          echo "MEDIA_CHANGED=$media_changed" >> "$GITHUB_ENV"
+          echo "media_changed=$media_changed"
+
       - name: Generate and package production Workers
         shell: bash
         env:
@@ -143,7 +159,8 @@ jobs:
           npx wrangler deploy --config ".generated/$INSTALLATION_ID/app.wrangler.jsonc" --dry-run --outdir .generated/production-app-dry-run --x-provision=false
           npx wrangler deploy --config ".generated/$INSTALLATION_ID/media.wrangler.jsonc" --dry-run --outdir .generated/production-media-dry-run --x-provision=false
 
-      - name: Deploy production media Worker
+      - name: Deploy production media Worker only when its release surface changed
+        if: env.MEDIA_CHANGED == 'true'
         shell: bash
         run: |
           set -euo pipefail

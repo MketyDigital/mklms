@@ -71,7 +71,8 @@ test('managed-hosting recovery route requires admin auth and signed provider ver
 test('Starpips production release packages and deploys the shared billing worker without touching its secrets', async () => {
   const workflow = await read('.github/workflows/release-starpips-production.yml');
   assert.match(workflow, /workers\/billing\/wrangler\.jsonc --outdir \.generated\/starpips-release-billing-dry-run/);
-  assert.match(workflow, /Deploy shared managed-hosting billing Worker without changing secrets/);
+  assert.match(workflow, /Deploy shared managed-hosting billing Worker only when its code changed/);
+  assert.match(workflow, /if: env\.BILLING_CHANGED == 'true'/);
   assert.match(workflow, /wrangler deploy --config workers\/billing\/wrangler\.jsonc --x-provision=false/);
   assert.doesNotMatch(workflow, /wrangler secret (put|bulk|delete).*billing/);
 });
