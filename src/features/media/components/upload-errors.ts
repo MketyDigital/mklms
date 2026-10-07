@@ -1,5 +1,6 @@
 export interface UploadPreparationFailure {
   code?: string;
+  detailCode?: string;
   message?: string;
   requestId?: string;
 }
@@ -18,6 +19,9 @@ export function getUploadPreparationMessage(
     return failure.message ?? "The portal could not prepare this upload. Check the file details and try again.";
   }
 
+  const detail = failure.detailCode
+    ? ` Storage response: ${failure.detailCode}.`
+    : "";
   const reference = failure.requestId ? ` Reference: ${failure.requestId}.` : "";
-  return `Streaming Storage could not start an upload session. Please try again shortly.${reference}`;
+  return `Streaming Storage could not start an upload session.${detail} Please try again shortly.${reference}`;
 }
