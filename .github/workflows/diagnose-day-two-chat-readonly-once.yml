@@ -61,7 +61,7 @@ jobs:
               ["1631fa52-40fa-48d1-93f1-b2820f18f3dc"],
             );
             const media = await client.query(
-              `SELECT id, title, source_type, object_key, file_size_bytes, status, created_at, updated_at
+              `SELECT id, title, source_type, provider_asset_id, duration_seconds, processing_status, created_at, updated_at
                FROM media_assets
                WHERE id = $1`,
               ["945b59ec-ae4d-49b7-8af5-63348c1d1688"],
