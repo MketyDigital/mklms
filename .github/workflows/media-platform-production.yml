@@ -393,4 +393,10 @@ jobs:
           done
           status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "https://assets.mkety.app/not-a-tenant/not-a-bucket/not-a-file")
           test "$status" = "404"
-          echo "Mkety Media production smoke checks passed."
+          # Verify the freshly deployed operator key from GitHub secrets without printing it.
+          # This catches successful Worker deployments whose runtime secret sync failed.
+          OPERATOR_LOGIN_STATUS=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            -X POST "https://media.mkety.com/api/operator/login" \
+            --data-urlencode "accessKey=$MEDIA_OPERATOR_ACCESS_KEY")
+          test "$OPERATOR_LOGIN_STATUS" = "303" || { echo "Operator login credential smoke failed"; exit 1; }
+          echo "Mkety Media production smoke checks passed, including operator sign-in."
