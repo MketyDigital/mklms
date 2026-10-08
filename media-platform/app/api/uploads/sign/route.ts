@@ -34,7 +34,7 @@ export async function POST(request:Request){
   const bucket=await db.prepare("SELECT id,slug,prefix,pool_key FROM media_buckets WHERE id=? AND tenant_id=? LIMIT 1").bind(bucketId,user.tenantId).first<any>();
   if(!bucket) return NextResponse.json({error:"Bucket not found"},{status:404});
 
-  const reservations=await db.prepare("SELECT COALESCE(SUM(reserved_bytes),0) AS bytes FROM media_quota_reservations WHERE tenant_id=? AND committed_at IS NULL AND expires_at>datetime('now')").bind(user.tenantId).first<any>();
+  const reservations=await db.prepare("SELECT COALESCE(SUM(reserved_bytes),0) AS bytes FROM media_quota_reservations WHERE tenant_id=? AND committed_at IS NULL AND datetime(expires_at)>datetime('now')").bind(user.tenantId).first<any>();
   const reserved=Number(reservations?.bytes||0);
   if(state.storageUsedBytes+reserved+size>state.storageLimitBytes){
     return NextResponse.json({error:"Storage limit reached"},{status:409});
