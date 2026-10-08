@@ -110,7 +110,7 @@ test('recording start clock aligns wall-clock Zoom chats to the video timeline',
   const start = parseLocalRecordingStartTime('2026-05-04T11:37:30');
   assert.equal(start, 11 * 3600 + 37 * 60 + 30);
   const parsed = parseTimestampedLiveChat(
-    '11:37:45 From Ada to Everyone: Starting now\\n11:38:30 From Bo to Everyone: Question',
+    '11:37:45 From Ada to Everyone: Starting now\n11:38:30 From Bo to Everyone: Question',
     { preserveWallClock: true },
   );
   const aligned = alignZoomChatToRecordingStart(parsed.items, start, 3600);
@@ -120,7 +120,7 @@ test('recording start clock aligns wall-clock Zoom chats to the video timeline',
 test('wall-clock alignment handles midnight and preserves pre-recording chats as negative', () => {
   const start = parseLocalRecordingStartTime('2026-05-04T23:59:30');
   const parsed = parseTimestampedLiveChat(
-    '00:00:15 From Ada: After midnight\\n23:59:00 From Bo: Before recording',
+    '00:00:15 From Ada: After midnight\n23:59:00 From Bo: Before recording',
     { preserveWallClock: true },
   );
   const aligned = alignZoomChatToRecordingStart(parsed.items, start, 3600);
