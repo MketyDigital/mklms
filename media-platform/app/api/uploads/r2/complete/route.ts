@@ -15,11 +15,13 @@ export async function POST(request:Request){
 
   const db=getMediaDb();
   const reservation=await db.prepare(
-    "SELECT r.provider_upload_id,r.storage_key,r.bucket_id FROM media_quota_reservations r JOIN media_objects o ON o.id=? AND o.bucket_id=r.bucket_id WHERE r.id=? AND r.tenant_id=? AND r.committed_at IS NULL AND r.expires_at>datetime('now') LIMIT 1"
+    "SELECT r.provider_upload_id,r.storage_key,r.bucket_id,r.reserved_bytes FROM media_quota_reservations r JOIN media_objects o ON o.id=? AND o.bucket_id=r.bucket_id WHERE r.id=? AND r.tenant_id=? AND r.committed_at IS NULL AND r.datetime(expires_at)>datetime('now') LIMIT 1"
   ).bind(objectId,reservationId,user.tenantId).first<any>();
   if(!reservation?.provider_upload_id||!reservation?.storage_key) return NextResponse.json({error:"Upload expired"},{status:409});
 
-  const normalized=parts.map((part:any)=>({partNumber:Number(part.partNumber),etag:String(part.etag||"")})).filter((p:any)=>Number.isInteger(p.partNumber)&&p.partNumber>0&&p.etag);
+  if(parts.length>10000) return NextResponse.json({error:"Too many parts"},{status:400});
+  const normalized=parts.map((part:any)=>({partNumber:Number(part.partNumber),etag:String(part.etag||"")})).filter((p:any)=>Number.isInteger(p.partNumber)&&p.partNumber>0&&p.partNumber<=10000&&p.etag);
+  if(normalized.some((p:any,i:number)=>p.partNumber!==i+1)) return NextResponse.json({error:"Parts must be ordered and contiguous"},{status:400});
   if(normalized.length!==parts.length) return NextResponse.json({error:"Invalid parts"},{status:400});
 
   const bucket=getMediaEnv().MEDIA_R2_BUCKET;
@@ -27,10 +29,17 @@ export async function POST(request:Request){
 
   const multipart=bucket.resumeMultipartUpload(String(reservation.storage_key),String(reservation.provider_upload_id));
   await multipart.complete(normalized);
+  const stored=await bucket.head(String(reservation.storage_key));
+  if(!stored || stored.size!==Number(reservation.reserved_bytes)){
+    // Never mark an unverified object READY or commit quota on a size mismatch.
+    // Keep the reservation for operator reconciliation rather than deleting customer data.
+    console.error("Media R2 completed upload size verification failed");
+    return NextResponse.json({error:"Uploaded file could not be verified. Please contact support."},{status:409});
+  }
 
   await db.batch([
     db.prepare("UPDATE media_quota_reservations SET committed_at=datetime('now') WHERE id=?").bind(reservationId),
-    db.prepare("UPDATE media_objects SET status='ready' WHERE id=?").bind(objectId),
+    db.prepare("UPDATE media_objects SET status='ready',size_bytes=?,etag=? WHERE id=?").bind(stored.size,stored.etag||null,objectId),
     db.prepare("INSERT INTO media_usage_daily (tenant_id,usage_date,uploads) VALUES (?,date('now'),1) ON CONFLICT(tenant_id,usage_date) DO UPDATE SET uploads=uploads+1").bind(user.tenantId),
   ]);
 
