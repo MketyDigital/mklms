@@ -1,8 +1,10 @@
 import { normalizeSafeExternalUrl } from "../../../lib/security/external-url.ts";
 import type { ViewerDisplayMode } from "../domain/live-session.ts";
 import {
+  alignZoomChatToRecordingStart,
   looksLikeZoomChatExport,
   parseLiveChatCsv,
+  parseLocalRecordingStartTime,
   parseTimestampedLiveChat,
   type ImportedLiveChatItem,
   type LiveChatImportError,
@@ -188,16 +190,42 @@ export class AdminLiveClassService {
     format: "csv" | "text";
     content: string;
     firstMessageAtSeconds?: number | null;
+    recordingStartAtLocal?: string | null;
   }): Promise<{
     imported: number;
     stored: number;
     summary: LiveTimelineSummary;
     errors: LiveChatImportError[];
   }> {
-    const parsed = input.format === "csv" ? parseLiveChatCsv(input.content) : parseTimestampedLiveChat(input.content);
+    const recordingStartAtLocal = input.recordingStartAtLocal?.trim() ?? "";
+    const parsed = input.format === "csv"
+      ? parseLiveChatCsv(input.content)
+      : parseTimestampedLiveChat(input.content, { preserveWallClock: Boolean(recordingStartAtLocal) });
     let items = parsed.items;
     const errors = [...parsed.errors];
     const session = await this.repository.findSessionById?.(sessionId);
+
+    if (recordingStartAtLocal) {
+      if (input.format !== "text") {
+        items = [];
+        errors.push({ line: 0, message: "Recording start time sync is only available for timestamped Zoom text exports." });
+      } else if (input.firstMessageAtSeconds != null) {
+        items = [];
+        errors.push({ line: 0, message: "Choose either the exact recording start time or the manual first-message video time." });
+      } else {
+        const recordingStartSeconds = parseLocalRecordingStartTime(recordingStartAtLocal);
+        if (recordingStartSeconds == null) {
+          items = [];
+          errors.push({ line: 0, message: "Enter a valid local recording start date and time." });
+        } else {
+          items = alignZoomChatToRecordingStart(
+            items,
+            recordingStartSeconds,
+            session?.durationSeconds ?? 12 * 60 * 60,
+          );
+        }
+      }
+    }
 
     if (session && items.length > 0) {
       const maxOffset = Math.max(...items.map((item) => item.offsetSeconds));
