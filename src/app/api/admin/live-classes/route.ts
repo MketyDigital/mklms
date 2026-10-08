@@ -34,6 +34,7 @@ const payloadSchema = z.discriminatedUnion("action", [
     format: z.enum(["csv", "text"]),
     content: z.string().max(2_000_000),
     firstMessageAtSeconds: z.number().int().min(0).max(12 * 60 * 60).optional().nullable(),
+    recordingStartAtLocal: z.string().max(40).optional().nullable(),
   }),
   z.object({ action: z.literal("setBatchStatus"), batchId: z.string().min(1).max(200), status: z.enum(["DRAFT", "ACTIVE", "ARCHIVED"]) }),
   z.object({ action: z.literal("setSessionStatus"), sessionId: z.string().min(1).max(200), status: z.enum(["DRAFT", "PUBLISHED"]) }),
