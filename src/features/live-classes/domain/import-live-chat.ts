@@ -183,7 +183,7 @@ function rebaseWallClockZoomTimestamps(
 }
 
 export function parseLocalRecordingStartTime(value: string): number | null {
-  const match = value.trim().match(/^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2})(?::(\\d{2}))?$/);
+  const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
   if (!match) return null;
 
   const [, yearRaw, monthRaw, dayRaw, hoursRaw, minutesRaw, secondsRaw = "00"] = match;
