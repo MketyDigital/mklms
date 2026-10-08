@@ -147,7 +147,7 @@ test('exact Zoom recording start syncs wall-clock messages to their video offset
   const result = await service.importTimeline('session-1', {
     format: 'text',
     recordingStartAtLocal: '2026-05-04T11:37:30',
-    content: '11:37:45 From Mary to Everyone: Welcome\\n11:38:30 From Sam to Everyone: Ready',
+    content: '11:37:45 From Mary to Everyone: Welcome\n11:38:30 From Sam to Everyone: Ready',
   });
   assert.equal(result.imported, 2);
   assert.deepEqual(repository.timeline.map((item) => item.offsetSeconds), [15, 60]);
