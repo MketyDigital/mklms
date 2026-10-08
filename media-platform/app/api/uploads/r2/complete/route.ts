@@ -15,7 +15,7 @@ export async function POST(request:Request){
 
   const db=getMediaDb();
   const reservation=await db.prepare(
-    "SELECT r.provider_upload_id,r.storage_key,r.bucket_id,r.reserved_bytes FROM media_quota_reservations r JOIN media_objects o ON o.id=? AND o.bucket_id=r.bucket_id WHERE r.id=? AND r.tenant_id=? AND r.committed_at IS NULL AND r.datetime(expires_at)>datetime('now') LIMIT 1"
+    "SELECT r.provider_upload_id,r.storage_key,r.bucket_id,r.reserved_bytes FROM media_quota_reservations r JOIN media_objects o ON o.id=? AND o.bucket_id=r.bucket_id WHERE r.id=? AND r.tenant_id=? AND r.committed_at IS NULL AND datetime(r.expires_at)>datetime('now') LIMIT 1"
   ).bind(objectId,reservationId,user.tenantId).first<any>();
   if(!reservation?.provider_upload_id||!reservation?.storage_key) return NextResponse.json({error:"Upload expired"},{status:409});
 
