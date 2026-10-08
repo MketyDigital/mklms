@@ -18,7 +18,7 @@ function uploadWithProgress(url:string, data:Blob, headers:Record<string,string>
   return new Promise((resolve,reject)=>{
     const xhr=new XMLHttpRequest();
     xhr.open("PUT",url);
-    xhr.timeout=180000;
+    xhr.timeout=600000;
     xhr.withCredentials=url.startsWith("/");
     for(const [key,value] of Object.entries(headers)) xhr.setRequestHeader(key,value);
     xhr.upload.onprogress=(event)=>{ if(event.lengthComputable) onProgress(Math.min(event.loaded,data.size)); };
@@ -69,7 +69,12 @@ export default function UploadClient({bucketId}:{bucketId:string}){
 
       if(signed.uploadMode==="r2-multipart"){
         const parts:{partNumber:number;etag:string}[]=[];
-        const chunkSize=Math.min(20*1024*1024,Math.max(5*1024*1024,Number(signed.chunkSize||20*1024*1024)));
+        const connection=(navigator as Navigator & {connection?:{effectiveType?:string;saveData?:boolean}}).connection;
+        const limitedConnection=connection?.saveData || ["slow-2g","2g","3g"].includes(connection?.effectiveType||"");
+        // R2 multipart requires each non-final part to be at least 5 MiB.
+        // Use smaller valid chunks over constrained networks so retries lose less progress.
+        const targetSize=limitedConnection?5*1024*1024:10*1024*1024;
+        const chunkSize=Math.max(5*1024*1024,Math.min(targetSize,Number(signed.chunkSize||20*1024*1024)));
         let confirmed=0;
         for(let offset=0;offset<file.size;offset+=chunkSize){
           const chunk=file.slice(offset,Math.min(file.size,offset+chunkSize));
