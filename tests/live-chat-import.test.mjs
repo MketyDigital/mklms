@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import {
   parseLiveChatCsv,
   parseTimestampedLiveChat,
+  alignZoomChatToRecordingStart,
+  parseLocalRecordingStartTime,
 } from '../src/features/live-classes/domain/import-live-chat.ts';
 
 test('CSV import accepts normalized offset_seconds, display_name, message rows', () => {
@@ -101,4 +103,31 @@ test('invalid rows are reported without discarding valid imported chat', () => {
   assert.equal(result.items.length, 1);
   assert.equal(result.errors.length, 1);
   assert.equal(result.errors[0].line, 1);
+});
+
+
+test('recording start clock aligns wall-clock Zoom chats to the video timeline', () => {
+  const start = parseLocalRecordingStartTime('2026-05-04T11:37:30');
+  assert.equal(start, 11 * 3600 + 37 * 60 + 30);
+  const parsed = parseTimestampedLiveChat(
+    '11:37:45 From Ada to Everyone: Starting now\n11:38:30 From Bo to Everyone: Question',
+    { preserveWallClock: true },
+  );
+  const aligned = alignZoomChatToRecordingStart(parsed.items, start, 3600);
+  assert.deepEqual(aligned.map((item) => item.offsetSeconds), [15, 60]);
+});
+
+test('wall-clock alignment handles midnight and preserves pre-recording chats as negative', () => {
+  const start = parseLocalRecordingStartTime('2026-05-04T23:59:30');
+  const parsed = parseTimestampedLiveChat(
+    '00:00:15 From Ada: After midnight\n23:59:00 From Bo: Before recording',
+    { preserveWallClock: true },
+  );
+  const aligned = alignZoomChatToRecordingStart(parsed.items, start, 3600);
+  assert.deepEqual(aligned.map((item) => item.offsetSeconds), [45, -30]);
+});
+
+test('recording start parser rejects invalid local dates and times', () => {
+  assert.equal(parseLocalRecordingStartTime('2026-02-30T11:37:30'), null);
+  assert.equal(parseLocalRecordingStartTime('2026-05-04T25:37:30'), null);
 });

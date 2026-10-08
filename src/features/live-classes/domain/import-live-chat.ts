@@ -182,7 +182,49 @@ function rebaseWallClockZoomTimestamps(
   };
 }
 
-export function parseTimestampedLiveChat(input: string): LiveChatImportResult {
+export function parseLocalRecordingStartTime(value: string): number | null {
+  const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) return null;
+
+  const [, yearRaw, monthRaw, dayRaw, hoursRaw, minutesRaw, secondsRaw = "00"] = match;
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  const hours = Number(hoursRaw);
+  const minutes = Number(minutesRaw);
+  const seconds = Number(secondsRaw);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day ||
+    hours > 23 ||
+    minutes > 59 ||
+    seconds > 59
+  ) return null;
+
+  return timestampToSeconds(hoursRaw, minutesRaw, secondsRaw);
+}
+
+export function alignZoomChatToRecordingStart(
+  items: ImportedLiveChatItem[],
+  recordingStartSeconds: number,
+  durationSeconds: number,
+): ImportedLiveChatItem[] {
+  return items.map((item) => {
+    let offsetSeconds = item.offsetSeconds - recordingStartSeconds;
+    if (offsetSeconds < 0 && offsetSeconds + 24 * 60 * 60 <= durationSeconds) {
+      offsetSeconds += 24 * 60 * 60;
+    }
+    return { ...item, offsetSeconds };
+  });
+}
+
+export function parseTimestampedLiveChat(
+  input: string,
+  options: { preserveWallClock?: boolean } = {},
+): LiveChatImportResult {
   const result: LiveChatImportResult = { items: [], errors: [] };
   const normalizedInput = input.replace(/^\uFEFF/, "");
   const lines = normalizedInput.split(/\r?\n/);
@@ -217,7 +259,7 @@ export function parseTimestampedLiveChat(input: string): LiveChatImportResult {
       const [, hours, minutes, seconds, remainderRaw = ""] = timestampMatch;
       const numericMinutes = Number(minutes);
       const numericSeconds = Number(seconds);
-      if (numericMinutes > 59 || numericSeconds > 59) {
+      if (numericMinutes > 59 || numericSeconds > 59 || (options.preserveWallClock && Number(hours) > 23)) {
         result.errors.push({ line: index + 1, message: "Invalid timestamp." });
         continue;
       }
@@ -269,5 +311,5 @@ export function parseTimestampedLiveChat(input: string): LiveChatImportResult {
     result.errors.push({ line: pendingTimestamp.line, message: "Expected a chat message after timestamp." });
   }
   flushPendingZoomMessage(result, pendingMessage);
-  return rebaseWallClockZoomTimestamps(result, normalizedInput);
+  return options.preserveWallClock ? result : rebaseWallClockZoomTimestamps(result, normalizedInput);
 }
