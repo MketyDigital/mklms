@@ -1,0 +1,230 @@
+name: Inspect Starpips live-video timing (read-only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ${{ secrets.STARPIPS_DATABASE_URL }}
+      DATABASE_SSL: ${{ secrets.STARPIPS_DATABASE_SSL }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_DIRECT_UPLOAD_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY }}
+      R2_BUCKET: spf-media
+      TARGET_OBJECT: media/bfa8765a-33b9-4686-b846-19e1bcf4f941.mp4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Inspect R2 inventory, database links, and MP4 headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$DATABASE_URL" || { echo "Missing STARPIPS_DATABASE_URL"; exit 1; }
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "Missing CLOUDFLARE_ACCOUNT_ID"; exit 1; }
+          test -n "$R2_ACCESS_KEY_ID" || { echo "Missing R2_DIRECT_UPLOAD_ACCESS_KEY_ID"; exit 1; }
+          test -n "$R2_SECRET_ACCESS_KEY" || { echo "Missing R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY"; exit 1; }
+          node --input-type=module <<'NODE'
+          import pg from "pg";
+          import { S3Client, ListObjectsV2Command, GetObjectCommand } from "@aws-sdk/client-s3";
+
+          const { Pool } = pg;
+          const pool = new Pool({
+            connectionString: process.env.DATABASE_URL,
+            ssl: process.env.DATABASE_SSL === "disable" ? false : { rejectUnauthorized: false },
+            max: 1,
+          });
+          const s3 = new S3Client({
+            region: "auto",
+            endpoint: `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+            forcePathStyle: true,
+            credentials: {
+              accessKeyId: process.env.R2_ACCESS_KEY_ID,
+              secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+            },
+          });
+
+          async function bodyBuffer(response) {
+            return Buffer.from(await response.Body.transformToByteArray());
+          }
+          async function getRange(key, start, end) {
+            const response = await s3.send(new GetObjectCommand({
+              Bucket: process.env.R2_BUCKET,
+              Key: key,
+              Range: `bytes=${start}-${end}`,
+            }));
+            return bodyBuffer(response);
+          }
+          function u32(buf, at) { return buf.readUInt32BE(at); }
+          function u64(buf, at) { return Number(buf.readBigUInt64BE(at)); }
+          function parseMovieHeader(buf, absoluteBase) {
+            const tag = Buffer.from("moov");
+            let found = -1;
+            while ((found = buf.indexOf(tag, found + 1)) >= 0) {
+              if (found < 4) continue;
+              let moovStart = found - 4;
+              let moovSize = u32(buf, moovStart);
+              let headerSize = 8;
+              if (moovSize === 1) {
+                if (moovStart + 16 > buf.length) continue;
+                moovSize = u64(buf, moovStart + 8);
+                headerSize = 16;
+              }
+              if (moovSize < headerSize || moovSize > 16 * 1024 * 1024) continue;
+              const absoluteStart = absoluteBase + moovStart;
+              return { absoluteStart, moovSize, headerSize };
+            }
+            return null;
+          }
+          function parseMvhd(moov) {
+            const tag = Buffer.from("mvhd");
+            const at = moov.indexOf(tag);
+            if (at < 4 || at + 24 > moov.length) return null;
+            const boxStart = at - 4;
+            const version = moov[at + 4];
+            let created, modified, timescale, duration;
+            if (version === 1) {
+              if (at + 32 > moov.length) return null;
+              created = u64(moov, at + 8);
+              modified = u64(moov, at + 16);
+              timescale = u32(moov, at + 24);
+              duration = u64(moov, at + 28);
+            } else {
+              created = u32(moov, at + 8);
+              modified = u32(moov, at + 12);
+              timescale = u32(moov, at + 16);
+              duration = u32(moov, at + 20);
+            }
+            const toIso = (seconds) => {
+              if (!seconds) return null;
+              const date = new Date((seconds - 2082844800) * 1000);
+              return Number.isNaN(date.valueOf()) ? null : date.toISOString();
+            };
+            return {
+              version,
+              creationUtc: toIso(created),
+              modificationUtc: toIso(modified),
+              durationSeconds: timescale ? Number((duration / timescale).toFixed(3)) : null,
+              boxOffsetInMoov: boxStart,
+            };
+          }
+          async function inspectMp4(key, size) {
+            const tailStart = Math.max(0, size - 8 * 1024 * 1024);
+            const tail = await getRange(key, tailStart, size - 1);
+            let moovInfo = parseMovieHeader(tail, tailStart);
+            if (!moovInfo) {
+              const headEnd = Math.min(size - 1, 8 * 1024 * 1024 - 1);
+              const head = await getRange(key, 0, headEnd);
+              moovInfo = parseMovieHeader(head, 0);
+              if (!moovInfo) return { key, metadata: "moov atom not found in first/last 8 MiB" };
+            }
+            const moov = await getRange(key, moovInfo.absoluteStart, moovInfo.absoluteStart + moovInfo.moovSize - 1);
+            return {
+              key,
+              moovOffset: moovInfo.absoluteStart,
+              moovBytes: moovInfo.moovSize,
+              movieHeader: parseMvhd(moov),
+            };
+          }
+
+          let objects = [];
+          let token;
+          do {
+            const page = await s3.send(new ListObjectsV2Command({
+              Bucket: process.env.R2_BUCKET,
+              ...(token ? { ContinuationToken: token } : {}),
+              MaxKeys: 1000,
+            }));
+            objects.push(...(page.Contents ?? []));
+            token = page.IsTruncated ? page.NextContinuationToken : undefined;
+          } while (token && objects.length < 10000);
+
+          const videos = objects.filter((item) => item.Key?.toLowerCase().endsWith(".mp4"));
+          console.log("R2 MP4 inventory:");
+          for (const item of videos) {
+            console.log(JSON.stringify({
+              key: item.Key,
+              sizeBytes: item.Size,
+              uploadedUtc: item.LastModified?.toISOString() ?? null,
+            }));
+          }
+
+          const keys = videos.map((item) => item.Key).filter(Boolean);
+          const client = await pool.connect();
+          let links;
+          try {
+            await client.query("BEGIN READ ONLY");
+            const result = await client.query(
+              `SELECT m.id AS media_id, m.title AS media_title, m.provider_asset_id,
+                      m.duration_seconds AS media_duration_seconds, m.created_at AS media_created_at,
+                      b.title AS batch_title, s.id AS session_id, s.title AS session_title,
+                      s.starts_at, s.duration_seconds AS session_duration_seconds,
+                      COALESCE(t.message_count, 0)::int AS timeline_message_count,
+                      t.first_offset_seconds, t.last_offset_seconds
+                 FROM media_assets m
+                 LEFT JOIN live_sessions s ON s.media_asset_id = m.id
+                 LEFT JOIN live_batches b ON b.id = s.batch_id
+                 LEFT JOIN LATERAL (
+                   SELECT COUNT(*) AS message_count, MIN(offset_seconds) AS first_offset_seconds,
+                          MAX(offset_seconds) AS last_offset_seconds
+                     FROM live_timeline_messages WHERE session_id = s.id
+                 ) t ON TRUE
+                WHERE m.provider_asset_id = ANY($1::text[])
+                ORDER BY m.created_at DESC`,
+              [keys],
+            );
+            links = result.rows;
+            await client.query("COMMIT");
+          } catch (error) {
+            await client.query("ROLLBACK");
+            throw error;
+          } finally {
+            client.release();
+          }
+
+          console.log("Database media/live-class links (no chat text):");
+          console.log(JSON.stringify(links.map((row) => ({
+            ...row,
+            media_created_at: row.media_created_at?.toISOString?.() ?? row.media_created_at,
+            starts_at: row.starts_at?.toISOString?.() ?? row.starts_at,
+          })), null, 2));
+
+          const target = videos.find((item) => item.Key === process.env.TARGET_OBJECT);
+          const classVideos = videos.filter((item) => /live[-_/ ]?classes/i.test(item.Key ?? ""));
+          const inspect = new Map();
+          if (target) inspect.set(target.Key, target);
+          for (const item of classVideos) inspect.set(item.Key, item);
+          for (const row of links) {
+            const item = videos.find((candidate) => candidate.Key === row.provider_asset_id);
+            if (item) inspect.set(item.Key, item);
+          }
+          if (inspect.size === 0) {
+            const newest = [...videos].sort((a, b) => (b.LastModified?.getTime() ?? 0) - (a.LastModified?.getTime() ?? 0))[0];
+            if (newest) inspect.set(newest.Key, newest);
+          }
+
+          console.log("MP4 movie-header metadata (range reads only):");
+          for (const item of [...inspect.values()].slice(0, 20)) {
+            try {
+              console.log(JSON.stringify(await inspectMp4(item.Key, item.Size)));
+            } catch (error) {
+              console.log(JSON.stringify({
+                key: item.Key,
+                error: error instanceof Error ? error.name : "inspection failed",
+              }));
+            }
+          }
+
+          await pool.end();
+          s3.destroy();
+          NODE
