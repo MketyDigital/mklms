@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getMediaDb,getMediaEnv } from "../../../../../src/lib/postgres";
 import { retrieveFlutterwaveV4Charge,verifyFlutterwaveV4Webhook,verifyMketyPaymentAttestation } from "../../../../../src/billing/flutterwave";
-import { settleInvoice } from "../../../../../src/billing/settle";
+import { settleVerifiedPayment } from "../../../../../src/billing/settle";
 
 export async function POST(request:Request){
   const env=getMediaEnv() as any;
@@ -61,11 +61,16 @@ export async function POST(request:Request){
   if(String(verified.currency||"").toUpperCase()!==expectedCurrency) return NextResponse.json({ok:false,message:"currency mismatch"},{status:400});
   if(Number(verified.amount||0)+0.01<expectedAmount) return NextResponse.json({ok:false,message:"amount mismatch"},{status:400});
 
-  const existing=await db.prepare("SELECT id FROM media_payment_events WHERE provider='flutterwave' AND external_event_id=? LIMIT 1").bind(eventId).first();
-  if(existing) return NextResponse.json({ok:true,settled:true,duplicate:true});
-
-  await db.prepare("INSERT INTO media_payment_events (id,invoice_id,provider,external_event_id,event_type) VALUES (?,?,'flutterwave',?,'successful')")
-    .bind(crypto.randomUUID(),String(invoice.id),eventId).run();
-  await settleInvoice({invoiceId:String(invoice.id),provider:"flutterwave",paymentId:eventId});
-  return NextResponse.json({ok:true,settled:true});
+  const settlement=await settleVerifiedPayment({
+    invoiceId:String(invoice.id),
+    provider:"flutterwave",
+    paymentId:eventId,
+    eventType:"successful",
+  });
+  return NextResponse.json({
+    ok:true,
+    settled:settlement.settled,
+    duplicate:settlement.duplicate,
+    ...(settlement.settled?{}:{reason:"invoice_not_payable",invoiceStatus:settlement.invoiceStatus}),
+  });
 }
