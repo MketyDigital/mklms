@@ -31,7 +31,7 @@ export async function POST(request:Request){
   const settlement=await settleVerifiedPayment({
     invoiceId:String(invoice.id),
     provider:"kora",
-    paymentId:paymentId,
+    paymentId:eventId,
     eventType:"success",
   });
   return NextResponse.json({
