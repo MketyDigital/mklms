@@ -100,3 +100,45 @@ export async function settleInvoice(input:{
 
   return {ok:true,alreadyPaid:false,tenantId:String(invoice.tenant_id),periodEnd,purchaseType};
 }
+
+
+export async function settleVerifiedPayment(input:{
+  invoiceId:string;
+  provider:"nowpayments"|"flutterwave"|"kora";
+  paymentId:string;
+  eventType:string;
+}){
+  const db=getMediaDb();
+  await db.prepare(
+    "INSERT OR IGNORE INTO media_payment_events (id,invoice_id,provider,external_event_id,event_type) VALUES (?,?,?,?,?)"
+  ).bind(crypto.randomUUID(),input.invoiceId,input.provider,input.paymentId,input.eventType).run();
+
+  const result=await settleInvoice({
+    invoiceId:input.invoiceId,
+    provider:input.provider,
+    paymentId:input.paymentId,
+  });
+  const invoice=await db.prepare("SELECT tenant_id,status,provider_payment_id FROM media_invoices WHERE id=? LIMIT 1").bind(input.invoiceId).first<any>();
+  const settled=String(invoice?.status||"")==="paid"&&String(invoice?.provider_payment_id||"")===input.paymentId;
+  if(!settled){
+    await db.batch([
+      db.prepare("UPDATE media_payment_events SET event_type='success_unapplied' WHERE provider=? AND external_event_id=?")
+        .bind(input.provider,input.paymentId),
+      db.prepare("INSERT INTO media_audit_log (id,tenant_id,actor_type,actor_id,action,target_type,target_id,metadata_json) SELECT ?,?,'payment',?,'payment.success_unapplied','invoice',?,? WHERE NOT EXISTS (SELECT 1 FROM media_audit_log WHERE action='payment.success_unapplied' AND actor_id=?)")
+        .bind(
+          crypto.randomUUID(),
+          String(invoice?.tenant_id||""),
+          input.paymentId,
+          input.invoiceId,
+          JSON.stringify({provider:input.provider,invoiceStatus:String(invoice?.status||"missing")}),
+          input.paymentId
+        ),
+    ]);
+  }
+
+  return {
+    settled,
+    duplicate:Boolean(result.alreadyPaid),
+    invoiceStatus:String(invoice?.status||"missing"),
+  };
+}
