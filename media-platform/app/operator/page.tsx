@@ -6,6 +6,7 @@ import { getBillingTerms,getSetting } from "../../src/lib/operator-settings";
 import { configuredProviders } from "../../src/config/providers";
 import { getProviderEnv } from "../../src/lib/provider-env";
 import { telegramOperatorChatId } from "../../src/billing/telegram";
+import { isFlutterwaveCheckoutConfigured } from "../../src/billing/provider-status";
 import OperatorRecoveryTool from "./OperatorRecoveryTool";
 
 export const dynamic = "force-dynamic";
@@ -17,12 +18,13 @@ function gb(bytes:any){return bytes==null?"":(Number(bytes)/1024**3).toFixed(0);
 export default async function OperatorPage(){
   if(!(await isOperator())) redirect("/operator/login");
   const db=getMediaDb();
-  const [plansResult,addonsResult,tenantsResult,poolsResult,pendingInvoices,enterpriseRequests,customDomains,terms,bank,enforcement,portal]=await Promise.all([
+  const [plansResult,addonsResult,tenantsResult,poolsResult,pendingInvoices,cancelledInvoices,enterpriseRequests,customDomains,terms,bank,enforcement,portal]=await Promise.all([
     db.prepare("SELECT * FROM media_plans ORDER BY display_order").all<any>(),
     db.prepare("SELECT * FROM media_addon_products ORDER BY display_order,price_usd").all<any>(),
     db.prepare("SELECT t.id,t.slug,t.name,t.status,t.plan_code,c.* FROM media_tenants t LEFT JOIN media_tenant_commercial_terms c ON c.tenant_id=t.id ORDER BY t.created_at DESC LIMIT 200").all<any>(),
     db.prepare("SELECT * FROM media_provider_pools ORDER BY priority").all<any>(),
     db.prepare("SELECT i.id,i.reference,i.amount_usd,i.amount_local,i.local_currency,i.payment_method,i.checkout_provider,i.created_at,t.name AS tenant_name FROM media_invoices i JOIN media_tenants t ON t.id=i.tenant_id WHERE i.status='pending' ORDER BY i.created_at DESC LIMIT 100").all<any>(),
+    db.prepare("SELECT i.id,i.reference,i.amount_usd,i.amount_local,i.local_currency,i.payment_method,i.checkout_provider,i.updated_at,t.name AS tenant_name,MAX(CASE WHEN e.event_type='success_unapplied' THEN e.event_type ELSE NULL END) AS payment_review FROM media_invoices i JOIN media_tenants t ON t.id=i.tenant_id LEFT JOIN media_payment_events e ON e.invoice_id=i.id WHERE i.status='cancelled' GROUP BY i.id ORDER BY i.updated_at DESC LIMIT 100").all<any>(),
     db.prepare("SELECT * FROM media_enterprise_requests WHERE status IN ('new','contacted') ORDER BY created_at DESC LIMIT 100").all<any>(),
     db.prepare("SELECT d.*,t.name AS tenant_name,t.slug AS tenant_slug FROM media_custom_domains d JOIN media_tenants t ON t.id=d.tenant_id WHERE d.status<>'removed' ORDER BY d.created_at DESC LIMIT 100").all<any>(),
     getBillingTerms(),
@@ -43,7 +45,7 @@ export default async function OperatorPage(){
   const runtime=getMediaEnv() as any;
   const integrationStatus={
     nowpayments:Boolean(runtime.NOWPAYMENTS_API_KEY&&runtime.NOWPAYMENTS_IPN_SECRET),
-    flutterwave:Boolean(runtime.FLUTTERWAVE_CLIENT_ID&&runtime.FLUTTERWAVE_CLIENT_SECRET&&runtime.FLUTTERWAVE_WEBHOOK_SECRET),
+    flutterwave:isFlutterwaveCheckoutConfigured(runtime),
     kora:Boolean(runtime.KORA_PUBLIC_KEY&&runtime.KORA_SECRET_KEY),
     telegramToken:Boolean(runtime.MEDIA_TELEGRAM_BOT_TOKEN),
     telegramUsername:String(runtime.MEDIA_TELEGRAM_BOT_USERNAME||""),
@@ -157,6 +159,12 @@ export default async function OperatorPage(){
     <div className="card"><table className="table"><thead><tr><th>Customer</th><th>Invoice</th><th>Amount</th><th>Method</th><th></th></tr></thead><tbody>
       {(pendingInvoices.results||[]).map((i:any)=><tr key={i.id}><td>{i.tenant_name}</td><td>{i.reference}</td><td>{i.amount_local!=null?String(i.local_currency||"")+" "+Number(i.amount_local).toLocaleString():"$"+Number(i.amount_usd).toFixed(2)}</td><td>{i.checkout_provider||i.payment_method}</td><td><div className="toolbar"><form method="post" action="/api/operator/invoices"><input type="hidden" name="invoiceId" value={i.id}/><input type="hidden" name="action" value="approve"/><button className="btn">Approve</button></form><form method="post" action="/api/operator/invoices"><input type="hidden" name="invoiceId" value={i.id}/><input type="hidden" name="action" value="reject"/><button className="btn secondary">Reject</button></form></div></td></tr>)}
     </tbody></table></div>
+
+    <h2 style={{marginTop:30}}>Cancelled orders</h2>
+    <div className="card"><table className="table"><thead><tr><th>Customer</th><th>Invoice</th><th>Amount</th><th>Method</th><th>Status</th></tr></thead><tbody>
+      {(cancelledInvoices.results||[]).map((i:any)=><tr key={i.id}><td>{i.tenant_name}</td><td>{i.reference}</td><td>{i.amount_local!=null?String(i.local_currency||"")+" "+Number(i.amount_local).toLocaleString():"$"+Number(i.amount_usd).toFixed(2)}</td><td>{i.checkout_provider||i.payment_method}</td><td>{i.payment_review?<strong className="notice danger">Provider reported payment — review required</strong>:"Cancelled"}</td></tr>)}
+      {!cancelledInvoices.results?.length&&<tr><td colSpan={5}>No cancelled orders.</td></tr>}
+    </tbody></table><p className="muted">Cancelled invoices cannot activate access. A late successful provider event is flagged for manual review.</p></div>
 
     <h2 style={{marginTop:30}}>Public plans</h2>
     <div className="grid">{(plansResult.results||[]).map((p:any)=><form className="card" method="post" action="/api/operator/plans" key={p.code}>
