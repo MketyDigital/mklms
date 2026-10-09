@@ -8,6 +8,12 @@ on:
     paths:
       - "media-platform/**"
       - ".github/workflows/media-platform-ci.yml"
+  pull_request:
+    branches:
+      - media-platform
+    paths:
+      - "media-platform/**"
+      - ".github/workflows/media-platform-ci.yml"
   workflow_dispatch:
 
 permissions:
