@@ -6,6 +6,7 @@ import { getBillingTerms,getSetting } from "../../src/lib/operator-settings";
 import { configuredProviders } from "../../src/config/providers";
 import { getProviderEnv } from "../../src/lib/provider-env";
 import { telegramOperatorChatId } from "../../src/billing/telegram";
+import OperatorRecoveryTool from "./OperatorRecoveryTool";
 
 export const dynamic = "force-dynamic";
 
@@ -194,6 +195,8 @@ export default async function OperatorPage(){
       <label>Priority<input type="number" name="priority" defaultValue={p.priority}/></label>
       <button className="btn">Save pool</button>
     </form>)}</div>
+
+    <OperatorRecoveryTool />
 
     <h2 style={{marginTop:30}}>Customers</h2>
     <div className="grid">{(tenantsResult.results||[]).map((t:any)=><form className="card" method="post" action="/api/operator/tenants" key={t.id}>
