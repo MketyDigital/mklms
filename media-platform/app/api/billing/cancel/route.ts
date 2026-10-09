@@ -26,7 +26,7 @@ export async function POST(request:Request){
   }
 
   const result=await db.prepare(
-    "UPDATE media_invoices SET status='cancelled',updated_at=? WHERE id=? AND tenant_id=? AND status='pending' AND EXISTS (SELECT 1 FROM media_tenants t JOIN media_subscriptions s ON s.tenant_id=t.id WHERE t.id=? AND t.status='pending' AND s.status='pending')"
+    "UPDATE media_invoices SET status='cancelled',updated_at=? WHERE id=? AND tenant_id=? AND status='pending' AND EXISTS (SELECT 1 FROM media_tenants t LEFT JOIN media_subscriptions s ON s.tenant_id=t.id WHERE t.id=? AND t.status='pending' AND COALESCE(s.status,'pending')='pending')"
   ).bind(new Date().toISOString(),invoiceId,user.tenantId,user.tenantId).run();
   if(Number(result.meta?.changes||0)!==1){
     return NextResponse.redirect(new URL("/billing?error=payment-raced",request.url),303);
