@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+type UploadApiResponse = { ok?: boolean; error?: string; etag?: string; partNumber?: number };
+
 type UploadTicket = {
   uploadMode: "r2-multipart" | "presigned";
   reservationId: string;
@@ -63,7 +65,7 @@ export default function UploadClient({bucketId}:{bucketId:string}){
     let signed:UploadTicket|undefined;
     try{
       const sign=await fetch("/api/uploads/sign",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({bucketId,name:file.name,size:file.size,contentType:file.type||"application/octet-stream"})});
-      const response=await sign.json();
+      const response=await sign.json() as UploadApiResponse;
       if(!sign.ok) throw new Error(response.error||"Upload could not start");
       signed=response as UploadTicket;
 
@@ -87,14 +89,14 @@ export default function UploadClient({bucketId}:{bucketId:string}){
             }),
             attempt=>{setProgress(Math.min(99,Math.floor(confirmed/file.size*100)));setStatus("Connection interrupted. Retrying part "+number+" ("+attempt+"/4)...");}
           );
-          const payload=JSON.parse(result);
+          const payload=JSON.parse(result) as UploadApiResponse;
           if(!payload.etag || payload.partNumber!==number) throw new Error("Storage did not acknowledge part "+number);
           parts.push({partNumber:number,etag:payload.etag});
           confirmed+=chunk.size;
         }
         setProgress(99);setStatus("Verifying and saving "+file.name+"...");
         const complete=await fetch("/api/uploads/r2/complete",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({reservationId:signed.reservationId,objectId:signed.objectId,parts})});
-        const payload=await complete.json();
+        const payload=await complete.json() as UploadApiResponse;
         if(!complete.ok || !payload.ok) throw new Error(payload.error||"Storage confirmation failed");
       } else {
         if(!signed.uploadUrl) throw new Error("Storage upload URL missing");
@@ -108,7 +110,7 @@ export default function UploadClient({bucketId}:{bucketId:string}){
         );
         setProgress(99);setStatus("Verifying and saving "+file.name+"...");
         const finalize=await fetch("/api/uploads/finalize",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({reservationId:signed.reservationId,objectId:signed.objectId})});
-        const payload=await finalize.json().catch(()=>({}));
+        const payload=await finalize.json().catch(()=>({})) as UploadApiResponse;
         if(!finalize.ok || !payload.ok) throw new Error(payload.error||"Storage confirmation failed");
       }
       setProgress(100);setSaved(true);setStatus("✓ "+file.name+" successfully uploaded and saved.");

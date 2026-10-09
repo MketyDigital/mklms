@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - media-platform
+      - "codex/**"
+    paths:
+      - "media-platform/**"
+      - ".github/workflows/media-platform-ci.yml"
+  pull_request:
+    branches:
+      - media-platform
     paths:
       - "media-platform/**"
       - ".github/workflows/media-platform-ci.yml"
