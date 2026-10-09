@@ -6,6 +6,8 @@ import { getTenantState } from "../../src/lib/tenant-state";
 import { getMediaDb, getMediaEnv } from "../../src/lib/postgres";
 import { getSetting,getBillingTerms } from "../../src/lib/operator-settings";
 import PaymentMethodsClient from "./PaymentMethodsClient";
+import CancelUnpaidOrder from "./CancelUnpaidOrder";
+import { isFlutterwaveCheckoutConfigured } from "../../src/billing/provider-status";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +35,7 @@ export default async function BillingPage({searchParams}:{searchParams:Promise<R
   const paymentStarted=Boolean(invoice&&(invoice.checkout_provider||String(invoice.payment_method||"invoice")!=="invoice"));
   const runtime=getMediaEnv() as any;
   const nowPaymentsConfigured=Boolean(runtime.NOWPAYMENTS_API_KEY&&runtime.NOWPAYMENTS_IPN_SECRET);
-  const flutterwaveConfigured=Boolean(runtime.FLUTTERWAVE_CHECKOUT_BROKER_URL&&runtime.FLUTTERWAVE_CHECKOUT_BROKER_SECRET);
+  const flutterwaveConfigured=isFlutterwaveCheckoutConfigured(runtime);
   const koraConfigured=Boolean(runtime.KORA_PUBLIC_KEY&&runtime.KORA_SECRET_KEY);
   const telegramBotUsername=String(runtime.MEDIA_TELEGRAM_BOT_USERNAME||"");
   const currentPlan=await db.prepare("SELECT plan_code FROM media_tenants WHERE id=? LIMIT 1").bind(user.tenantId).first<any>();
@@ -66,6 +68,8 @@ export default async function BillingPage({searchParams}:{searchParams:Promise<R
         </>}
       </div>
 
+      {params.cancelled==="1"&&<div className="notice" style={{marginTop:18}}>Your previous unpaid order is cancelled. Choose a plan and continue with a new payment method below.</div>}
+      {params.error==="payment-raced"&&<div className="notice danger" style={{marginTop:18}}>This order changed while we processed your request, so it was not cancelled. Refresh this page to see the current payment status. If you already paid, wait for confirmation or contact Mkety support.</div>}
       {params.payment==="processing"&&<div className="notice" style={{marginTop:18}}>Payment confirmation is being checked. This page will show the updated account status after the provider confirms the transaction.</div>}
 
       {hasPending&&(
@@ -119,12 +123,12 @@ export default async function BillingPage({searchParams}:{searchParams:Promise<R
               <button className="btn secondary">Update plan and continue</button>
               <p className="muted">We’ll replace this unpaid invoice with a fresh one using your new selection.</p>
             </form>
-            <form method="post" action="/api/billing/cancel" style={{marginTop:10}}>
-              <button className="btn secondary">Cancel this payment request</button>
-              <p className="muted">Your account stays saved. You can return later and choose a plan again.</p>
-            </form>
+            <CancelUnpaidOrder invoiceId={String(invoice.id)}/>
           </details>}
-          {state.status==="pending"&&paymentStarted&&<p className="muted">This payment is already in progress. Continue with the same payment method above. If you need to change the order, contact Mkety Support first so we can avoid duplicate or late payments.</p>}
+          {state.status==="pending"&&paymentStarted&&<>
+            <p className="muted">If you have not completed or submitted payment, you can cancel this order and create a fresh one to choose another plan or payment method. Cancelling here cannot reverse a payment already sent to a provider.</p>
+            <CancelUnpaidOrder invoiceId={String(invoice.id)}/>
+          </> }
         </div>
       )}
 

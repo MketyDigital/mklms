@@ -18,8 +18,12 @@ export async function POST(request:Request){
   if(!allowedCurrencies.has(paymentCurrency)) return NextResponse.redirect(new URL("/billing?error=currency",request.url),303);
 
   const db=getMediaDb();
-  const invoice=await db.prepare("SELECT id,reference,amount_usd,status FROM media_invoices WHERE id=? AND tenant_id=? LIMIT 1").bind(invoiceId,user.tenantId).first<any>();
+  const invoice=await db.prepare("SELECT id,reference,amount_usd,status,payment_method,checkout_provider FROM media_invoices WHERE id=? AND tenant_id=? LIMIT 1").bind(invoiceId,user.tenantId).first<any>();
   if(!invoice || invoice.status!=="pending") return NextResponse.redirect(new URL("/billing?error=invoice",request.url),303);
+  if((invoice.checkout_provider&&String(invoice.checkout_provider)!=="flutterwave")||!["invoice","flutterwave"].includes(String(invoice.payment_method||"invoice"))){
+    if(request.headers.get("accept")?.includes("application/json")) return NextResponse.json({ok:false,error:"payment-method-locked",message:"Cancel the current unpaid order before choosing another payment method."},{status:409});
+    return NextResponse.redirect(new URL("/billing?error=payment-method-locked",request.url),303);
+  }
 
   const env=getMediaEnv() as any;
   const brokerUrl=String(env.FLUTTERWAVE_CHECKOUT_BROKER_URL||"").trim();
@@ -75,11 +79,13 @@ export async function POST(request:Request){
     return NextResponse.redirect(new URL("/billing?error=currency-quote",request.url),303);
   }
 
-  await db.batch([
-    db.prepare("UPDATE media_users SET email=? WHERE id=?").bind(email,user.userId),
-    db.prepare("UPDATE media_invoices SET checkout_provider='flutterwave',checkout_amount=?,checkout_currency=?,provider_invoice_id=?,updated_at=datetime('now') WHERE id=? AND status='pending'")
-      .bind(checkoutAmount,checkoutCurrency,"flutterwave:"+String(invoice.reference),invoiceId),
-  ]);
+  const saved=await db.prepare("UPDATE media_invoices SET checkout_provider='flutterwave',checkout_amount=?,checkout_currency=?,provider_invoice_id=?,updated_at=datetime('now') WHERE id=? AND tenant_id=? AND status='pending' AND (checkout_provider IS NULL OR checkout_provider IN ('','flutterwave')) AND payment_method IN ('invoice','flutterwave')")
+    .bind(checkoutAmount,checkoutCurrency,"flutterwave:"+String(invoice.reference),invoiceId,user.tenantId).run();
+  if(Number(saved.meta?.changes||0)!==1){
+    if(request.headers.get("accept")?.includes("application/json")) return NextResponse.json({ok:false,error:"payment-method-locked",message:"This order changed. Refresh billing and choose an available option."},{status:409});
+    return NextResponse.redirect(new URL("/billing?error=payment-method-locked",request.url),303);
+  }
+  await db.prepare("UPDATE media_users SET email=? WHERE id=?").bind(email,user.userId).run();
   if(request.headers.get("accept")?.includes("application/json")){
     return NextResponse.json({
       ok:true,

@@ -18,12 +18,12 @@ export async function settleInvoice(input:{
 }){
   const db=getMediaDb();
   const invoice=await db.prepare(
-    "SELECT i.id,i.tenant_id,i.status,c.billing_term_months,s.current_period_end,p.purchase_type,p.target_plan_code,p.addon_code FROM media_invoices i LEFT JOIN media_tenant_commercial_terms c ON c.tenant_id=i.tenant_id LEFT JOIN media_subscriptions s ON s.tenant_id=i.tenant_id LEFT JOIN media_purchases p ON p.invoice_id=i.id WHERE i.id=? LIMIT 1"
+    "SELECT i.id,i.tenant_id,i.status,i.provider_payment_id,c.billing_term_months,s.current_period_end,p.purchase_type,p.target_plan_code,p.addon_code FROM media_invoices i LEFT JOIN media_tenant_commercial_terms c ON c.tenant_id=i.tenant_id LEFT JOIN media_subscriptions s ON s.tenant_id=i.tenant_id LEFT JOIN media_purchases p ON p.invoice_id=i.id WHERE i.id=? LIMIT 1"
   ).bind(input.invoiceId).first<any>();
 
   if(!invoice) throw new Error("Invoice not found");
-  if(invoice.status==="paid") return {ok:true,alreadyPaid:true};
-  if(invoice.status!=="pending") throw new Error("Invoice is not payable");
+  if(invoice.status==="paid") return {ok:true,alreadyPaid:true,matchedPayment:String(invoice.provider_payment_id||"")===input.paymentId};
+  if(invoice.status!=="pending") return {ok:false,notPayable:true,invoiceStatus:String(invoice.status)};
 
   const purchaseType=String(invoice.purchase_type||"subscription");
   const legacyProvider=input.provider==="flutterwave"||input.provider==="kora"?"invoice":input.provider;
@@ -40,9 +40,9 @@ export async function settleInvoice(input:{
     const targetPlan=String(invoice.target_plan_code||"");
     if(!targetPlan) throw new Error("Upgrade target is missing");
     statements.push(
-      db.prepare("UPDATE media_tenants SET plan_code=?,status='active' WHERE id=?").bind(targetPlan,String(invoice.tenant_id)),
-      db.prepare("UPDATE media_tenant_commercial_terms SET base_plan_code=?,display_name=NULL,monthly_usd=NULL,storage_bytes=NULL,delivery_bytes=NULL,delivery_requests=NULL,logical_buckets=NULL,team_seats=NULL,max_object_bytes=NULL,enterprise_features=0,infrastructure_mode='automatic',preferred_pool_key='r2-global',updated_at=datetime('now') WHERE tenant_id=?").bind(targetPlan,String(invoice.tenant_id)),
-      db.prepare("UPDATE media_subscriptions SET status='active',payment_provider=?,checkout_provider=?,updated_at=? WHERE tenant_id=?").bind(legacyProvider,input.provider,nowIso,String(invoice.tenant_id)),
+      db.prepare("UPDATE media_tenants SET plan_code=?,status='active' WHERE id=? AND EXISTS (SELECT 1 FROM media_invoices WHERE id=? AND status='paid' AND provider_payment_id=?)").bind(targetPlan,String(invoice.tenant_id),input.invoiceId,input.paymentId),
+      db.prepare("UPDATE media_tenant_commercial_terms SET base_plan_code=?,display_name=NULL,monthly_usd=NULL,storage_bytes=NULL,delivery_bytes=NULL,delivery_requests=NULL,logical_buckets=NULL,team_seats=NULL,max_object_bytes=NULL,enterprise_features=0,infrastructure_mode='automatic',preferred_pool_key='r2-global',updated_at=datetime('now') WHERE tenant_id=? AND EXISTS (SELECT 1 FROM media_invoices WHERE id=? AND status='paid' AND provider_payment_id=?)").bind(targetPlan,String(invoice.tenant_id),input.invoiceId,input.paymentId),
+      db.prepare("UPDATE media_subscriptions SET status='active',payment_provider=?,checkout_provider=?,updated_at=? WHERE tenant_id=? AND EXISTS (SELECT 1 FROM media_invoices WHERE id=? AND status='paid' AND provider_payment_id=?)").bind(legacyProvider,input.provider,nowIso,String(invoice.tenant_id),input.invoiceId,input.paymentId),
     );
   } else if(purchaseType==="addon"){
     const addonCode=String(invoice.addon_code||"");
@@ -50,8 +50,8 @@ export async function settleInvoice(input:{
     if(!addon) throw new Error("Add-on product is unavailable");
     if(!periodEnd || new Date(periodEnd).getTime()<=Date.now()) throw new Error("Active paid period required for add-on");
     statements.push(
-      db.prepare("INSERT INTO media_tenant_addons (id,tenant_id,product_code,storage_bytes,delivery_bytes,delivery_requests,starts_at,ends_at,invoice_id) VALUES (?,?,?,?,?,?,?,?,?)")
-        .bind(crypto.randomUUID(),String(invoice.tenant_id),addonCode,Number(addon.storage_bytes||0),Number(addon.delivery_bytes||0),Number(addon.delivery_requests||0),nowIso,periodEnd,input.invoiceId)
+      db.prepare("INSERT INTO media_tenant_addons (id,tenant_id,product_code,storage_bytes,delivery_bytes,delivery_requests,starts_at,ends_at,invoice_id) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM media_invoices WHERE id=? AND status='paid' AND provider_payment_id=?) AND NOT EXISTS (SELECT 1 FROM media_tenant_addons WHERE invoice_id=?)")
+        .bind(crypto.randomUUID(),String(invoice.tenant_id),addonCode,Number(addon.storage_bytes||0),Number(addon.delivery_bytes||0),Number(addon.delivery_requests||0),nowIso,periodEnd,input.invoiceId,input.invoiceId,input.paymentId,input.invoiceId)
     );
   } else {
     const months=Number(invoice.billing_term_months||1);
@@ -59,18 +59,26 @@ export async function settleInvoice(input:{
     const base=existingEnd && existingEnd.getTime()>Date.now()?existingEnd:now;
     periodEnd=addMonths(base,months).toISOString();
     statements.push(
-      db.prepare("UPDATE media_tenants SET status='active' WHERE id=?").bind(String(invoice.tenant_id)),
-      db.prepare("UPDATE media_subscriptions SET status='active',payment_provider=?,checkout_provider=?,current_period_end=?,updated_at=? WHERE tenant_id=?")
-        .bind(legacyProvider,input.provider,periodEnd,nowIso,String(invoice.tenant_id)),
+      db.prepare("UPDATE media_tenants SET status='active' WHERE id=? AND EXISTS (SELECT 1 FROM media_invoices WHERE id=? AND status='paid' AND provider_payment_id=?)").bind(String(invoice.tenant_id),input.invoiceId,input.paymentId),
+      db.prepare("UPDATE media_subscriptions SET status='active',payment_provider=?,checkout_provider=?,current_period_end=?,updated_at=? WHERE tenant_id=? AND EXISTS (SELECT 1 FROM media_invoices WHERE id=? AND status='paid' AND provider_payment_id=?)")
+        .bind(legacyProvider,input.provider,periodEnd,nowIso,String(invoice.tenant_id),input.invoiceId,input.paymentId),
     );
   }
 
   statements.push(
-    db.prepare("INSERT INTO media_audit_log (id,tenant_id,actor_type,actor_id,action,target_type,target_id,metadata_json) VALUES (?,?,'payment',?,'invoice.settled','invoice',?,?)")
-      .bind(crypto.randomUUID(),String(invoice.tenant_id),input.approvedBy||input.provider,input.invoiceId,JSON.stringify({provider:input.provider,paymentId:input.paymentId,purchaseType}))
+    db.prepare("INSERT INTO media_audit_log (id,tenant_id,actor_type,actor_id,action,target_type,target_id,metadata_json) SELECT ?,?,'payment',?,'invoice.settled','invoice',?,? WHERE EXISTS (SELECT 1 FROM media_invoices WHERE id=? AND status='paid' AND provider_payment_id=?) AND NOT EXISTS (SELECT 1 FROM media_audit_log WHERE action='invoice.settled' AND target_id=?)")
+      .bind(crypto.randomUUID(),String(invoice.tenant_id),input.approvedBy||input.provider,input.invoiceId,JSON.stringify({provider:input.provider,paymentId:input.paymentId,purchaseType}),input.invoiceId,input.paymentId,input.invoiceId)
   );
 
   await db.batch(statements);
+
+  const settled=await db.prepare("SELECT status,provider_payment_id FROM media_invoices WHERE id=? LIMIT 1").bind(input.invoiceId).first<any>();
+  if(String(settled?.status||"")!=="paid"){
+    return {ok:false,notPayable:true,invoiceStatus:String(settled?.status||"missing")};
+  }
+  if(String(settled.provider_payment_id||"")!==input.paymentId){
+    return {ok:true,alreadyPaid:true,matchedPayment:false};
+  }
 
   const env=getMediaEnv();
   if(env.BUCKET_DIRECTORY){
@@ -91,4 +99,46 @@ export async function settleInvoice(input:{
   }
 
   return {ok:true,alreadyPaid:false,tenantId:String(invoice.tenant_id),periodEnd,purchaseType};
+}
+
+
+export async function settleVerifiedPayment(input:{
+  invoiceId:string;
+  provider:"nowpayments"|"flutterwave"|"kora";
+  paymentId:string;
+  eventType:string;
+}){
+  const db=getMediaDb();
+  await db.prepare(
+    "INSERT OR IGNORE INTO media_payment_events (id,invoice_id,provider,external_event_id,event_type) VALUES (?,?,?,?,?)"
+  ).bind(crypto.randomUUID(),input.invoiceId,input.provider,input.paymentId,input.eventType).run();
+
+  const result=await settleInvoice({
+    invoiceId:input.invoiceId,
+    provider:input.provider,
+    paymentId:input.paymentId,
+  });
+  const invoice=await db.prepare("SELECT tenant_id,status,provider_payment_id FROM media_invoices WHERE id=? LIMIT 1").bind(input.invoiceId).first<any>();
+  const settled=String(invoice?.status||"")==="paid"&&String(invoice?.provider_payment_id||"")===input.paymentId;
+  if(!settled){
+    await db.batch([
+      db.prepare("UPDATE media_payment_events SET event_type='success_unapplied' WHERE provider=? AND external_event_id=?")
+        .bind(input.provider,input.paymentId),
+      db.prepare("INSERT INTO media_audit_log (id,tenant_id,actor_type,actor_id,action,target_type,target_id,metadata_json) SELECT ?,?,'payment',?,'payment.success_unapplied','invoice',?,? WHERE NOT EXISTS (SELECT 1 FROM media_audit_log WHERE action='payment.success_unapplied' AND actor_id=?)")
+        .bind(
+          crypto.randomUUID(),
+          String(invoice?.tenant_id||""),
+          input.paymentId,
+          input.invoiceId,
+          JSON.stringify({provider:input.provider,invoiceStatus:String(invoice?.status||"missing")}),
+          input.paymentId
+        ),
+    ]);
+  }
+
+  return {
+    settled,
+    duplicate:Boolean(result.alreadyPaid),
+    invoiceStatus:String(invoice?.status||"missing"),
+  };
 }

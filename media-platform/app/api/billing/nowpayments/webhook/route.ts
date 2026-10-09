@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getMediaDb,getMediaEnv } from "../../../../../src/lib/postgres";
 import { verifyNowPaymentsSignature } from "../../../../../src/billing/nowpayments";
-import { settleInvoice } from "../../../../../src/billing/settle";
+import { settleVerifiedPayment } from "../../../../../src/billing/settle";
 
 export async function POST(request:Request){
   const env=getMediaEnv() as any;
@@ -26,11 +26,16 @@ export async function POST(request:Request){
   if(!invoice) return NextResponse.json({ok:false},{status:404});
   if(Number(payload.price_amount||0)+0.01<Number(invoice.amount_usd)) return NextResponse.json({ok:false,message:"amount mismatch"},{status:400});
 
-  const existing=await db.prepare("SELECT id FROM media_payment_events WHERE provider='nowpayments' AND external_event_id=? LIMIT 1").bind(paymentId).first();
-  if(existing) return NextResponse.json({ok:true,settled:true,duplicate:true});
-
-  await db.prepare("INSERT INTO media_payment_events (id,invoice_id,provider,external_event_id,event_type) VALUES (?,?,'nowpayments',?,'finished')")
-    .bind(crypto.randomUUID(),String(invoice.id),paymentId).run();
-  await settleInvoice({invoiceId:String(invoice.id),provider:"nowpayments",paymentId});
-  return NextResponse.json({ok:true,settled:true});
+  const settlement=await settleVerifiedPayment({
+    invoiceId:String(invoice.id),
+    provider:"nowpayments",
+    paymentId:paymentId,
+    eventType:"finished",
+  });
+  return NextResponse.json({
+    ok:true,
+    settled:settlement.settled,
+    duplicate:settlement.duplicate,
+    ...(settlement.settled?{}:{reason:"invoice_not_payable",invoiceStatus:settlement.invoiceStatus}),
+  });
 }
