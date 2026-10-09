@@ -25,6 +25,18 @@ function objectHeaders(object:R2ObjectBody){
   return headers;
 }
 
+function inlinePreview(response:Response,enabled:boolean){
+  if(!enabled) return response;
+  const type=(response.headers.get("content-type")||"").split(";")[0].trim().toLowerCase();
+  const safeTypes=new Set([
+    "image/jpeg","image/png","image/gif","image/webp","image/avif",
+    "video/mp4","video/webm","video/ogg",
+  ]);
+  if(!safeTypes.has(type)) return new Response("Preview is not available for this file type",{status:415,headers:{"Cache-Control":"no-store","X-Content-Type-Options":"nosniff"}});
+  response.headers.set("content-disposition","inline");
+  return response;
+}
+
 function recordUsage(env:Env,route:BucketRoute,bytes:number){
   if(!env.MEDIA_USAGE_ANALYTICS) return;
   env.MEDIA_USAGE_ANALYTICS.writeDataPoint({
@@ -91,7 +103,7 @@ export default {
         const bytes=Number(response.headers.get("content-length")||0);
         recordUsage(env,route,bytes);
         response.headers.set("X-Mkety-Cache","HIT");
-        return response;
+        return inlinePreview(response,url.searchParams.get("preview")==="1");
       }
     }
 
@@ -137,6 +149,8 @@ export default {
 
     response.headers.set("X-Content-Type-Options","nosniff");
     response.headers.set("X-Mkety-Cache","MISS");
+    response=inlinePreview(response,url.searchParams.get("preview")==="1");
+    if(response.status===415) return response;
     const bytes=Number(response.headers.get("content-length")||0);
     recordUsage(env,route,request.method==="GET"?bytes:0);
 
