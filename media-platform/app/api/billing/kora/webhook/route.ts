@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getMediaDb,getMediaEnv } from "../../../../../src/lib/postgres";
 import { verifyKoraCharge,verifyKoraWebhook } from "../../../../../src/billing/kora";
-import { settleInvoice } from "../../../../../src/billing/settle";
+import { settleVerifiedPayment } from "../../../../../src/billing/settle";
 
 export async function POST(request:Request){
   const env=getMediaEnv() as any;
@@ -28,11 +28,16 @@ export async function POST(request:Request){
   if(paid+0.01<Number(invoice.amount_usd)) return NextResponse.json({ok:false,message:"amount mismatch"},{status:400});
 
   const eventId=String(verified.transaction_reference||verified.reference||reference);
-  const existing=await db.prepare("SELECT id FROM media_payment_events WHERE provider='kora' AND external_event_id=? LIMIT 1").bind(eventId).first();
-  if(existing) return NextResponse.json({ok:true,settled:true,duplicate:true});
-
-  await db.prepare("INSERT INTO media_payment_events (id,invoice_id,provider,external_event_id,event_type) VALUES (?,?,'kora',?,'success')")
-    .bind(crypto.randomUUID(),String(invoice.id),eventId).run();
-  await settleInvoice({invoiceId:String(invoice.id),provider:"kora",paymentId:eventId});
-  return NextResponse.json({ok:true,settled:true});
+  const settlement=await settleVerifiedPayment({
+    invoiceId:String(invoice.id),
+    provider:"kora",
+    paymentId:paymentId,
+    eventType:"success",
+  });
+  return NextResponse.json({
+    ok:true,
+    settled:settlement.settled,
+    duplicate:settlement.duplicate,
+    ...(settlement.settled?{}:{reason:"invoice_not_payable",invoiceStatus:settlement.invoiceStatus}),
+  });
 }
