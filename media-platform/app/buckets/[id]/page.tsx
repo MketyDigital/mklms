@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect,notFound } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser } from "../../../src/lib/current-user";
@@ -6,6 +7,7 @@ import UploadClient from "./UploadClient";
 import FileLibrary from "./FileLibrary";
 
 export const dynamic = "force-dynamic";
+export const metadata:Metadata={robots:{index:false,follow:false,nocache:true}};
 
 function shortIdForUuid(id:string){
   const hex=id.replace(/-/g,"");
