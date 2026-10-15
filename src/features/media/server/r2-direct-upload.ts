@@ -67,16 +67,15 @@ function getConfig(): DirectR2Config {
 
 function getClient(
   config: DirectR2Config,
-  options?: { multipartUploadPart?: boolean },
+  options?: { multipart?: boolean },
 ): S3Client {
   return new S3Client({
     region: "auto",
     endpoint: config.endpoint,
     forcePathStyle: true,
-    ...(options?.multipartUploadPart
+    ...(options?.multipart
       ? {
-          // R2 does not support these optional checksum headers on UploadPart.
-          // Keep this compatibility setting off the regular PutObject signing path.
+          // Avoid optional checksum headers on R2 multipart requests; preserve single-upload signing.
           requestChecksumCalculation: "WHEN_REQUIRED" as const,
           responseChecksumValidation: "WHEN_REQUIRED" as const,
         }
@@ -150,7 +149,7 @@ export async function createDirectR2UploadAuthorization(input: {
     };
   }
 
-  const created = await client.send(
+  const created = await getClient(config, { multipart: true }).send(
     new CreateMultipartUploadCommand({
       Bucket: config.bucket,
       Key: objectKey,
@@ -182,7 +181,7 @@ export async function createDirectR2MultipartPartAuthorization(input: {
   const config = getConfig();
   const ttlSeconds = 1800;
   const uploadUrl = await getSignedUrl(
-    getClient(config, { multipartUploadPart: true }),
+    getClient(config, { multipart: true }),
     new UploadPartCommand({
       Bucket: config.bucket,
       Key: input.objectKey,
@@ -215,7 +214,7 @@ export async function completeDirectR2MultipartUpload(input: {
     });
 
   const config = getConfig();
-  await getClient(config).send(
+  await getClient(config, { multipart: true }).send(
     new CompleteMultipartUploadCommand({
       Bucket: config.bucket,
       Key: input.objectKey,
@@ -231,7 +230,7 @@ export async function abortDirectR2MultipartUpload(input: {
 }) {
   if (!isValidDirectMediaObjectKey(input.objectKey) || !input.uploadId) return;
   const config = getConfig();
-  await getClient(config).send(
+  await getClient(config, { multipart: true }).send(
     new AbortMultipartUploadCommand({
       Bucket: config.bucket,
       Key: input.objectKey,

@@ -138,3 +138,46 @@ test('quick test creates an active published session that is live immediately wi
   assert.ok(result.session.startsAt.getTime() <= now.getTime());
   assert.equal(result.session.durationSeconds, 15 * 60);
 });
+
+
+test('exact Zoom recording start syncs wall-clock messages to their video offsets', async () => {
+  const repository = new FakeRepository();
+  repository.sessions.push({ id: 'session-1', batchId: 'batch-1', durationSeconds: 3600 });
+  const service = new AdminLiveClassService(repository);
+  const result = await service.importTimeline('session-1', {
+    format: 'text',
+    recordingStartAtLocal: '2026-05-04T11:37:30',
+    content: '11:37:45 From Mary to Everyone: Welcome\n11:38:30 From Sam to Everyone: Ready',
+  });
+  assert.equal(result.imported, 2);
+  assert.deepEqual(repository.timeline.map((item) => item.offsetSeconds), [15, 60]);
+  assert.equal(result.errors.length, 0);
+});
+
+test('exact recording start rejects simultaneous manual first-message calibration', async () => {
+  const repository = new FakeRepository();
+  repository.sessions.push({ id: 'session-1', batchId: 'batch-1', durationSeconds: 3600 });
+  const service = new AdminLiveClassService(repository);
+  const result = await service.importTimeline('session-1', {
+    format: 'text',
+    recordingStartAtLocal: '2026-05-04T11:37:30',
+    firstMessageAtSeconds: 0,
+    content: '11:37:45 From Mary: Welcome',
+  });
+  assert.equal(result.imported, 0);
+  assert.match(result.errors[0].message, /choose either/i);
+});
+
+test('exact recording-start sync rejects messages before recording rather than silently shifting them', async () => {
+  const repository = new FakeRepository();
+  repository.sessions.push({ id: 'session-1', batchId: 'batch-1', durationSeconds: 3600 });
+  const service = new AdminLiveClassService(repository);
+  const result = await service.importTimeline('session-1', {
+    format: 'text',
+    recordingStartAtLocal: '2026-05-04T11:37:30',
+    content: '11:37:00 From Mary: Before recording',
+  });
+  assert.equal(result.imported, 0);
+  assert.equal(repository.timeline.length, 0);
+  assert.match(result.errors[0].message, /verify the exact recording start/i);
+});

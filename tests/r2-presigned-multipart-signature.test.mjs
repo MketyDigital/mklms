@@ -41,18 +41,28 @@ test('R2 multipart presigned UploadPart omits unsupported flexible-checksum para
   assert.equal(url.searchParams.has('x-amz-checksum-sha256'), false);
 });
 
-test('R2 checksum compatibility is scoped to multipart part signing, preserving direct PutObject signing', () => {
+test('R2 checksum compatibility covers multipart operations while preserving direct PutObject signing', () => {
   const helper = fs.readFileSync('src/features/media/server/r2-direct-upload.ts', 'utf8');
   const directStart = helper.indexOf('export async function createDirectR2UploadAuthorization');
   const partStart = helper.indexOf('export async function createDirectR2MultipartPartAuthorization');
   const completeStart = helper.indexOf('export async function completeDirectR2MultipartUpload');
-  assert.ok(directStart >= 0 && partStart > directStart && completeStart > partStart);
+  const abortStart = helper.indexOf('export async function abortDirectR2MultipartUpload');
+  const verifyStart = helper.indexOf('export async function verifyDirectR2Object');
+  assert.ok(directStart >= 0 && partStart > directStart && completeStart > partStart && abortStart > completeStart && verifyStart > abortStart);
 
-  const directSigning = helper.slice(directStart, partStart);
-  const multipartPartSigning = helper.slice(partStart, completeStart);
-  assert.match(helper, /function getClient\(\s*config: DirectR2Config,\s*options\?: \{ multipartUploadPart\?: boolean \},?\s*\): S3Client/);
-  assert.match(helper, /options\?\.multipartUploadPart[\s\S]*requestChecksumCalculation: "WHEN_REQUIRED"/);
-  assert.match(multipartPartSigning, /getClient\(config, \{ multipartUploadPart: true \}\)/);
-  assert.match(directSigning, /getClient\(config\)/);
-  assert.doesNotMatch(directSigning, /multipartUploadPart|requestChecksumCalculation|responseChecksumValidation/);
+  const initiate = helper.slice(directStart, partStart);
+  const partSigning = helper.slice(partStart, completeStart);
+  const completion = helper.slice(completeStart, abortStart);
+  const abort = helper.slice(abortStart, verifyStart);
+  assert.ok(helper.includes('options?.multipart'));
+  assert.ok(helper.includes('requestChecksumCalculation: "WHEN_REQUIRED"'));
+  assert.ok(initiate.includes('getClient(config, { multipart: true }).send('));
+  assert.ok(partSigning.includes('getClient(config, { multipart: true })'));
+  assert.ok(completion.includes('getClient(config, { multipart: true }).send('));
+  assert.ok(abort.includes('getClient(config, { multipart: true }).send('));
+  const singleUpload = initiate.slice(0, initiate.indexOf('const created'));
+  assert.ok(singleUpload.includes('const client = getClient(config);'));
+  assert.ok(!singleUpload.includes('getClient(config, { multipart: true })'));
+  assert.ok(!singleUpload.includes('requestChecksumCalculation'));
+  assert.ok(!singleUpload.includes('responseChecksumValidation'));
 });
