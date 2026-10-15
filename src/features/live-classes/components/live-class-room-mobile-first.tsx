@@ -502,7 +502,7 @@ export function LiveClassRoomMobileFirst({
         if (currentState?.state !== "LIVE") return;
 
         const video = currentAudioVideo();
-        let needsRecovery =
+        const needsRecovery =
           !video ||
           video.paused ||
           video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA;
