@@ -9,13 +9,13 @@ function read(path) {
 test('live player renews authorization without jumping an active viewer backward or to a new live offset', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
 
-  assert.match(source, /sameLoadedMedia\s*&&\s*!forceLiveEdge/);
+  assert.match(source, /sameLoadedMedia\s*&&\s*currentVideo/);
   assert.match(source, /targetVideo\.currentTime\s*=\s*currentVideo\.currentTime/);
   assert.match(source, /currentVideo\.currentTime - targetVideo\.currentTime > 0\.75/);
   assert.match(source, /preservedPosition/);
   assert.match(source, /video\.currentTime\s*<\s*target/);
   assert.match(source, /const recoveringPausedPlayback =[\s\S]*video\.paused \|\| video\.readyState < HTMLMediaElement\.HAVE_FUTURE_DATA/);
-  assert.match(source, /if \(recoveringPausedPlayback\)[\s\S]*correctPosition\(video\)/);
+  assert.match(source, /if \(recoveringPausedPlayback\)[\s\S]*forceLiveEdgeOnNextAuthorizationRef\.current = false/);
 });
 
 test('foreground rollover never seeks a new session using stale previous-session timing', () => {
@@ -129,11 +129,11 @@ test('returning to a healthy visible live player does not mute or rebuild it unn
   const refresh = source.slice(refreshStart, refreshEnd);
 
   assert.ok(refreshStart >= 0 && refreshEnd > refreshStart, 'foreground recovery block must exist');
-  assert.match(refresh, /let needsRecovery =/);
+  assert.match(refresh, /const needsRecovery =/);
   assert.match(refresh, /video\.paused/);
   assert.match(refresh, /video\.readyState < HTMLMediaElement\.HAVE_FUTURE_DATA/);
-  assert.match(refresh, /video\.currentTime < expectedSeconds/);
-  assert.match(refresh, /shouldCorrectBroadcastPosition/);
+  assert.doesNotMatch(refresh, /video\.currentTime < expectedSeconds/);
+  assert.doesNotMatch(refresh, /shouldCorrectBroadcastPosition/);
   assert.match(refresh, /if \(!needsRecovery\)[\s\S]*forceLiveEdgeOnNextAuthorizationRef\.current = false[\s\S]*setActivePlaybackBlocked\(false\)[\s\S]*return/);
   assert.doesNotMatch(refresh, /setMuted\(true\)/);
   assert.doesNotMatch(refresh, /video\.muted = true/);
@@ -218,7 +218,7 @@ test('silent visible mobile freezes are detected even when the browser emits no 
 test('persistent waiting or stalled media recovers only after a guarded timeout and cancels on playing', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
 
-  assert.match(source, /LIVE_STALL_RECOVERY_MS = 8_000/);
+  assert.match(source, /LIVE_STALL_RECOVERY_MS = 12_000/);
   assert.match(source, /onWaiting=\{\(event\) => scheduleStallRecovery\(event\.currentTarget\)\}/);
   assert.match(source, /onStalled=\{\(event\) => scheduleStallRecovery\(event\.currentTarget\)\}/);
   assert.match(source, /video !== currentAudioVideo\(\)/);
@@ -226,6 +226,86 @@ test('persistent waiting or stalled media recovers only after a guarded timeout 
   assert.match(source, /roomStateRef\.current\?\.state !== "LIVE"/);
   assert.match(source, /video\.readyState >= HTMLMediaElement\.HAVE_FUTURE_DATA/);
   assert.match(source, /clearStallRecovery\(\);[\s\S]*setNeedsPlaybackGesture\(false\)/);
+});
+
+test('playback authorization is single-flight so concurrent recovery signals cannot race source swaps', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+  const requestStart = source.indexOf('const requestPlayback = useCallback');
+  const requestEnd = source.indexOf('\n  useEffect(() => {', requestStart);
+  const request = source.slice(requestStart, requestEnd);
+
+  assert.match(request, /playbackRequestRef\.current/);
+  assert.match(request, /if \(playbackRequestRef\.current\) return playbackRequestRef\.current/);
+  assert.match(request, /playbackRequestRef\.current = request/);
+  assert.match(request, /playbackRequestRef\.current === request/);
+  assert.match(request, /playbackRequestRef\.current = null/);
+});
+
+test('weak-network waiting events preserve useful buffering before forcing a DIRECT source rebuild', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+  const start = source.indexOf('const scheduleStallRecovery = useCallback');
+  const end = source.indexOf('\n  useEffect(() => {', start);
+  const handler = source.slice(start, end);
+
+  assert.match(handler, /if \(stallRecoveryTimerRef\.current !== null\) return/);
+  assert.match(handler, /const stalledAtSeconds = video\.currentTime/);
+  assert.match(handler, /Math\.abs\(video\.currentTime - stalledAtSeconds\) >= 0\.5/);
+  assert.match(handler, /authorization\?\.playbackType === "HLS"/);
+  assert.match(handler, /keepPlaybackRunning\(video, \{ preferAudio: false \}\)/);
+  assert.match(handler, /LIVE_FORCED_RECOVERY_COOLDOWN_MS/);
+  assert.doesNotMatch(handler, /clearStallRecovery\(\);[\s\S]*stallRecoveryTimerRef\.current = window\.setTimeout/);
+});
+
+test('HLS uses conservative adaptive buffering and local fatal recovery before authorization rebuild', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+
+  assert.match(source, /capLevelToPlayerSize: true/);
+  assert.match(source, /abrBandWidthFactor: 0\.75/);
+  assert.match(source, /abrBandWidthUpFactor: 0\.6/);
+  assert.match(source, /maxBufferLength: 45/);
+  assert.match(source, /fragLoadingMaxRetry: 6/);
+  assert.match(source, /Hls\.Events\.FRAG_BUFFERED/);
+  assert.match(source, /Hls\.ErrorTypes\.NETWORK_ERROR[\s\S]*hls\.startLoad\(\)/);
+  assert.match(source, /Hls\.ErrorTypes\.MEDIA_ERROR[\s\S]*hls\.recoverMediaError\(\)/);
+  assert.match(source, /LIVE_HLS_FATAL_RECOVERY_ATTEMPTS = 3/);
+});
+
+test('staged chat follows the actual media position when playback falls behind the live wall clock', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+
+  assert.match(source, /const currentPlaybackOffsetSeconds = playedOffsetSeconds/);
+  assert.match(source, /loadedMediaSessionRef\.current === active/);
+  assert.match(source, /Math\.min\(currentLiveOffsetSeconds, playedOffsetSeconds\)/);
+  assert.match(source, /getNewTimelineMessages\([\s\S]*currentPlaybackOffsetSeconds/);
+  assert.match(source, /getInitialTimelineMessages\([\s\S]*currentPlaybackOffsetSeconds/);
+});
+
+test('large DIRECT MP4 recovery preserves played position even when forced and samples chat only in an effect', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+  assert.match(source, /sameLoadedMedia\s*&&\s*currentVideo\s*&&\s*Number\.isFinite\(currentVideo\.currentTime\)/);
+  assert.match(source, /targetVideo\.currentTime = currentVideo\.currentTime/);
+  assert.match(source, /const \[playedOffsetSeconds, setPlayedOffsetSeconds\] = useState/);
+  assert.match(source, /setPlayedOffsetSeconds\(/);
+  assert.match(source, /lastForcedRecoveryAtRef\.current = recoveryNow/);
+  const begin = source.indexOf('const currentPlaybackOffsetSeconds =');
+  const end = source.indexOf('const timelineSource =', begin);
+  assert.doesNotMatch(source.slice(begin, end), /\.current/);
+});
+
+test('healthy DIRECT playback ignores browser native seek and foreground wall-clock drift', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+  const seekingStart = source.indexOf('const handleSeeking =');
+  const seekingEnd = source.indexOf('const scheduleStallRecovery =', seekingStart);
+  const seeking = source.slice(seekingStart, seekingEnd);
+
+  assert.match(seeking, /playbackType === "DIRECT"/);
+  assert.match(seeking, /loadedMediaSessionRef\.current === playbackRef\.current\?\.sessionId/);
+  assert.match(seeking, /const target = expectedPosition\(\)/);
+
+  const foregroundStart = source.indexOf('const refreshVisiblePlayback =');
+  const foregroundEnd = source.indexOf('const onVisibilityChange =', foregroundStart);
+  const foreground = source.slice(foregroundStart, foregroundEnd);
+  assert.doesNotMatch(foreground, /shouldCorrectBroadcastPosition/);
 });
 
 test('visibility return and playback errors explicitly rejoin the authoritative live edge', () => {
