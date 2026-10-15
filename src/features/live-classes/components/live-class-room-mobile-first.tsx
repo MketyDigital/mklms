@@ -77,11 +77,13 @@ const SHARED_CHAT_REFRESH_MS = 3_000;
 const LIVE_CHAT_INITIAL_CONTEXT = 10;
 const LIVE_CHAT_MAX_RENDERED = 80;
 const LIVE_CHAT_BOTTOM_THRESHOLD_PX = 48;
-const LIVE_STALL_RECOVERY_MS = 8_000;
+const LIVE_STALL_RECOVERY_MS = 12_000;
 const LIVE_SILENT_FREEZE_RECOVERY_MS = 10_000;
 const LIVE_PROGRESS_SAMPLE_MS = 2_500;
 const LIVE_AUTHORIZATION_RETRY_MS = 2_000;
 const LIVE_FRAME_READY_TIMEOUT_MS = 5_000;
+const LIVE_FORCED_RECOVERY_COOLDOWN_MS = 20_000;
+const LIVE_HLS_FATAL_RECOVERY_ATTEMPTS = 3;
 
 type DirectSlot = 0 | 1;
 
@@ -172,6 +174,8 @@ export function LiveClassRoomMobileFirst({
   const mutedRef = useRef(true);
   const stallRecoveryTimerRef = useRef<number | null>(null);
   const authorizationRetryTimerRef = useRef<number | null>(null);
+  const playbackRequestRef = useRef<Promise<PlaybackState> | null>(null);
+  const lastForcedRecoveryAtRef = useRef(0);
   const silentFreezeSampleRef = useRef<{
     video: HTMLVideoElement;
     currentTime: number;
@@ -188,6 +192,7 @@ export function LiveClassRoomMobileFirst({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(0);
+  const [playedOffsetSeconds, setPlayedOffsetSeconds] = useState<number | null>(null);
   const [muted, setMuted] = useState(true);
   const [needsPlaybackGesture, setNeedsPlaybackGesture] = useState(false);
   const [activePlaybackBlocked, setActivePlaybackBlocked] = useState(false);
@@ -417,32 +422,45 @@ export function LiveClassRoomMobileFirst({
   }, [slug]);
 
   const requestPlayback = useCallback(async () => {
-    const response = await fetch(`/api/live/${encodeURIComponent(slug)}/playback`, {
-      method: "POST",
-      cache: "no-store",
-      credentials: "same-origin",
-    });
-    const payload = (await response.json()) as {
-      ok?: boolean;
-      sessionId?: string;
-      startAtSeconds?: number;
-      testMode?: boolean;
-      authorization?: PlaybackAuthorization | null;
-      message?: string;
-    };
-    if (!response.ok || !payload.ok || !payload.sessionId) {
-      throw new Error(payload.message ?? "Live broadcast is not available yet.");
+    if (playbackRequestRef.current) return playbackRequestRef.current;
+
+    const request = (async () => {
+      const response = await fetch(`/api/live/${encodeURIComponent(slug)}/playback`, {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      const payload = (await response.json()) as {
+        ok?: boolean;
+        sessionId?: string;
+        startAtSeconds?: number;
+        testMode?: boolean;
+        authorization?: PlaybackAuthorization | null;
+        message?: string;
+      };
+      if (!response.ok || !payload.ok || !payload.sessionId) {
+        throw new Error(payload.message ?? "Live broadcast is not available yet.");
+      }
+      const next: PlaybackState = {
+        sessionId: payload.sessionId,
+        startAtSeconds: payload.startAtSeconds ?? 0,
+        testMode: payload.testMode === true,
+        authorization: payload.authorization ?? null,
+      };
+      playbackRef.current = next;
+      setPlayback(next);
+      setError(null);
+      return next;
+    })();
+
+    playbackRequestRef.current = request;
+    try {
+      return await request;
+    } finally {
+      if (playbackRequestRef.current === request) {
+        playbackRequestRef.current = null;
+      }
     }
-    const next: PlaybackState = {
-      sessionId: payload.sessionId,
-      startAtSeconds: payload.startAtSeconds ?? 0,
-      testMode: payload.testMode === true,
-      authorization: payload.authorization ?? null,
-    };
-    playbackRef.current = next;
-    setPlayback(next);
-    setError(null);
-    return next;
   }, [slug]);
 
   useEffect(() => {
@@ -458,7 +476,19 @@ export function LiveClassRoomMobileFirst({
           if (active) setLoading(false);
         });
     }, 0);
-    const clock = window.setInterval(() => setNowMs(synchronizedNowMs()), 1_000);
+    const clock = window.setInterval(() => {
+      setNowMs(synchronizedNowMs());
+      const video = currentAudioVideo();
+      const active = roomStateRef.current?.session?.id;
+      setPlayedOffsetSeconds(
+        active &&
+        loadedMediaSessionRef.current === active &&
+        video &&
+        Number.isFinite(video.currentTime)
+          ? Math.max(0, video.currentTime)
+          : null,
+      );
+    }, 1_000);
     const safetyRefresh = window.setInterval(
       () => void fetchState().catch(() => undefined),
       SAFETY_STATE_REFRESH_MS,
@@ -472,31 +502,15 @@ export function LiveClassRoomMobileFirst({
         if (currentState?.state !== "LIVE") return;
 
         const video = currentAudioVideo();
-        let needsRecovery =
+        const needsRecovery =
           !video ||
           video.paused ||
           video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA;
 
-        if (
-          !needsRecovery &&
-          video &&
-          currentState.session &&
-          currentState.liveOffsetSeconds !== null &&
-          playbackRef.current?.sessionId === currentState.session.id
-        ) {
-          const expectedSeconds = resolveBroadcastPosition({
-            liveOffsetSeconds: currentState.liveOffsetSeconds,
-            serverNow: new Date(currentState.serverNow),
-            clientNow: new Date(synchronizedNowMs()),
-            durationSeconds: currentState.session.durationSeconds,
-          });
-          needsRecovery =
-            video.currentTime < expectedSeconds &&
-            shouldCorrectBroadcastPosition({
-              currentSeconds: video.currentTime,
-              expectedSeconds,
-            });
-        }
+        // A healthy large DIRECT MP4 may legitimately trail the simulated
+        // broadcast clock on mobile data. Never discard its buffer solely
+        // because it is behind; recover only a genuinely paused/unready player.
+        // The initial join still seeks to the authoritative session offset.
 
         if (!needsRecovery) {
           forceLiveEdgeOnNextAuthorizationRef.current = false;
@@ -661,6 +675,12 @@ export function LiveClassRoomMobileFirst({
     });
   }, [nowMs, roomState]);
 
+  // Read media progress in the interval, never during React render. A stalled
+  // DIRECT MP4 must not advance prerecorded chat beyond the displayed frame.
+  const currentPlaybackOffsetSeconds = playedOffsetSeconds === null
+    ? currentLiveOffsetSeconds
+    : Math.min(currentLiveOffsetSeconds, playedOffsetSeconds);
+
   const timelineSource = useMemo(() => {
     if (!roomState || roomState.state !== "LIVE") return [];
     return chatFeedLoaded ? stagedChat : roomState.chat.staged;
@@ -672,13 +692,13 @@ export function LiveClassRoomMobileFirst({
     const timer = window.setTimeout(() => {
       const reached = getNewTimelineMessages(
         timelineSource,
-        currentLiveOffsetSeconds,
+        currentPlaybackOffsetSeconds,
         new Set<string>(),
       );
       seenStagedMessageIdsRef.current = new Set(reached.map((item) => item.id));
       const initial = getInitialTimelineMessages(
         timelineSource,
-        currentLiveOffsetSeconds,
+        currentPlaybackOffsetSeconds,
         LIVE_CHAT_INITIAL_CONTEXT,
       );
       setLiveChatStream(initial.map(stagedStreamItem));
@@ -690,7 +710,7 @@ export function LiveClassRoomMobileFirst({
   }, [
     activeSessionId,
     chatFeedLoaded,
-    currentLiveOffsetSeconds,
+    currentPlaybackOffsetSeconds,
     streamSeeded,
     timelineSource,
   ]);
@@ -699,7 +719,7 @@ export function LiveClassRoomMobileFirst({
     if (!activeSessionId || !streamSeeded) return;
     const newlyReached = getNewTimelineMessages(
       timelineSource,
-      currentLiveOffsetSeconds,
+      currentPlaybackOffsetSeconds,
       seenStagedMessageIdsRef.current,
     );
     if (newlyReached.length === 0) return;
@@ -714,7 +734,7 @@ export function LiveClassRoomMobileFirst({
     return () => window.clearTimeout(timer);
   }, [
     activeSessionId,
-    currentLiveOffsetSeconds,
+    currentPlaybackOffsetSeconds,
     isFollowingLiveChat,
     streamSeeded,
     timelineSource,
@@ -845,10 +865,12 @@ export function LiveClassRoomMobileFirst({
         if (generation !== directSwapGenerationRef.current) return;
         if (
           sameLoadedMedia &&
-          !forceLiveEdge &&
           currentVideo &&
           Number.isFinite(currentVideo.currentTime)
         ) {
+          // A stalled 400MB+ MP4 may have downloaded useful data already.
+          // Recovery must resume where the viewer was watching rather than
+          // jumping forward to a new wall-clock live offset.
           targetVideo.currentTime = currentVideo.currentTime;
         } else {
           correctPosition(targetVideo);
@@ -1002,17 +1024,59 @@ export function LiveClassRoomMobileFirst({
           setError("This browser cannot play the live stream.");
           return;
         }
-        const hls = new Hls({ enableWorker: true });
+        const hls = new Hls({
+          enableWorker: true,
+          capLevelToPlayerSize: true,
+          abrBandWidthFactor: 0.75,
+          abrBandWidthUpFactor: 0.6,
+          maxBufferLength: 45,
+          maxMaxBufferLength: 90,
+          backBufferLength: 30,
+          manifestLoadingMaxRetry: 4,
+          levelLoadingMaxRetry: 4,
+          fragLoadingMaxRetry: 6,
+          manifestLoadingRetryDelay: 750,
+          levelLoadingRetryDelay: 750,
+          fragLoadingRetryDelay: 750,
+        });
+        let fatalRecoveryAttempts = 0;
         destroyHls = () => hls.destroy();
         hls.loadSource(authorization.url);
         hls.attachMedia(video);
         hls.on(Hls.Events.MANIFEST_PARSED, positionAtLiveEdge);
+        hls.on(Hls.Events.FRAG_BUFFERED, () => {
+          fatalRecoveryAttempts = 0;
+          clearStallRecovery();
+        });
         hls.on(Hls.Events.ERROR, (_event, data) => {
-          if (data.fatal) {
-            setActivePlaybackBlocked(true);
-            setNeedsPlaybackGesture(true);
-            setError("The live stream could not be loaded.");
+          if (!data.fatal || destroyed) return;
+
+          if (
+            data.type === Hls.ErrorTypes.NETWORK_ERROR &&
+            fatalRecoveryAttempts < LIVE_HLS_FATAL_RECOVERY_ATTEMPTS
+          ) {
+            fatalRecoveryAttempts += 1;
+            hls.startLoad();
+            return;
           }
+
+          if (
+            data.type === Hls.ErrorTypes.MEDIA_ERROR &&
+            fatalRecoveryAttempts < LIVE_HLS_FATAL_RECOVERY_ATTEMPTS
+          ) {
+            fatalRecoveryAttempts += 1;
+            hls.recoverMediaError();
+            return;
+          }
+
+          setActivePlaybackBlocked(true);
+          forceLiveEdgeOnNextAuthorizationRef.current = true;
+          void requestPlayback().catch(() => {
+            if (video === currentAudioVideo()) {
+              setNeedsPlaybackGesture(true);
+              setError("The live stream could not be loaded.");
+            }
+          });
         });
       });
     }
@@ -1022,10 +1086,13 @@ export function LiveClassRoomMobileFirst({
       destroyHls?.();
     };
   }, [
+    clearStallRecovery,
     correctPosition,
+    currentAudioVideo,
     directVideoForSlot,
     keepPlaybackRunning,
     playback,
+    requestPlayback,
     roomState?.state,
     setDirectSlot,
   ]);
@@ -1098,6 +1165,14 @@ export function LiveClassRoomMobileFirst({
 
   const handleSeeking = (video: HTMLVideoElement) => {
     if (video !== currentAudioVideo()) return;
+    // The native MP4 decoder may seek internally when a slow byte-range
+    // request resumes. For a session already joined, do not chase the wall
+    // clock and throw away buffered progress. Initial join is positioned in
+    // the loadedmetadata handler before the session is marked loaded.
+    if (
+      playbackRef.current?.authorization?.playbackType === "DIRECT" &&
+      loadedMediaSessionRef.current === playbackRef.current?.sessionId
+    ) return;
     const target = expectedPosition();
     if (
       video.currentTime < target &&
@@ -1115,17 +1190,43 @@ export function LiveClassRoomMobileFirst({
       video !== currentAudioVideo() ||
       loadedMediaSessionRef.current !== playbackRef.current?.sessionId
     ) return;
-    clearStallRecovery();
+
+    // waiting/stalled can fire repeatedly on a weak connection. Do not reset
+    // the timeout for every event or create overlapping authorization requests.
+    if (stallRecoveryTimerRef.current !== null) return;
+
+    const stalledAtSeconds = video.currentTime;
     stallRecoveryTimerRef.current = window.setTimeout(() => {
       stallRecoveryTimerRef.current = null;
       if (
         video !== currentAudioVideo() ||
-        roomStateRef.current?.state !== "LIVE" ||
-        (!video.paused && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA)
+        roomStateRef.current?.state !== "LIVE"
       ) {
         return;
       }
+
+      const progressed = Math.abs(video.currentTime - stalledAtSeconds) >= 0.5;
+      const hasFutureData = video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA;
+      if (progressed || (!video.paused && hasFutureData)) {
+        setActivePlaybackBlocked(false);
+        return;
+      }
+
       setActivePlaybackBlocked(true);
+
+      // hls.js has its own fragment/network recovery and keeps useful buffered
+      // media. Reauthorizing on every slow fragment throws that buffer away.
+      if (playbackRef.current?.authorization?.playbackType === "HLS") {
+        void keepPlaybackRunning(video, { preferAudio: false });
+        return;
+      }
+
+      const now = window.performance.now();
+      if (now - lastForcedRecoveryAtRef.current < LIVE_FORCED_RECOVERY_COOLDOWN_MS) {
+        void keepPlaybackRunning(video, { preferAudio: false });
+        return;
+      }
+      lastForcedRecoveryAtRef.current = now;
       forceLiveEdgeOnNextAuthorizationRef.current = true;
       void requestPlayback().catch(() => {
         const activeVideo = currentAudioVideo();
@@ -1137,7 +1238,11 @@ export function LiveClassRoomMobileFirst({
         }
       });
     }, LIVE_STALL_RECOVERY_MS);
-  }, [clearStallRecovery, currentAudioVideo, requestPlayback]);
+  }, [
+    currentAudioVideo,
+    keepPlaybackRunning,
+    requestPlayback,
+  ]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -1188,6 +1293,18 @@ export function LiveClassRoomMobileFirst({
         currentTime: video.currentTime,
         sampledAtMs: now,
       };
+      // Preserve the existing download and seek position on poor connections;
+      // avoid tearing down the MP4 for every silent 10-second buffering gap.
+      const recoveryNow = window.performance.now();
+      if (
+        playbackRef.current?.authorization?.playbackType === "DIRECT" &&
+        recoveryNow - lastForcedRecoveryAtRef.current < LIVE_FORCED_RECOVERY_COOLDOWN_MS
+      ) {
+        return;
+      }
+      if (playbackRef.current?.authorization?.playbackType === "DIRECT") {
+        lastForcedRecoveryAtRef.current = recoveryNow;
+      }
       setActivePlaybackBlocked(true);
       forceLiveEdgeOnNextAuthorizationRef.current = true;
       void requestPlayback().catch(() => {
@@ -1269,8 +1386,9 @@ export function LiveClassRoomMobileFirst({
       // A plain "Tap to hear audio" never seeks. Only an actually paused/
       // suspended player is moved to the authoritative live edge before resume.
       if (recoveringPausedPlayback) {
-        forceLiveEdgeOnNextAuthorizationRef.current = true;
-        correctPosition(video);
+        // Resume from the buffered position first. A forced seek on a slow
+        // MP4 connection discards progress and can restart buffering.
+        forceLiveEdgeOnNextAuthorizationRef.current = false;
       }
 
       try {
