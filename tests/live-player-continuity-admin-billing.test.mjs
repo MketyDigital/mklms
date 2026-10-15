@@ -9,13 +9,13 @@ function read(path) {
 test('live player renews authorization without jumping an active viewer backward or to a new live offset', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
 
-  assert.match(source, /sameLoadedMedia\s*&&\s*!forceLiveEdge/);
+  assert.match(source, /sameLoadedMedia\s*&&\s*currentVideo/);
   assert.match(source, /targetVideo\.currentTime\s*=\s*currentVideo\.currentTime/);
   assert.match(source, /currentVideo\.currentTime - targetVideo\.currentTime > 0\.75/);
   assert.match(source, /preservedPosition/);
   assert.match(source, /video\.currentTime\s*<\s*target/);
   assert.match(source, /const recoveringPausedPlayback =[\s\S]*video\.paused \|\| video\.readyState < HTMLMediaElement\.HAVE_FUTURE_DATA/);
-  assert.match(source, /if \(recoveringPausedPlayback\)[\s\S]*correctPosition\(video\)/);
+  assert.match(source, /if \(recoveringPausedPlayback\)[\s\S]*forceLiveEdgeOnNextAuthorizationRef\.current = false/);
 });
 
 test('foreground rollover never seeks a new session using stale previous-session timing', () => {
@@ -273,11 +273,23 @@ test('HLS uses conservative adaptive buffering and local fatal recovery before a
 test('staged chat follows the actual media position when playback falls behind the live wall clock', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
 
-  assert.match(source, /const currentPlaybackOffsetSeconds = useMemo/);
-  assert.match(source, /loadedMediaSessionRef\.current !== activeSessionId/);
-  assert.match(source, /Math\.min\(currentLiveOffsetSeconds, Math\.max\(0, video\.currentTime\)\)/);
+  assert.match(source, /const currentPlaybackOffsetSeconds = playedOffsetSeconds/);
+  assert.match(source, /loadedMediaSessionRef\.current === active/);
+  assert.match(source, /Math\.min\(currentLiveOffsetSeconds, playedOffsetSeconds\)/);
   assert.match(source, /getNewTimelineMessages\([\s\S]*currentPlaybackOffsetSeconds/);
   assert.match(source, /getInitialTimelineMessages\([\s\S]*currentPlaybackOffsetSeconds/);
+});
+
+test('large DIRECT MP4 recovery preserves played position even when forced and samples chat only in an effect', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+  assert.match(source, /sameLoadedMedia\s*&&\s*currentVideo\s*&&\s*Number\.isFinite\(currentVideo\.currentTime\)/);
+  assert.match(source, /targetVideo\.currentTime = currentVideo\.currentTime/);
+  assert.match(source, /const \[playedOffsetSeconds, setPlayedOffsetSeconds\] = useState/);
+  assert.match(source, /setPlayedOffsetSeconds\(/);
+  assert.match(source, /lastForcedRecoveryAtRef\.current = recoveryNow/);
+  const begin = source.indexOf('const currentPlaybackOffsetSeconds =');
+  const end = source.indexOf('const timelineSource =', begin);
+  assert.doesNotMatch(source.slice(begin, end), /\.current/);
 });
 
 test('visibility return and playback errors explicitly rejoin the authoritative live edge', () => {
