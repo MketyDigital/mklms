@@ -46,11 +46,17 @@ jobs:
           curl --silent --show-error --fail-with-body "$api" \
             -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' > "$runs_file"
           # The second parent of a production merge is its tested main SHA.
-          main_sha="$(git rev-parse "$GITHUB_SHA^2" 2>/dev/null || true)"
-          if [ -n "$main_sha" ] && jq -e --arg sha "$main_sha" '.workflow_runs | any(.head_sha == $sha and .conclusion == "success")' "$runs_file" >/dev/null; then
-            source_sha="$main_sha"
-          elif ! jq -e --arg sha "$source_sha" '.workflow_runs | any(.head_sha == $sha and .conclusion == "success")' "$runs_file" >/dev/null; then
-            echo "No successful exact-source CI for production or promoted main SHA." >&2
+          # Only reuse a tested merge parent when application contents match
+          # byte-for-byte; allow changes solely to this release workflow.
+          while read -r ancestor; do
+            candidate="$(git rev-parse "$ancestor^2" 2>/dev/null || true)"
+            if [ -n "$candidate" ] && git diff --quiet "$candidate" "$GITHUB_SHA" -- . ':(exclude).github/workflows/release-starpips-production.yml' && jq -e --arg sha "$candidate" '.workflow_runs | any(.head_sha == $sha and .conclusion == "success")' "$runs_file" >/dev/null; then
+              source_sha="$candidate"
+              break
+            fi
+          done < <(git rev-list --first-parent -n 20 "$GITHUB_SHA")
+          if ! jq -e --arg sha "$source_sha" '.workflow_runs | any(.head_sha == $sha and .conclusion == "success")' "$runs_file" >/dev/null; then
+            echo "No successful CI for application-identical promoted main commit." >&2
             exit 1
           fi
           run_id="$(jq -er --arg sha "$source_sha" '[.workflow_runs[] | select(.head_sha == $sha and .conclusion == "success")] | sort_by(.run_started_at) | last | .id' "$runs_file")"
@@ -135,11 +141,17 @@ jobs:
           curl --silent --show-error --fail-with-body "$api" \
             -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' > "$runs_file"
           # The second parent of a production merge is its tested main SHA.
-          main_sha="$(git rev-parse "$GITHUB_SHA^2" 2>/dev/null || true)"
-          if [ -n "$main_sha" ] && jq -e --arg sha "$main_sha" '.workflow_runs | any(.head_sha == $sha and .conclusion == "success")' "$runs_file" >/dev/null; then
-            source_sha="$main_sha"
-          elif ! jq -e --arg sha "$source_sha" '.workflow_runs | any(.head_sha == $sha and .conclusion == "success")' "$runs_file" >/dev/null; then
-            echo "No successful exact-source CI for production or promoted main SHA." >&2
+          # Only reuse a tested merge parent when application contents match
+          # byte-for-byte; allow changes solely to this release workflow.
+          while read -r ancestor; do
+            candidate="$(git rev-parse "$ancestor^2" 2>/dev/null || true)"
+            if [ -n "$candidate" ] && git diff --quiet "$candidate" "$GITHUB_SHA" -- . ':(exclude).github/workflows/release-starpips-production.yml' && jq -e --arg sha "$candidate" '.workflow_runs | any(.head_sha == $sha and .conclusion == "success")' "$runs_file" >/dev/null; then
+              source_sha="$candidate"
+              break
+            fi
+          done < <(git rev-list --first-parent -n 20 "$GITHUB_SHA")
+          if ! jq -e --arg sha "$source_sha" '.workflow_runs | any(.head_sha == $sha and .conclusion == "success")' "$runs_file" >/dev/null; then
+            echo "No successful CI for application-identical promoted main commit." >&2
             exit 1
           fi
           run_id="$(jq -er --arg sha "$source_sha" '[.workflow_runs[] | select(.head_sha == $sha and .conclusion == "success")] | sort_by(.run_started_at) | last | .id' "$runs_file")"
