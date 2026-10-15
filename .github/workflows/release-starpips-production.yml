@@ -45,8 +45,13 @@ jobs:
           api="https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/phase1-ci.yml/runs?branch=main&status=success&per_page=100"
           curl --silent --show-error --fail-with-body "$api" \
             -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' > "$runs_file"
-          if ! jq -e --arg sha "$source_sha" '.workflow_runs | any(.head_sha == $sha and .conclusion == "success")' "$runs_file" >/dev/null; then
-            source_sha="$(git rev-parse "$GITHUB_SHA^")"
+          # The second parent of a production merge is its tested main SHA.
+          main_sha="$(git rev-parse "$GITHUB_SHA^2" 2>/dev/null || true)"
+          if [ -n "$main_sha" ] && jq -e --arg sha "$main_sha" '.workflow_runs | any(.head_sha == $sha and .conclusion == "success")' "$runs_file" >/dev/null; then
+            source_sha="$main_sha"
+          elif ! jq -e --arg sha "$source_sha" '.workflow_runs | any(.head_sha == $sha and .conclusion == "success")' "$runs_file" >/dev/null; then
+            echo "No successful exact-source CI for production or promoted main SHA." >&2
+            exit 1
           fi
           run_id="$(jq -er --arg sha "$source_sha" '[.workflow_runs[] | select(.head_sha == $sha and .conclusion == "success")] | sort_by(.run_started_at) | last | .id' "$runs_file")"
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
@@ -129,8 +134,13 @@ jobs:
           api="https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/phase1-ci.yml/runs?branch=main&status=success&per_page=100"
           curl --silent --show-error --fail-with-body "$api" \
             -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' > "$runs_file"
-          if ! jq -e --arg sha "$source_sha" '.workflow_runs | any(.head_sha == $sha and .conclusion == "success")' "$runs_file" >/dev/null; then
-            source_sha="$(git rev-parse "$GITHUB_SHA^")"
+          # The second parent of a production merge is its tested main SHA.
+          main_sha="$(git rev-parse "$GITHUB_SHA^2" 2>/dev/null || true)"
+          if [ -n "$main_sha" ] && jq -e --arg sha "$main_sha" '.workflow_runs | any(.head_sha == $sha and .conclusion == "success")' "$runs_file" >/dev/null; then
+            source_sha="$main_sha"
+          elif ! jq -e --arg sha "$source_sha" '.workflow_runs | any(.head_sha == $sha and .conclusion == "success")' "$runs_file" >/dev/null; then
+            echo "No successful exact-source CI for production or promoted main SHA." >&2
+            exit 1
           fi
           run_id="$(jq -er --arg sha "$source_sha" '[.workflow_runs[] | select(.head_sha == $sha and .conclusion == "success")] | sort_by(.run_started_at) | last | .id' "$runs_file")"
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
