@@ -507,26 +507,10 @@ export function LiveClassRoomMobileFirst({
           video.paused ||
           video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA;
 
-        if (
-          !needsRecovery &&
-          video &&
-          currentState.session &&
-          currentState.liveOffsetSeconds !== null &&
-          playbackRef.current?.sessionId === currentState.session.id
-        ) {
-          const expectedSeconds = resolveBroadcastPosition({
-            liveOffsetSeconds: currentState.liveOffsetSeconds,
-            serverNow: new Date(currentState.serverNow),
-            clientNow: new Date(synchronizedNowMs()),
-            durationSeconds: currentState.session.durationSeconds,
-          });
-          needsRecovery =
-            video.currentTime < expectedSeconds &&
-            shouldCorrectBroadcastPosition({
-              currentSeconds: video.currentTime,
-              expectedSeconds,
-            });
-        }
+        // A healthy large DIRECT MP4 may legitimately trail the simulated
+        // broadcast clock on mobile data. Never discard its buffer solely
+        // because it is behind; recover only a genuinely paused/unready player.
+        // The initial join still seeks to the authoritative session offset.
 
         if (!needsRecovery) {
           forceLiveEdgeOnNextAuthorizationRef.current = false;
@@ -1181,6 +1165,14 @@ export function LiveClassRoomMobileFirst({
 
   const handleSeeking = (video: HTMLVideoElement) => {
     if (video !== currentAudioVideo()) return;
+    // The native MP4 decoder may seek internally when a slow byte-range
+    // request resumes. For a session already joined, do not chase the wall
+    // clock and throw away buffered progress. Initial join is positioned in
+    // the loadedmetadata handler before the session is marked loaded.
+    if (
+      playbackRef.current?.authorization?.playbackType === "DIRECT" &&
+      loadedMediaSessionRef.current === playbackRef.current?.sessionId
+    ) return;
     const target = expectedPosition();
     if (
       video.currentTime < target &&
