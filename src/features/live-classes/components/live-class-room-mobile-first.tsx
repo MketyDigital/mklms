@@ -192,6 +192,7 @@ export function LiveClassRoomMobileFirst({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(0);
+  const [playedOffsetSeconds, setPlayedOffsetSeconds] = useState<number | null>(null);
   const [muted, setMuted] = useState(true);
   const [needsPlaybackGesture, setNeedsPlaybackGesture] = useState(false);
   const [activePlaybackBlocked, setActivePlaybackBlocked] = useState(false);
@@ -475,7 +476,19 @@ export function LiveClassRoomMobileFirst({
           if (active) setLoading(false);
         });
     }, 0);
-    const clock = window.setInterval(() => setNowMs(synchronizedNowMs()), 1_000);
+    const clock = window.setInterval(() => {
+      setNowMs(synchronizedNowMs());
+      const video = currentAudioVideo();
+      const active = roomStateRef.current?.session?.id;
+      setPlayedOffsetSeconds(
+        active &&
+        loadedMediaSessionRef.current === active &&
+        video &&
+        Number.isFinite(video.currentTime)
+          ? Math.max(0, video.currentTime)
+          : null,
+      );
+    }, 1_000);
     const safetyRefresh = window.setInterval(
       () => void fetchState().catch(() => undefined),
       SAFETY_STATE_REFRESH_MS,
@@ -678,23 +691,11 @@ export function LiveClassRoomMobileFirst({
     });
   }, [nowMs, roomState]);
 
-  const currentPlaybackOffsetSeconds = useMemo(() => {
-    const video = currentAudioVideo();
-    if (
-      !activeSessionId ||
-      loadedMediaSessionRef.current !== activeSessionId ||
-      !video ||
-      !Number.isFinite(video.currentTime)
-    ) {
-      return currentLiveOffsetSeconds;
-    }
-
-    // Keep staged chat tied to what the viewer can actually see. On a weak
-    // connection the authoritative wall clock can move ahead while media is
-    // buffering; advancing staged comments during that gap makes the room feel
-    // like both the video and chat are jumping independently.
-    return Math.min(currentLiveOffsetSeconds, Math.max(0, video.currentTime));
-  }, [activeSessionId, currentAudioVideo, currentLiveOffsetSeconds]);
+  // Read media progress in the interval, never during React render. A stalled
+  // DIRECT MP4 must not advance prerecorded chat beyond the displayed frame.
+  const currentPlaybackOffsetSeconds = playedOffsetSeconds === null
+    ? currentLiveOffsetSeconds
+    : Math.min(currentLiveOffsetSeconds, playedOffsetSeconds);
 
   const timelineSource = useMemo(() => {
     if (!roomState || roomState.state !== "LIVE") return [];
@@ -880,10 +881,12 @@ export function LiveClassRoomMobileFirst({
         if (generation !== directSwapGenerationRef.current) return;
         if (
           sameLoadedMedia &&
-          !forceLiveEdge &&
           currentVideo &&
           Number.isFinite(currentVideo.currentTime)
         ) {
+          // A stalled 400MB+ MP4 may have downloaded useful data already.
+          // Recovery must resume where the viewer was watching rather than
+          // jumping forward to a new wall-clock live offset.
           targetVideo.currentTime = currentVideo.currentTime;
         } else {
           correctPosition(targetVideo);
@@ -1298,6 +1301,18 @@ export function LiveClassRoomMobileFirst({
         currentTime: video.currentTime,
         sampledAtMs: now,
       };
+      // Preserve the existing download and seek position on poor connections;
+      // avoid tearing down the MP4 for every silent 10-second buffering gap.
+      const recoveryNow = window.performance.now();
+      if (
+        playbackRef.current?.authorization?.playbackType === "DIRECT" &&
+        recoveryNow - lastForcedRecoveryAtRef.current < LIVE_FORCED_RECOVERY_COOLDOWN_MS
+      ) {
+        return;
+      }
+      if (playbackRef.current?.authorization?.playbackType === "DIRECT") {
+        lastForcedRecoveryAtRef.current = recoveryNow;
+      }
       setActivePlaybackBlocked(true);
       forceLiveEdgeOnNextAuthorizationRef.current = true;
       void requestPlayback().catch(() => {
@@ -1379,8 +1394,9 @@ export function LiveClassRoomMobileFirst({
       // A plain "Tap to hear audio" never seeks. Only an actually paused/
       // suspended player is moved to the authoritative live edge before resume.
       if (recoveringPausedPlayback) {
-        forceLiveEdgeOnNextAuthorizationRef.current = true;
-        correctPosition(video);
+        // Resume from the buffered position first. A forced seek on a slow
+        // MP4 connection discards progress and can restart buffering.
+        forceLiveEdgeOnNextAuthorizationRef.current = false;
       }
 
       try {
