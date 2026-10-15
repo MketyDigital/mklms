@@ -1099,10 +1099,13 @@ export function LiveClassRoomMobileFirst({
       destroyHls?.();
     };
   }, [
+    clearStallRecovery,
     correctPosition,
+    currentAudioVideo,
     directVideoForSlot,
     keepPlaybackRunning,
     playback,
+    requestPlayback,
     roomState?.state,
     setDirectSlot,
   ]);
