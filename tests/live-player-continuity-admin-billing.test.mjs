@@ -129,11 +129,11 @@ test('returning to a healthy visible live player does not mute or rebuild it unn
   const refresh = source.slice(refreshStart, refreshEnd);
 
   assert.ok(refreshStart >= 0 && refreshEnd > refreshStart, 'foreground recovery block must exist');
-  assert.match(refresh, /let needsRecovery =/);
+  assert.match(refresh, /const needsRecovery =/);
   assert.match(refresh, /video\.paused/);
   assert.match(refresh, /video\.readyState < HTMLMediaElement\.HAVE_FUTURE_DATA/);
-  assert.match(refresh, /video\.currentTime < expectedSeconds/);
-  assert.match(refresh, /shouldCorrectBroadcastPosition/);
+  assert.doesNotMatch(refresh, /video\.currentTime < expectedSeconds/);
+  assert.doesNotMatch(refresh, /shouldCorrectBroadcastPosition/);
   assert.match(refresh, /if \(!needsRecovery\)[\s\S]*forceLiveEdgeOnNextAuthorizationRef\.current = false[\s\S]*setActivePlaybackBlocked\(false\)[\s\S]*return/);
   assert.doesNotMatch(refresh, /setMuted\(true\)/);
   assert.doesNotMatch(refresh, /video\.muted = true/);
@@ -290,6 +290,22 @@ test('large DIRECT MP4 recovery preserves played position even when forced and s
   const begin = source.indexOf('const currentPlaybackOffsetSeconds =');
   const end = source.indexOf('const timelineSource =', begin);
   assert.doesNotMatch(source.slice(begin, end), /\.current/);
+});
+
+test('healthy DIRECT playback ignores browser native seek and foreground wall-clock drift', () => {
+  const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+  const seekingStart = source.indexOf('const handleSeeking =');
+  const seekingEnd = source.indexOf('const scheduleStallRecovery =', seekingStart);
+  const seeking = source.slice(seekingStart, seekingEnd);
+
+  assert.match(seeking, /playbackType === "DIRECT"/);
+  assert.match(seeking, /loadedMediaSessionRef\.current === playbackRef\.current\?\.sessionId/);
+  assert.match(seeking, /const target = expectedPosition\(\)/);
+
+  const foregroundStart = source.indexOf('const refreshVisiblePlayback =');
+  const foregroundEnd = source.indexOf('const onVisibilityChange =', foregroundStart);
+  const foreground = source.slice(foregroundStart, foregroundEnd);
+  assert.doesNotMatch(foreground, /shouldCorrectBroadcastPosition/);
 });
 
 test('visibility return and playback errors explicitly rejoin the authoritative live edge', () => {
