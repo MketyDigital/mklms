@@ -192,7 +192,6 @@ export function LiveClassRoomMobileFirst({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(0);
-  const [playedOffsetSeconds, setPlayedOffsetSeconds] = useState<number | null>(null);
   const [muted, setMuted] = useState(true);
   const [needsPlaybackGesture, setNeedsPlaybackGesture] = useState(false);
   const [activePlaybackBlocked, setActivePlaybackBlocked] = useState(false);
@@ -478,16 +477,6 @@ export function LiveClassRoomMobileFirst({
     }, 0);
     const clock = window.setInterval(() => {
       setNowMs(synchronizedNowMs());
-      const video = currentAudioVideo();
-      const active = roomStateRef.current?.session?.id;
-      setPlayedOffsetSeconds(
-        active &&
-        loadedMediaSessionRef.current === active &&
-        video &&
-        Number.isFinite(video.currentTime)
-          ? Math.max(0, video.currentTime)
-          : null,
-      );
     }, 1_000);
     const safetyRefresh = window.setInterval(
       () => void fetchState().catch(() => undefined),
@@ -513,7 +502,12 @@ export function LiveClassRoomMobileFirst({
           playbackRef.current?.sessionId === currentState.session?.id &&
           shouldCorrectBroadcastPosition({
             currentSeconds: video.currentTime,
-            expectedSeconds: expectedPosition(),
+            expectedSeconds: resolveBroadcastPosition({
+              liveOffsetSeconds: currentState.liveOffsetSeconds ?? 0,
+              serverNow: new Date(currentState.serverNow),
+              clientNow: new Date(synchronizedNowMs()),
+              durationSeconds: currentState.session?.durationSeconds ?? 0,
+            }),
           });
 
         // A healthy large DIRECT MP4 may legitimately trail the simulated
