@@ -5,10 +5,22 @@ import {readFileSync} from 'node:fs';
 import {activateD1AllActiveCourse} from '../src/lib/d1-all-active-enrollment.ts';
 import {allActiveEnrollmentId} from '../src/lib/all-active-enrollment-id.ts';
 
-function d1ForSqlite(db){
- return {prepare(sql){return {bind(...values){return {
-  async run(){const out=db.prepare(sql).run(...values);return {success:true,meta:{changes:Number(out.changes)}}}
- }}},batch(){throw Error('unused')}}};
+function d1ForSqlite(db) {
+  return {
+    prepare(sql) {
+      return {
+        bind(...values) {
+          return {
+            async run() {
+              const out = db.prepare(sql).run(...values);
+              return { success: true, meta: { changes: Number(out.changes) } };
+            }
+          };
+        }
+      };
+    },
+    async batch() { throw Error('unused'); }
+  };
 }
 test('D1 enrollment SQL matches PostgreSQL deterministic IDs and preserves completions',async()=>{
  const db=new DatabaseSync(':memory:');
