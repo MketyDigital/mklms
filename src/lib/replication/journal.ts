@@ -212,3 +212,88 @@ export async function readD1JournalBatch(
   });
   return ensureOrderedBatch(rows, identity, cursor, limit);
 }
+
+/** Read one complete source transaction. Checkpoints must never land mid-transaction. */
+export async function readNextPostgresJournalTransaction(
+  pool: Pick<Pool, "query">,
+  identity: JournalStreamIdentity,
+  afterSequence: string,
+  limit: number,
+): Promise<ReplicationJournalEntry[]> {
+  if (identity.sourceBackend !== "postgresql") {
+    throw new Error("PostgreSQL transaction reader requires a PostgreSQL source identity.");
+  }
+  const cursor = validateReadRequest(identity, afterSequence, limit);
+  const next = await pool.query<{ transaction_id: unknown }>(
+    `SELECT transaction_id
+       FROM mklms_replication_journal
+      WHERE installation_id = $1 AND source_backend = $2
+        AND source_epoch = $3::BIGINT AND sequence > $4::BIGINT
+      ORDER BY sequence ASC LIMIT 1`,
+    [identity.installationId, identity.sourceBackend, identity.sourceEpoch, cursor],
+  );
+  const transactionId = next.rows[0]?.transaction_id;
+  if (transactionId === undefined) return [];
+  if (typeof transactionId !== "string" || !transactionId.trim()) {
+    throw new Error("Replication source returned an invalid transaction ID.");
+  }
+  const result = await pool.query<RawJournalRow>(
+    `SELECT sequence::TEXT AS sequence, installation_id, source_backend,
+            source_epoch::TEXT AS source_epoch, schema_version, transaction_id,
+            table_name, record_key, operation, payload, idempotency_key,
+            occurred_at::TEXT AS occurred_at
+       FROM mklms_replication_journal
+      WHERE installation_id = $1 AND source_backend = $2
+        AND source_epoch = $3::BIGINT AND transaction_id = $4
+      ORDER BY sequence ASC LIMIT $5`,
+    [identity.installationId, identity.sourceBackend, identity.sourceEpoch, transactionId, limit + 1],
+  );
+  if (result.rows.length === 0) throw new Error("Replication source transaction disappeared during read.");
+  if (result.rows.length > limit) throw new Error(`Replication source transaction exceeds the ${limit}-entry limit.`);
+  if (BigInt(String(result.rows[0].sequence)) <= BigInt(cursor)) {
+    throw new Error("Replication cursor splits a source transaction.");
+  }
+  return ensureOrderedBatch(result.rows, identity, cursor, limit);
+}
+
+/** Read one complete source transaction. Checkpoints must never land mid-transaction. */
+export async function readNextD1JournalTransaction(
+  db: D1DatabaseLike,
+  identity: JournalStreamIdentity,
+  afterSequence: string,
+  limit: number,
+): Promise<ReplicationJournalEntry[]> {
+  if (identity.sourceBackend !== "d1") {
+    throw new Error("D1 transaction reader requires a D1 source identity.");
+  }
+  const cursor = validateReadRequest(identity, afterSequence, limit);
+  const next = await queryD1Rows<{ transaction_id: unknown }>(db, {
+    sql: `SELECT transaction_id
+            FROM mklms_replication_journal
+           WHERE installation_id = ? AND source_backend = ?
+             AND source_epoch = ? AND sequence > ?
+           ORDER BY sequence ASC LIMIT 1`,
+    params: [identity.installationId, identity.sourceBackend, identity.sourceEpoch, cursor],
+  });
+  const transactionId = next[0]?.transaction_id;
+  if (transactionId === undefined) return [];
+  if (typeof transactionId !== "string" || !transactionId.trim()) {
+    throw new Error("Replication source returned an invalid transaction ID.");
+  }
+  const rows = await queryD1Rows<RawJournalRow>(db, {
+    sql: `SELECT sequence, installation_id, source_backend, source_epoch,
+                 schema_version, transaction_id, table_name, record_key,
+                 operation, payload, idempotency_key, occurred_at
+            FROM mklms_replication_journal
+           WHERE installation_id = ? AND source_backend = ?
+             AND source_epoch = ? AND transaction_id = ?
+           ORDER BY sequence ASC LIMIT ?`,
+    params: [identity.installationId, identity.sourceBackend, identity.sourceEpoch, transactionId, limit + 1],
+  });
+  if (rows.length === 0) throw new Error("Replication source transaction disappeared during read.");
+  if (rows.length > limit) throw new Error(`Replication source transaction exceeds the ${limit}-entry limit.`);
+  if (BigInt(String(rows[0].sequence)) <= BigInt(cursor)) {
+    throw new Error("Replication cursor splits a source transaction.");
+  }
+  return ensureOrderedBatch(rows, identity, cursor, limit);
+}
