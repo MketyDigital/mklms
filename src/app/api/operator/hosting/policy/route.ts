@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { PostgresManagedHostingRepository } from "@/features/hosting/repositories/postgres-managed-hosting.repository";
+import { createPostgresManagedHostingRepository } from "@/features/hosting/repositories/hosting-repository.factory";
 import { isValidManagedHostingOperatorKey } from "@/features/hosting/server/hosting-operator-auth";
 import { getEffectiveManagedHostingPolicy } from "@/features/hosting/server/managed-hosting-policy";
 
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, message: "Invalid operator key." }, { status: 403 });
   }
 
-  const repository = new PostgresManagedHostingRepository();
+  const repository = createPostgresManagedHostingRepository();
   const [stored, effective] = await Promise.all([
     repository.getOperatorPolicy(),
     getEffectiveManagedHostingPolicy(repository),
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "Invalid hosting policy." }, { status: 400 });
   }
 
-  const policy = await new PostgresManagedHostingRepository().upsertOperatorPolicy({
+  const policy = await createPostgresManagedHostingRepository().upsertOperatorPolicy({
     enabled: parsed.data.enabled,
     minimumMonthlyFeeUsd: parsed.data.minimumMonthlyFeeUsd,
     maximumMonthlyFeeUsd: parsed.data.maximumMonthlyFeeUsd,

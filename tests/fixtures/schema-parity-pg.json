@@ -1,0 +1,8 @@
+{
+  "tables": [{ "name": "students" }],
+  "columns": [{ "table": "students", "name": "id", "type": "text", "nullable": false, "default": null }],
+  "indexes": [{ "table": "students", "name": "students_email_uq", "unique": true, "partial": false, "columns": ["email"] }],
+  "foreignKeys": [{ "table": "enrollments", "name": "enrollments_student_fk", "columns": ["student_id"], "refTable": "students", "refColumns": ["id"], "onDelete": "CASCADE" }],
+  "checks": [{ "table": "students", "name": "students_status_ck", "expression": "status IN ('ACTIVE','INACTIVE')" }],
+  "triggers": [{ "table": "students", "name": "students_activate_trigger", "timing": "AFTER INSERT", "body": "..." }]
+}

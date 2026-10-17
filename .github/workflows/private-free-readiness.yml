@@ -15,6 +15,10 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       STARPIPS_DATABASE_URL: ${{ secrets.STARPIPS_DATABASE_URL }}
       STARPIPS_DATABASE_SSL: ${{ secrets.STARPIPS_DATABASE_SSL }}
+      MKETY_DB_HOST: ${{ secrets.MKETY_DB_HOST }}
+      MKETY_DB_PORT: ${{ secrets.MKETY_DB_PORT }}
+      MKETY_DB_NAME: ${{ secrets.MKETY_DB_NAME }}
+      MKETY_DB_USER: ${{ secrets.MKETY_DB_USER }}
       MKETY_DB_PASSWORD: ${{ secrets.MKETY_DB_PASSWORD }}
       MKETY_ADMIN_ACCESS_KEY: ${{ secrets.MKETY_ADMIN_ACCESS_KEY }}
       MKETY_ADMIN_SESSION_SECRET: ${{ secrets.MKETY_ADMIN_SESSION_SECRET }}
@@ -34,6 +38,10 @@ jobs:
             CLOUDFLARE_API_TOKEN \
             STARPIPS_DATABASE_URL \
             STARPIPS_DATABASE_SSL \
+            MKETY_DB_HOST \
+            MKETY_DB_PORT \
+            MKETY_DB_NAME \
+            MKETY_DB_USER \
             MKETY_DB_PASSWORD \
             MKETY_ADMIN_ACCESS_KEY \
             MKETY_ADMIN_SESSION_SECRET \
@@ -66,6 +74,10 @@ jobs:
         run: |
           set -euo pipefail
           grep -q 'secrets.MKETY_DB_PASSWORD' .github/workflows/mkety-academy-release.yml
+          for name in MKETY_DB_HOST MKETY_DB_PORT MKETY_DB_NAME MKETY_DB_USER; do
+            grep -q "secrets.\$name" .github/workflows/deploy-mkety-installation.yml
+            grep -q "secrets.\$name" .github/workflows/provision-mkety-installation.yml
+          done
           grep -q 'secrets.MKETY_ADMIN_ACCESS_KEY' .github/workflows/mkety-academy-release.yml
           grep -q 'secrets.MKETY_MANAGED_HOSTING_OPERATOR_KEY' .github/workflows/mkety-academy-release.yml
           grep -q 'workflow_call:' .github/workflows/deploy-installation-preview.yml

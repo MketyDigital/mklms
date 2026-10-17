@@ -49,6 +49,7 @@ function pickApp(config) {
     build: config.build,
     assets: config.assets,
     observability: config.observability,
+    d1_databases: config.d1_databases,
     hyperdrive: config.hyperdrive,
     r2_buckets: config.r2_buckets,
     ratelimits: config.ratelimits,

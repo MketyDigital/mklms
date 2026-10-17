@@ -45,7 +45,7 @@ These are shared control-plane credentials for the Mkety Cloudflare account. Ins
 - `STARPIPS_DATABASE_URL`
 - `STARPIPS_DATABASE_SSL`
 
-`STARPIPS_DATABASE_URL` must contain the same Starpips database connection currently used by the old `database-migrations` environment secret `MKLMS_DATABASE_URL`. GitHub does not reveal an existing secret value, so re-enter the original Starpips database URL from the authoritative credential source. Do not point it at the connected Mkety Supabase database.
+`STARPIPS_DATABASE_URL` must contain the same Starpips database connection currently used by the old `database-migrations` environment secret `MKLMS_DATABASE_URL`. GitHub does not reveal an existing secret value, so re-enter the original Starpips database URL from the authoritative credential source. Never point it at another installation's database.
 
 `STARPIPS_DATABASE_SSL` must likewise preserve the exact existing `MKLMS_DATABASE_SSL` value rather than guessing it.
 
@@ -54,6 +54,11 @@ These are shared control-plane credentials for the Mkety Cloudflare account. Ins
 - `MKETY_ADMIN_ACCESS_KEY`
 - `MKETY_ADMIN_SESSION_SECRET`
 - `MKETY_MEDIA_SIGNING_SECRET`
+- `MKETY_DB_HOST`
+- `MKETY_DB_PORT`
+- `MKETY_DB_NAME`
+- `MKETY_DB_USER`
+- `MKETY_DB_PASSWORD`
 
 The following remain optional unless those features are enabled:
 

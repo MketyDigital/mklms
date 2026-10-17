@@ -1,0 +1,14 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+import { readdir, readFile } from 'node:fs/promises';
+import { D1SettingsRepository } from '../src/features/settings/repositories/d1-settings.repository.ts';
+import { DEFAULT_PLATFORM_SETTINGS } from '../src/features/settings/platform-settings.ts';
+
+function d1(db){return{prepare(sql){let p=[];const s={bind(...v){p=v;return s;},async all(){return{success:true,results:db.prepare(sql).all(...p)};},async first(){return db.prepare(sql).get(...p)??null;},async run(){return{success:true,meta:{changes:Number(db.prepare(sql).run(...p).changes)}};}};return s;}};}
+async function setup(){const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON');for(const f of(await readdir('db/d1-migrations')).filter(f=>f.endsWith('.sql')).sort())db.exec(await readFile(`db/d1-migrations/${f}`,'utf8'));return{db,repo:new D1SettingsRepository(d1(db))};}
+
+test('D1 settings repository returns the same defaults as the PostgreSQL contract',async()=>{const{db,repo}=await setup();try{assert.deepEqual(await repo.getPlatformSettings(),DEFAULT_PLATFORM_SETTINGS);}finally{db.close();}});
+test('D1 settings save and read preserve fields and normalize legacy providers/font/base URL',async()=>{const{db,repo}=await setup();try{await repo.savePlatformSettings({...DEFAULT_PLATFORM_SETTINGS,organizationName:'Academy',productName:'Portal',publicBaseUrl:'https://example.test/',fontFamily:'  Ubuntu  Sans ',storageProvider:'oci',mediaProvider:'oci-media-flow',emailProvider:'smtp',notificationProvider:'telegram',claimVerificationStrategy:'manual-approval',completionCommunityUrl:' https://community.test '});const actual=await repo.getPlatformSettings();assert.equal(actual.organizationName,'Academy');assert.equal(actual.publicBaseUrl,'https://example.test');assert.equal(actual.fontFamily,'Ubuntu Sans');assert.equal(actual.storageProvider,'r2');assert.equal(actual.mediaProvider,'custom');assert.equal(actual.emailProvider,'smtp');assert.equal(actual.notificationProvider,'telegram');assert.equal(actual.completionCommunityUrl,'https://community.test');const row=db.prepare("SELECT access_provider,storage_provider,media_provider FROM platform_settings WHERE id='default'").get();assert.equal(row.access_provider,'access-code');assert.equal(row.storage_provider,'r2');assert.equal(row.media_provider,'custom');
+}finally{db.close();}});
+test('D1 settings reject unknown singleton IDs in the underlying store contract',async()=>{const{db}=await setup();try{const{D1PlatformSettingsStore}=await import('../src/features/settings/repositories/d1-platform-settings.store.ts');const store=new D1PlatformSettingsStore(d1(db));await assert.rejects(store.write({id:'other'}),/ID must be default/);}finally{db.close();}});

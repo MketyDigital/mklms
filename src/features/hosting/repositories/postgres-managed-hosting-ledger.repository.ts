@@ -1,7 +1,7 @@
 import type { Pool } from "pg";
 
-import { getPostgresPool } from "@/lib/postgres";
-import { getBillingMonthKey, type StreamingActivityBand } from "../domain/managed-hosting";
+import { getPostgresPool } from "../../../lib/postgres.ts";
+import { getBillingMonthKey, type StreamingActivityBand } from "../domain/managed-hosting.ts";
 
 export interface ManagedHostingLedgerEntry {
   billingDate: string;
@@ -44,7 +44,11 @@ function mapRow(row: {
 }
 
 export class PostgresManagedHostingLedgerRepository {
-  constructor(private readonly pool: Pool = getPostgresPool()) {}
+  private readonly pool: Pool;
+
+  constructor(pool: Pool = getPostgresPool()) {
+    this.pool = pool;
+  }
 
   async recordDailySnapshot(input: {
     now?: Date;

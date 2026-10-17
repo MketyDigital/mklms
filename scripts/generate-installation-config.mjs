@@ -20,6 +20,10 @@ function relocateAppConfig(config) {
       ...config.assets,
       directory: '../../.open-next/assets',
     },
+    d1_databases: config.d1_databases?.map((database) => ({
+      ...database,
+      migrations_dir: `../../${database.migrations_dir}`,
+    })),
   };
 }
 

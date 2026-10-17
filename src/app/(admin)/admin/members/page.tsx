@@ -1,12 +1,12 @@
 import { AppLayout } from "@/components/layout/app-layout";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { PostgresAdminAccessRepository } from "@/features/access/repositories/postgres-admin-access.repository";
+import { createPostgresAdminAccessRepository } from "@/features/access/repositories/access-repository.factory";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminMembersPage() {
-  const students = await new PostgresAdminAccessRepository().listStudents(500);
+  const students = await createPostgresAdminAccessRepository().listStudents(500);
 
   return (
     <AppLayout user={{ name: "MkLMS Admin", email: "", avatar: undefined }} isAdmin={true} unreadMessages={0}>

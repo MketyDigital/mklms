@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
-import { PostgresCertificateTemplateRepository } from "@/features/certificates/repositories/postgres-certificate-template.repository";
+import { createPostgresCertificateTemplateRepository } from "@/features/certificates/repositories/certificate-repository.factory";
 import {
   DEFAULT_CERTIFICATE_VISUAL_LAYOUT,
   parseCertificateVisualLayout,
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     });
 
     const visualLayout = parseVisualLayout(form);
-    const id = await new PostgresCertificateTemplateRepository().createTemplate({
+    const id = await createPostgresCertificateTemplateRepository().createTemplate({
       name,
       courseId,
       backgroundAssetId: stored.assetId,

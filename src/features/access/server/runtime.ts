@@ -4,10 +4,10 @@ import {
   CLAIM_VERIFICATION_STRATEGIES,
   type ClaimVerificationStrategy,
 } from "../domain/claim-verification";
-import { PostgresAccessRepository } from "../repositories/postgres-access.repository";
+import { createPostgresAccessRepository } from "../repositories/access-repository.factory";
 import { AccessLoginService } from "../services/access-login.service";
 import { AccessService } from "../services/access.service";
-import { getPostgresPool } from "@/lib/postgres";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 
 export interface RuntimeAccessSettings {
   accessCodePrefix: string;
@@ -26,23 +26,12 @@ function parseClaimVerificationStrategy(
 }
 
 export async function getRuntimeAccessSettings(): Promise<RuntimeAccessSettings> {
-  const pool = getPostgresPool();
-  const result = await pool.query<{
-    access_code_prefix: string;
-    claim_verification_strategy: string;
-  }>(
-    `SELECT access_code_prefix, claim_verification_strategy
-     FROM platform_settings
-     ORDER BY created_at ASC
-     LIMIT 1`,
-  );
-
-  const row = result.rows[0];
+  const settings = await createPostgresSettingsRepository().getPlatformSettings();
   return {
     accessCodePrefix:
-      row?.access_code_prefix || process.env.MKLMS_ACCESS_CODE_PREFIX || "ACCESS",
+      settings.accessCodePrefix || process.env.MKLMS_ACCESS_CODE_PREFIX || "ACCESS",
     claimVerificationStrategy: parseClaimVerificationStrategy(
-      row?.claim_verification_strategy ||
+      settings.claimVerificationStrategy ||
         process.env.MKLMS_CLAIM_VERIFICATION_STRATEGY,
     ),
     sessionTtlSeconds: Number(
@@ -52,7 +41,7 @@ export async function getRuntimeAccessSettings(): Promise<RuntimeAccessSettings>
 }
 
 export async function getAccessRuntime() {
-  const repository = new PostgresAccessRepository(getPostgresPool());
+  const repository = createPostgresAccessRepository();
   const settings = await getRuntimeAccessSettings();
 
   return {

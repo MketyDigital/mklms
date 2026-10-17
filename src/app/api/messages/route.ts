@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getCurrentStudentSession } from "@/features/access/server/current-student";
-import { PostgresMessageRepository } from "@/features/messages/repositories/postgres-message.repository";
+import { createPostgresMessageRepository } from "@/features/messages/repositories/message-repository.factory";
 import {
   consumeDistributedRateLimit,
   FixedWindowRateLimiter,
@@ -19,7 +19,7 @@ export async function GET() {
     return NextResponse.json({ ok: false, message: "Unauthorized." }, { status: 401 });
   }
 
-  const messages = await new PostgresMessageRepository().listStudentMessages(session.studentId);
+  const messages = await createPostgresMessageRepository().listStudentMessages(session.studentId);
   return NextResponse.json({ ok: true, messages }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "Message cannot be empty." }, { status: 400 });
   }
 
-  const message = await new PostgresMessageRepository().sendStudentMessage(
+  const message = await createPostgresMessageRepository().sendStudentMessage(
     session.studentId,
     session.displayName,
     parsed.data.text,

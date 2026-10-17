@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
-import { PostgresAdminMediaRepository } from "@/features/media/repositories/postgres-admin-media.repository";
+import { createPostgresAdminMediaRepository } from "@/features/media/repositories/media-repository.factory";
 
 const createSchema = z.object({
   title: z.string().trim().min(1),
@@ -17,7 +17,7 @@ export async function GET() {
   if (!(await hasValidAdminSession())) {
     return NextResponse.json({ ok: false, message: "Unauthorized." }, { status: 401 });
   }
-  const assets = await new PostgresAdminMediaRepository().listAssets();
+  const assets = await createPostgresAdminMediaRepository().listAssets();
   return NextResponse.json({ ok: true, assets });
 }
 
@@ -31,6 +31,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "Invalid media asset details." }, { status: 400 });
   }
 
-  const asset = await new PostgresAdminMediaRepository().createAsset(parsed.data);
+  const asset = await createPostgresAdminMediaRepository().createAsset(parsed.data);
   return NextResponse.json({ ok: true, asset }, { status: 201 });
 }

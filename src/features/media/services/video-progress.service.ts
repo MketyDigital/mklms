@@ -68,6 +68,18 @@ export interface VideoProgressRepository {
     lessonId: string,
     creditedSeconds: number,
   ): Promise<void>;
+  saveProgressAndWatchCredit?(
+    input: {
+      studentId: string;
+      courseId: string;
+      lessonId: string;
+      progressPercent: number;
+      lastPositionSeconds: number;
+      lessonCompleted: boolean;
+      grantId: string;
+      creditedSeconds: number;
+    },
+  ): Promise<void>;
   markEnrollmentCompleted(studentId: string, courseId: string): Promise<void>;
 }
 
@@ -236,21 +248,34 @@ export class VideoProgressService {
       Boolean(priorProgress?.completed) ||
       creditedPercent >= lesson.completionThresholdPercent;
 
-    await this.repository.saveLessonProgress(
-      input.studentId,
-      input.courseId,
-      input.lessonId,
-      creditedPercent,
-      creditedPositionSeconds,
-      lessonCompleted,
-    );
-    await this.repository.recordCreditedWatch?.(
-      input.grantId,
-      input.studentId,
-      input.courseId,
-      input.lessonId,
-      currentGrantCreditedSeconds,
-    );
+    if (this.repository.saveProgressAndWatchCredit) {
+      await this.repository.saveProgressAndWatchCredit({
+        studentId: input.studentId,
+        courseId: input.courseId,
+        lessonId: input.lessonId,
+        progressPercent: creditedPercent,
+        lastPositionSeconds: creditedPositionSeconds,
+        lessonCompleted,
+        grantId: input.grantId,
+        creditedSeconds: currentGrantCreditedSeconds,
+      });
+    } else {
+      await this.repository.saveLessonProgress(
+        input.studentId,
+        input.courseId,
+        input.lessonId,
+        creditedPercent,
+        creditedPositionSeconds,
+        lessonCompleted,
+      );
+      await this.repository.recordCreditedWatch?.(
+        input.grantId,
+        input.studentId,
+        input.courseId,
+        input.lessonId,
+        currentGrantCreditedSeconds,
+      );
+    }
 
     if (lessonCompleted) {
       completed.add(input.lessonId);

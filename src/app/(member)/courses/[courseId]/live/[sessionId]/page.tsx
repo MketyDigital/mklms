@@ -5,10 +5,10 @@ import { notFound, redirect } from "next/navigation";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Button } from "@/components/ui/button";
 import { getCurrentStudentSession } from "@/features/access/server/current-student";
-import { PostgresLearningRepository } from "@/features/courses/repositories/postgres-learning.repository";
+import { createPostgresLearningRepository } from "@/features/courses/repositories/learning-repository.factory";
 import { StudentLearningService } from "@/features/courses/services/student-learning.service";
 import { StudentPaidLiveRoom } from "@/features/paid-live/components/student-paid-live-room";
-import { PostgresPaidLiveRepository } from "@/features/paid-live/repositories/postgres-paid-live.repository";
+import { createPostgresPaidLiveRepository } from "@/features/paid-live/repositories/paid-live-repository.factory"
 import { resolvePaidLiveState } from "@/features/paid-live/services/paid-live-state.service";
 
 export const dynamic = "force-dynamic";
@@ -23,8 +23,8 @@ export default async function PaidCourseLivePage({
   const { courseId, sessionId } = await params;
 
   const [course, liveSession] = await Promise.all([
-    new StudentLearningService(new PostgresLearningRepository()).getCourseView(student.studentId, courseId),
-    new PostgresPaidLiveRepository().getSession(sessionId),
+    new StudentLearningService(createPostgresLearningRepository()).getCourseView(student.studentId, courseId),
+    createPostgresPaidLiveRepository().getSession(sessionId),
   ]);
   if (!course || !liveSession || liveSession.courseId !== courseId || liveSession.status !== "PUBLISHED") notFound();
 

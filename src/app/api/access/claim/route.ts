@@ -3,9 +3,9 @@ import { z } from "zod";
 
 import { ACTIVE_CLAIM_VERIFICATION_STRATEGIES } from "@/features/access/domain/claim-verification";
 import { verifyClaimCode } from "@/features/access/domain/claim-code";
-import { PostgresAccessRepository } from "@/features/access/repositories/postgres-access.repository";
+import { createPostgresAccessRepository } from "@/features/access/repositories/access-repository.factory";
 import { AccessService } from "@/features/access/services/access.service";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 import {
   consumeDistributedRateLimit,
   FixedWindowRateLimiter,
@@ -47,12 +47,12 @@ export async function POST(request: Request) {
   if (!parsed.success) return NextResponse.json({ ok: false, message: NEUTRAL_FAILURE }, { status: 400 });
 
   try {
-    const repository = new PostgresAccessRepository();
+    const repository = createPostgresAccessRepository();
     const identity = { email: parsed.data.email ?? null, phone: parsed.data.phone ?? null };
     const preauthorization = await repository.findPreauthorization(identity);
     if (!preauthorization) return NextResponse.json({ ok: false, message: NEUTRAL_FAILURE }, { status: 403 });
 
-    const settings = await new PostgresSettingsRepository().getPlatformSettings();
+    const settings = await createPostgresSettingsRepository().getPlatformSettings();
     const strategy = preauthorization.claimStrategy ?? settings.claimVerificationStrategy;
     if (!ACTIVE_CLAIM_VERIFICATION_STRATEGIES.includes(strategy as (typeof ACTIVE_CLAIM_VERIFICATION_STRATEGIES)[number])) {
       return NextResponse.json({

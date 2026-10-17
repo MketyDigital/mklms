@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { ACTIVE_CLAIM_VERIFICATION_STRATEGIES } from "@/features/access/domain/claim-verification";
-import { PostgresAdminAccessRepository } from "@/features/access/repositories/postgres-admin-access.repository";
+import { createPostgresAdminAccessRepository } from "@/features/access/repositories/access-repository.factory";
 import { AccessAdminService } from "@/features/access/services/access-admin.service";
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
-import { PostgresAdminLearningRepository } from "@/features/courses/repositories/postgres-admin-learning.repository";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresAdminLearningRepository } from "@/features/courses/repositories/learning-repository.factory";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 
 const createSchema = z.object({
   email: z.string().email().optional(),
@@ -22,7 +22,7 @@ const createSchema = z.object({
 
 export async function GET() {
   if (!(await hasValidAdminSession())) return NextResponse.json({ ok: false }, { status: 401 });
-  return NextResponse.json({ ok: true, preauthorizations: await new PostgresAdminAccessRepository().listPreauthorizations(250) });
+  return NextResponse.json({ ok: true, preauthorizations: await createPostgresAdminAccessRepository().listPreauthorizations(250) });
 }
 
 export async function POST(request: Request) {
@@ -31,10 +31,10 @@ export async function POST(request: Request) {
   if (!parsed.success) return NextResponse.json({ ok: false, message: parsed.error.issues[0]?.message ?? "Invalid approval." }, { status: 400 });
 
   const [settings, courses] = await Promise.all([
-    new PostgresSettingsRepository().getPlatformSettings(),
-    new PostgresAdminLearningRepository().listCourses(),
+    createPostgresSettingsRepository().getPlatformSettings(),
+    createPostgresAdminLearningRepository().listCourses(),
   ]);
-  const service = new AccessAdminService(new PostgresAdminAccessRepository(), {
+  const service = new AccessAdminService(createPostgresAdminAccessRepository(), {
     accessCodePrefix: settings.accessCodePrefix,
     validCourseIds: new Set(courses.map((course) => course.id)),
   });

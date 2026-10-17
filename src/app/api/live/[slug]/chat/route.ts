@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { resolveLiveBatchState } from "@/features/live-classes/domain/live-session";
-import { PostgresLiveClassRepository } from "@/features/live-classes/repositories/postgres-live-class.repository";
+import { createPostgresLiveClassRepository } from "@/features/live-classes/repositories/live-class-repository.factory";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,7 @@ export async function GET(
   context: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await context.params;
-  const repository = new PostgresLiveClassRepository();
+  const repository = createPostgresLiveClassRepository();
   const batch = await repository.findPublicBatchBySlug(slug);
 
   if (!batch) {

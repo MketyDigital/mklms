@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { hashSessionToken } from "@/features/access/domain/session";
-import { PostgresAccessRepository } from "@/features/access/repositories/postgres-access.repository";
+import { createPostgresAccessRepository } from "@/features/access/repositories/access-repository.factory";
 import { STUDENT_SESSION_COOKIE } from "@/features/access/server/session-cookie";
 
 function readCookie(request: Request, name: string): string | null {
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ authenticated: false }, { status: 401 });
   }
 
-  const repository = new PostgresAccessRepository();
+  const repository = createPostgresAccessRepository();
   const session = await repository.findActiveSessionByTokenHash(
     hashSessionToken(sessionToken).hash,
     new Date(),

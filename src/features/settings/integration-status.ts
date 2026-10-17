@@ -34,7 +34,7 @@ export function getIntegrationStatus(
       requiredVariables: databaseConfigured ? [] : ["DATABASE_URL"],
       description: runtime.databaseConnected
         ? "Core MkLMS persistence is reachable through the active PostgreSQL/Hyperdrive runtime connection."
-        : "Core MkLMS persistence. Works with Supabase PostgreSQL, self-hosted PostgreSQL, Hyperdrive-backed PostgreSQL and other compatible providers.",
+        : "Core MkLMS persistence. Works with self-hosted PostgreSQL, Hyperdrive-backed PostgreSQL and other compatible providers.",
     },
     {
       id: "admin-auth",

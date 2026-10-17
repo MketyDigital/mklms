@@ -1,6 +1,6 @@
 import type { Pool } from "pg";
 
-import { getPostgresPool } from "@/lib/postgres";
+import { getPostgresPool } from "../../../lib/postgres.ts";
 import type { CourseAssignmentMode } from "../domain/model";
 
 export type CourseAudienceState = {
@@ -96,7 +96,7 @@ export class PostgresCourseAudienceRepository {
              id, student_id, course_id, status, authorized_at, activated_at
            )
            SELECT
-             md5(student.id || ':' || $1 || ':course-audience'),
+             encode(convert_to('[' || to_json(student.id)::text || ',' || to_json($1::text)::text || ',"course-audience"]', 'UTF8'), 'hex'),
              student.id,
              $1,
              'ACTIVE',
@@ -125,7 +125,7 @@ export class PostgresCourseAudienceRepository {
                id, student_id, course_id, status, authorized_at, activated_at
              )
              SELECT
-               md5(student.id || ':' || $1 || ':course-audience'),
+               encode(convert_to('[' || to_json(student.id)::text || ',' || to_json($1::text)::text || ',"course-audience"]', 'UTF8'), 'hex'),
                student.id,
                $1,
                'ACTIVE',

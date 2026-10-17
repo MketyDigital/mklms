@@ -3,8 +3,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { getCurrentStudentSession } from "@/features/access/server/current-student";
 import { MessageBubble } from "@/features/messages/components/message-bubble";
 import { MessageInput } from "@/features/messages/components/message-input";
-import { PostgresMessageRepository } from "@/features/messages/repositories/postgres-message.repository";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresMessageRepository } from "@/features/messages/repositories/message-repository.factory";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 import type { Message } from "@/types";
 import { redirect } from "next/navigation";
 
@@ -15,8 +15,8 @@ export default async function MessagesPage() {
   if (!session) redirect("/login");
 
   const [records, settings] = await Promise.all([
-    new PostgresMessageRepository().listStudentMessages(session.studentId),
-    new PostgresSettingsRepository().getPlatformSettings(),
+    createPostgresMessageRepository().listStudentMessages(session.studentId),
+    createPostgresSettingsRepository().getPlatformSettings(),
   ]);
   const messages: Message[] = records.map((record) => ({
     id: record.id,

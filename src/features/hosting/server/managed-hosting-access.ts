@@ -4,7 +4,7 @@ import {
   resolveManagedHostingStanding,
   type ManagedHostingStandingStatus,
 } from "../domain/managed-hosting";
-import { PostgresManagedHostingRepository } from "../repositories/postgres-managed-hosting.repository";
+import { createPostgresManagedHostingRepository } from "../repositories/hosting-repository.factory";
 import { getEffectiveManagedHostingPolicy } from "./managed-hosting-policy";
 
 export interface ManagedHostingServiceAccess {
@@ -28,7 +28,7 @@ function lastDayOfMonth(monthStart: Date): Date {
 }
 
 export async function ensurePreviousManagedHostingInvoice(
-  repository = new PostgresManagedHostingRepository(),
+  repository = createPostgresManagedHostingRepository(),
   now = new Date(),
 ) {
   const effective = await getEffectiveManagedHostingPolicy(repository);
@@ -61,7 +61,7 @@ export async function ensurePreviousManagedHostingInvoice(
 }
 
 export async function getManagedHostingServiceAccess(
-  repository = new PostgresManagedHostingRepository(),
+  repository = createPostgresManagedHostingRepository(),
   now = new Date(),
 ): Promise<ManagedHostingServiceAccess> {
   try {

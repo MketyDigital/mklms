@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
 import { nextMediaIngestState, type MediaIngestState } from "@/features/media/domain/media-ingest";
-import { PostgresMediaIngestRepository } from "@/features/media/repositories/postgres-media-ingest.repository";
+import { createPostgresMediaIngestRepository } from "@/features/media/repositories/media-repository.factory";
 
 const updateSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("ACCEPT_COST") }),
@@ -31,7 +31,7 @@ export async function PATCH(
   if (!parsed.success) {
     return NextResponse.json({ ok: false, message: "Invalid ingest update." }, { status: 400 });
   }
-  const repository = new PostgresMediaIngestRepository();
+  const repository = createPostgresMediaIngestRepository();
   const current = await repository.getJob(jobId);
   if (!current) {
     return NextResponse.json({ ok: false, message: "Ingest job not found." }, { status: 404 });

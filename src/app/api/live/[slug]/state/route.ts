@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { LIVE_STATE_CACHE_CONTROL } from "@/features/live-classes/domain/live-client-cache";
 import { resolveLiveBatchState, resolveViewerDisplayCount } from "@/features/live-classes/domain/live-session";
-import { PostgresLiveClassRepository } from "@/features/live-classes/repositories/postgres-live-class.repository";
+import { createPostgresLiveClassRepository } from "@/features/live-classes/repositories/live-class-repository.factory";
 import { getOrCreateLiveViewerIdentity } from "@/features/live-classes/server/live-viewer";
 import { LiveRoomService } from "@/features/live-classes/services/live-room.service";
 
@@ -13,7 +13,7 @@ export async function GET(
   context: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await context.params;
-  const repository = new PostgresLiveClassRepository();
+  const repository = createPostgresLiveClassRepository();
   const batch = await repository.findPublicBatchBySlug(slug);
   if (!batch) {
     return NextResponse.json(

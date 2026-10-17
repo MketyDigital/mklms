@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
-import { PostgresCourseAudienceRepository } from "@/features/courses/repositories/postgres-course-audience.repository";
+import { createPostgresCourseAudienceRepository } from "@/features/courses/repositories/course-audience-repository.factory";
 import {
   consumeDistributedRateLimit,
   getRequestClientKey,
@@ -43,7 +43,7 @@ export async function PATCH(
 
   try {
     const { courseId } = await context.params;
-    const audience = await new PostgresCourseAudienceRepository().setCourseAudience(
+    const audience = await createPostgresCourseAudienceRepository().setCourseAudience(
       courseId,
       parsed.data.mode,
       parsed.data.mode === "SELECTED_STUDENTS" ? parsed.data.studentIds : [],

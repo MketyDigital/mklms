@@ -7,9 +7,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { PostgresCertificateRepository } from "@/features/certificates/repositories/postgres-certificate.repository";
+import { createPostgresCertificateRepository } from "@/features/certificates/repositories/certificate-repository.factory";
 import { CertificateVerificationService } from "@/features/certificates/services/certificate-verification.service";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 
 export const dynamic = "force-dynamic";
 
@@ -21,9 +21,9 @@ export default async function VerifyCertificatePage({
   const { certificateId } = await params;
   const [verification, settings] = await Promise.all([
     new CertificateVerificationService(
-      new PostgresCertificateRepository(),
+      createPostgresCertificateRepository(),
     ).verify(decodeURIComponent(certificateId)),
-    new PostgresSettingsRepository().getPlatformSettings(),
+    createPostgresSettingsRepository().getPlatformSettings(),
   ]);
 
   const found = verification.state !== "NOT_FOUND";

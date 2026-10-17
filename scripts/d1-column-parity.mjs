@@ -38,13 +38,22 @@ function pgColumnMap(files){
      map.get(table).add(m[1].toLowerCase());
    }
   }
-  for(const match of sql.matchAll(/ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:public\.)?"?([a-z_][a-z0-9_]*)"?\s+ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?"?([a-z_][a-z0-9_]*)"?/gi)){
-   if(map.has(match[1].toLowerCase()))map.get(match[1].toLowerCase()).add(match[2].toLowerCase());
+  for(const match of sql.matchAll(/ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:public\.)?"?([a-z_][a-z0-9_]*)"?\s+([\s\S]*?);/gi)){
+   if(!map.has(match[1].toLowerCase()))continue;
+   for(const addition of match[2].matchAll(/\bADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?"?([a-z_][a-z0-9_]*)"?/gi)){
+    map.get(match[1].toLowerCase()).add(addition[1].toLowerCase());
+   }
   }
  }
  return map;
 }
-const pg=pgColumnMap(await readMigrations('db/migrations'));
+const pgFiles=await readMigrations('db/migrations');
+const pg=pgColumnMap(pgFiles);
+const semanticColumnMappings={
+ managed_hosting_months:{minimum_floor_usd:'minimum_floor_cents',amount_due_usd:'amount_due_cents',settled_amount_usd:'settled_amount_cents'},
+ managed_hosting_operator_policy:{minimum_monthly_fee_usd:'minimum_monthly_fee_cents',maximum_monthly_fee_usd:'maximum_monthly_fee_cents'},
+ managed_hosting_daily_ledger:{automatic_balance_usd:'automatic_balance_cents',operator_adjustment_usd:'operator_adjustment_cents'},
+};
 const d1files=await readMigrations('db/d1-migrations');
 const db=new DatabaseSync(':memory:');
 let report;
@@ -53,13 +62,28 @@ try{
  for(const {name,sql} of d1files){
   try{db.exec(sql);}catch(e){throw new Error('D1 migration '+name+' failed: '+e.message);}
  }
+ // Apply the effective DROP TABLE sequence after collecting historical CREATEs.
+ // In particular, PG 011 removes a legacy table that remains in earlier history.
+ for (const {sql} of pgFiles) {
+  for (const match of sql.matchAll(/DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:public\.)?"?([a-z_][a-z0-9_]*)"?/gi)) {
+   pg.delete(match[1].toLowerCase());
+  }
+ }
  const mismatches=[];
+ const semanticMappings=[];
  for(const [table,columns] of pg){
   const actual=new Set(db.prepare(`PRAGMA table_info("${table}")`).all().map(x=>String(x.name).toLowerCase()));
-  const missing=[...columns].filter(x=>!actual.has(x)).sort();
+  const mapped=[];
+  const missing=[...columns].filter(x=>{
+   if(actual.has(x))return false;
+   const target=semanticColumnMappings[table]?.[x];
+   if(target&&actual.has(target)){mapped.push({source:x,target,conversion:'exact USD decimal string ↔ integer cents'});return false;}
+   return true;
+  }).sort();
   if(missing.length)mismatches.push({table,missing});
+  if(mapped.length)semanticMappings.push({table,columns:mapped});
  }
- report={mode:'offline-only',sourceTables:pg.size,d1Migrations:d1files.length,
+ report={mode:'offline-only',sourceTables:pg.size,d1Migrations:d1files.length,semanticMappings,
   missingTableCount:mismatches.filter(x=>db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(x.table)===undefined).length,
   missingColumns:mismatches,complete:mismatches.length===0};
 }finally{db.close();}

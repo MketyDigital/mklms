@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 
-import { getPostgresPool } from "@/lib/postgres";
+import { getPostgresPool } from "../../../lib/postgres.ts";
 
 export interface MessageRecord {
   id: string;

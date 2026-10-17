@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
-import { PostgresAdminLiveClassRepository } from "@/features/live-classes/repositories/postgres-admin-live-class.repository";
+import { createPostgresAdminLiveClassRepository } from "@/features/live-classes/repositories/live-class-repository.factory";
 import { AdminLiveClassService } from "@/features/live-classes/services/admin-live-class.service";
 
 const optionalShortText = z.string().trim().max(500).optional().nullable();
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
   if (!(await hasValidAdminSession())) return NextResponse.json({ ok: false, message: "Unauthorized." }, { status: 401 });
   const parsed = payloadSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ ok: false, message: "Invalid live class request." }, { status: 400 });
-  const repository = new PostgresAdminLiveClassRepository();
+  const repository = createPostgresAdminLiveClassRepository();
   const service = new AdminLiveClassService(repository);
 
   try {

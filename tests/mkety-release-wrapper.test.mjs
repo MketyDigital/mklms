@@ -14,13 +14,24 @@ test('Mkety compatibility wrapper delegates to generic isolated preview and prod
   assert.doesNotMatch(source, /production\/starpips|learn\.starpipsforex\.com|spf-media/);
 });
 
-test('Mkety production release treats the isolated Supabase schema as pre-migrated and does not mutate it from GitHub-hosted runners', () => {
+test('Mkety production release leaves PostgreSQL migration ownership with operators', () => {
   const source = readFileSync('.github/workflows/mkety-academy-release.yml', 'utf8');
-  assert.match(source, /pre-migrated and audited through Supabase/i);
+  assert.match(source, /Database schema changes are operator-managed/i);
   assert.doesNotMatch(source, /npm run db:migrate|npm run db:status/);
   assert.doesNotMatch(source, /pooler\.supabase\.com|MKETY_MIGRATION_DB_|MKETY_DB_PASSWORD/);
   assert.doesNotMatch(source, /needs:\s*migrate/);
   assert.match(source, /release_sha:\s*\$\{\{ github\.sha \}\}/);
+});
+
+test('Mkety production deployment is blocked until both Hyperdrive origins match target secrets', () => {
+  const source = readFileSync('.github/workflows/mkety-academy-release.yml', 'utf8');
+  assert.match(source, /production-database-preflight:/);
+  assert.match(source, /needs: production-database-preflight/);
+  assert.match(source, /hyperdrive\/configs\/\$id/);
+  assert.match(source, /scripts\/assert-hyperdrive-origin\.mjs/);
+  assert.match(source, /MKETY_DB_HOST:\s*\$\{\{ secrets\.MKETY_DB_HOST \}\}/);
+  assert.match(source, /MKETY_DB_USER:\s*\$\{\{ secrets\.MKETY_DB_USER \}\}/);
+  assert.doesNotMatch(source, /--request\s+(?:POST|PUT|PATCH|DELETE)/i);
 });
 
 test('Mkety production alone wires the managed-hosting operator key into the application Worker', () => {

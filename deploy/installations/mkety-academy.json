@@ -12,6 +12,10 @@
     "platformId": "mkety-saas"
   },
   "r2Bucket": "mkety-academy-media",
+  "d1Database": {
+    "name": "mklms-mkety-academy",
+    "id": "a486cbca-0d53-40c2-937e-55eb0c0cfbde"
+  },
   "hyperdrive": {
     "freshId": "c6033fd6696444ea97c7c2c93707b3bc",
     "cachedId": "6d6c69493e404097907fb8e7719d09a2"
@@ -23,11 +27,5 @@
     "playback": "371518076",
     "certificate": "897396052"
   },
-  "billingInstallationId": "mkety-academy",
-  "databaseOrigin": {
-    "host": "db.vdblajgxrfndjesoyayy.supabase.co",
-    "port": 5432,
-    "database": "postgres",
-    "user": "mkety_academy_app"
-  }
+  "billingInstallationId": "mkety-academy"
 }

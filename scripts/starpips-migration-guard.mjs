@@ -9,6 +9,12 @@ const TARGET_MIGRATIONS = [
   '018_certificate_visual_layout_and_starpips_calibration.sql',
   '019_managed_hosting_daily_ledger.sql',
   '020_managed_hosting_payment_settlement.sql',
+  '021_shared_enrollment_id_encoding.sql',
+];
+const DEFERRED_MIGRATIONS = [
+  '022_replication_journal.sql',
+  '023_transactional_replication_capture.sql',
+  '024_replication_apply_guard.sql',
 ];
 
 export function validateStarpipsMigrationBatch(
@@ -30,14 +36,29 @@ export function validateStarpipsMigrationBatch(
 
   const firstTargetIndex = targetIndexes[0];
   const expectedIndexes = targetFilenames.map((_, index) => firstTargetIndex + index);
-  const isContiguousSuffix =
-    targetIndexes.every((value, index) => value === expectedIndexes[index]) &&
-    targetIndexes.at(-1) === migrations.length - 1;
-  if (!isContiguousSuffix) {
-    throw new Error('Guarded Starpips targets must be the contiguous latest migration suffix in this release.');
+  if (!targetIndexes.every((value, index) => value === expectedIndexes[index])) {
+    throw new Error('Guarded Starpips targets must be contiguous in this release.');
+  }
+  const trailingMigrations = migrations.slice(targetIndexes.at(-1) + 1).map(migration => migration.filename);
+  const expectedDeferred = DEFERRED_MIGRATIONS.slice(0, trailingMigrations.length);
+  if (
+    trailingMigrations.length > DEFERRED_MIGRATIONS.length ||
+    trailingMigrations.some((filename, index) => filename !== expectedDeferred[index])
+  ) {
+    throw new Error('Unclassified migrations follow the guarded Starpips batch; refusing release.');
   }
 
   const byName = new Map(records.map((record) => [record.filename, record]));
+  const knownNames = new Set(migrations.map(migration => migration.filename));
+  const unrecognizedLedgerEntry = records.find(record => !knownNames.has(record.filename));
+  if (unrecognizedLedgerEntry) {
+    throw new Error(`Migration ledger contains unknown migration ${unrecognizedLedgerEntry.filename}; refusing Starpips release.`);
+  }
+  for (const filename of trailingMigrations) {
+    if (byName.has(filename)) {
+      throw new Error(`Deferred migration ${filename} is recorded; refusing Starpips release.`);
+    }
+  }
   for (const migration of migrations.slice(0, firstTargetIndex)) {
     const record = byName.get(migration.filename);
     if (!record) {

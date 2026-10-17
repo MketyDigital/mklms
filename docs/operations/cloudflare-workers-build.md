@@ -13,7 +13,7 @@ Root directory: repository root
 Node: 24.x
 ```
 
-`wrangler.jsonc` also contains a custom build command (`npm run cf:build`) as defense in depth. Therefore `wrangler deploy` and `wrangler versions upload` regenerate the OpenNext bundle if the Cloudflare dashboard was accidentally left on a plain framework build command.
+Run `npm run cf:build` before a Wrangler dry-run or deploy. The Wrangler config deliberately has no custom build command: CI and release workflows build OpenNext explicitly, and Wrangler's automatic second build can corrupt generated Turbopack/OpenNext state. The supported `npm run deploy` script builds OpenNext before deploying.
 
 The expected build artifact is:
 

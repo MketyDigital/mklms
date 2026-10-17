@@ -9,8 +9,8 @@ import {
   getNextDestinationAfterQuiz,
 } from "@/features/courses/domain/paid-course-progression";
 import { getPublishedCourseStructure } from "@/features/courses/domain/publication";
-import { PostgresLearningRepository } from "@/features/courses/repositories/postgres-learning.repository";
-import { PostgresQuizRepository } from "@/features/quizzes/repositories/postgres-quiz.repository";
+import { createPostgresLearningRepository } from "@/features/courses/repositories/learning-repository.factory";
+import { createPostgresQuizRepository } from "@/features/quizzes/repositories/quiz-repository.factory";
 import { scoreQuizAttempt } from "@/features/quizzes/services/quiz-scoring.service";
 import { consumeDistributedRateLimit, rateLimitHeaders } from "@/lib/security/rate-limit";
 
@@ -36,8 +36,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ cou
     );
   }
 
-  const quizzes = new PostgresQuizRepository();
-  const learning = new PostgresLearningRepository();
+  const quizzes = createPostgresQuizRepository();
+  const learning = createPostgresLearningRepository();
   const [quiz, enrollment, rawCourse, publishedQuizzes, completedLessonsRaw, passedQuizIdsRaw] = await Promise.all([
     quizzes.getQuiz(quizId),
     quizzes.getEnrollment(session.studentId, courseId),

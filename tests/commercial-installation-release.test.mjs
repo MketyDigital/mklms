@@ -23,7 +23,7 @@ function sampleManifest(overrides = {}) {
     },
     billingInstallationId: 'customer-a',
     databaseOrigin: {
-      host: 'db.example.supabase.co',
+      host: 'db.example.com',
       port: 5432,
       database: 'postgres',
       user: 'customer_a_app',
@@ -81,7 +81,7 @@ test('selected installation isolation rejects collisions with another concrete p
 test('generic provision workflow is installation-driven and contains no Mkety resource constants', () => {
   const source = readFileSync('.github/workflows/provision-installation.yml', 'utf8');
   assert.match(source, /installation_id:/);
-  assert.doesNotMatch(source, /mklms-mkety-academy|mkety-academy-media|db\.vdblajgxrfndjesoyayy\.supabase\.co/);
+  assert.doesNotMatch(source, /mklms-mkety-academy|mkety-academy-media/);
 });
 
 test('generic preview deployment stays isolated and migration-free', () => {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { PostgresAdminAccessRepository } from "@/features/access/repositories/postgres-admin-access.repository";
+import { createPostgresAdminAccessRepository } from "@/features/access/repositories/access-repository.factory";
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
 
 const schema = z.object({
@@ -25,7 +25,7 @@ export async function PATCH(
   }
 
   const { studentId } = await context.params;
-  const repository = new PostgresAdminAccessRepository();
+  const repository = createPostgresAdminAccessRepository();
   await repository.setStudentStatus(studentId, parsed.data.status);
 
   return NextResponse.json({ ok: true, status: parsed.data.status });

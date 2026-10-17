@@ -10,21 +10,22 @@ import {
   getStreamingActivityBand,
   type ManagedHostingMonthOverride,
 } from "@/features/hosting/domain/managed-hosting";
-import { PostgresManagedHostingLedgerRepository } from "@/features/hosting/repositories/postgres-managed-hosting-ledger.repository";
-import { PostgresManagedHostingRepository } from "@/features/hosting/repositories/postgres-managed-hosting.repository";
+import { createPostgresManagedHostingLedgerRepository } from "@/features/hosting/repositories/hosting-repository.factory";
+import { createPostgresManagedHostingRepository } from "@/features/hosting/repositories/hosting-repository.factory";
+import type { PostgresManagedHostingRepository } from "@/features/hosting/repositories/postgres-managed-hosting.repository";
 import { getManagedHostingServiceAccess } from "@/features/hosting/server/managed-hosting-access";
 import {
   getEffectiveManagedHostingPolicy,
   isManagedHostingBillingAutomationConfigured,
 } from "@/features/hosting/server/managed-hosting-policy";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminHostingPage() {
-  const hostingRepository = new PostgresManagedHostingRepository();
-  const ledgerRepository = new PostgresManagedHostingLedgerRepository();
-  const settingsRepository = new PostgresSettingsRepository();
+  const hostingRepository = createPostgresManagedHostingRepository();
+  const ledgerRepository = createPostgresManagedHostingLedgerRepository();
+  const settingsRepository = createPostgresSettingsRepository();
   const platformSettings = await settingsRepository.getPlatformSettings();
   const effective = await getEffectiveManagedHostingPolicy(hostingRepository);
   const billingAutomationEnabled = isManagedHostingBillingAutomationConfigured();

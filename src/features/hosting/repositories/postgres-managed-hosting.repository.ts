@@ -1,7 +1,7 @@
 import type { Pool } from "pg";
 
-import { getPostgresPool } from "@/lib/postgres";
-import { getBillingMonthKey, type ManagedHostingMonthOverride } from "../domain/managed-hosting";
+import { getPostgresPool } from "../../../lib/postgres.ts";
+import { getBillingMonthKey, type ManagedHostingMonthOverride } from "../domain/managed-hosting.ts";
 
 export interface ManagedHostingUsageSummary {
   monthStart: Date;

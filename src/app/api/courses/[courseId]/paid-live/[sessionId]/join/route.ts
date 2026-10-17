@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentStudentSession } from "@/features/access/server/current-student";
 import { isAllowedZoomUrl } from "@/features/paid-live/domain/model";
-import { PostgresPaidLiveRepository } from "@/features/paid-live/repositories/postgres-paid-live.repository";
+import { createPostgresPaidLiveRepository } from "@/features/paid-live/repositories/paid-live-repository.factory"
 import { resolvePaidLiveState } from "@/features/paid-live/services/paid-live-state.service";
 import { consumeDistributedRateLimit, rateLimitHeaders } from "@/lib/security/rate-limit";
 
@@ -32,7 +32,7 @@ export async function POST(
     );
   }
 
-  const repository = new PostgresPaidLiveRepository();
+  const repository = createPostgresPaidLiveRepository();
   const [liveSession, enrollment, courseStatus] = await Promise.all([
     repository.getSession(sessionId),
     repository.getEnrollment(student.studentId, courseId),

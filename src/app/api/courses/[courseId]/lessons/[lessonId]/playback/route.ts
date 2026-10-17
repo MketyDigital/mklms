@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentStudentSession } from "@/features/access/server/current-student";
 import { getManagedHostingServiceAccess } from "@/features/hosting/server/managed-hosting-access";
-import { PostgresMediaPlaybackRepository } from "@/features/media/repositories/postgres-media-playback.repository";
+import { createPostgresMediaPlaybackRepository } from "@/features/media/repositories/media-repository.factory";
 import { MediaPlaybackService } from "@/features/media/services/media-playback.service";
 import { consumeDistributedRateLimit, rateLimitHeaders } from "@/lib/security/rate-limit";
 import { getConfiguredMediaProvider } from "@/providers/signed-delivery-media-provider";
@@ -44,7 +44,7 @@ export async function POST(
 
   try {
     const service = new MediaPlaybackService(
-      new PostgresMediaPlaybackRepository(),
+      createPostgresMediaPlaybackRepository(),
       getConfiguredMediaProvider(),
       { ttlSeconds: 300 },
     );

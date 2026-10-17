@@ -12,8 +12,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getCurrentStudentSession } from "@/features/access/server/current-student";
-import { PostgresCertificateRepository } from "@/features/certificates/repositories/postgres-certificate.repository";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresCertificateRepository } from "@/features/certificates/repositories/certificate-repository.factory";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 
 export const dynamic = "force-dynamic";
 
@@ -22,8 +22,8 @@ export default async function CertificatesPage() {
   if (!session) redirect("/login");
 
   const [certificates, settings] = await Promise.all([
-    new PostgresCertificateRepository().listForStudent(session.studentId),
-    new PostgresSettingsRepository().getPlatformSettings(),
+    createPostgresCertificateRepository().listForStudent(session.studentId),
+    createPostgresSettingsRepository().getPlatformSettings(),
   ]);
   const hasActiveCertificate = certificates.some(
     (certificate) => certificate.status === "ISSUED" && !certificate.revokedAt,

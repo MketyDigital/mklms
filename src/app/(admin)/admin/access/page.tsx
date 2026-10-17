@@ -1,18 +1,18 @@
 import { AppLayout } from "@/components/layout/app-layout";
 import { AdminAccessPanel } from "@/features/access/components/admin/admin-access-panel";
-import { PostgresAdminAccessRepository } from "@/features/access/repositories/postgres-admin-access.repository";
-import { PostgresAdminLearningRepository } from "@/features/courses/repositories/postgres-admin-learning.repository";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresAdminAccessRepository } from "@/features/access/repositories/access-repository.factory";
+import { createPostgresAdminLearningRepository } from "@/features/courses/repositories/learning-repository.factory";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminAccessPage() {
-  const accessRepository = new PostgresAdminAccessRepository();
-  const settingsRepository = new PostgresSettingsRepository();
+  const accessRepository = createPostgresAdminAccessRepository();
+  const settingsRepository = createPostgresSettingsRepository();
   const [students, preauthorizations, courses, settings] = await Promise.all([
     accessRepository.listStudents(250),
     accessRepository.listPreauthorizations(250),
-    new PostgresAdminLearningRepository().listCourses(),
+    createPostgresAdminLearningRepository().listCourses(),
     settingsRepository.getPlatformSettings(),
   ]);
 

@@ -3,12 +3,12 @@ import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ClaimAccessForm } from "@/features/access/components/claim-access-form";
 import { BrandMark } from "@/features/settings/components/branding-provider";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 
 export const dynamic = "force-dynamic";
 
 export default async function OnboardingPage() {
-  const settings = await new PostgresSettingsRepository().getPlatformSettings();
+  const settings = await createPostgresSettingsRepository().getPlatformSettings();
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-background px-4 py-12">

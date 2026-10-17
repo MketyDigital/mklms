@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 
-import { getPostgresPool } from "@/lib/postgres";
+import { getPostgresPool } from "../../../lib/postgres.ts";
 import type { MediaIngestState } from "../domain/media-ingest";
 
 export interface MediaIngestJob {
