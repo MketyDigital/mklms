@@ -1,5 +1,5 @@
-import { allActiveEnrollmentId } from "./all-active-enrollment-id";
-import type { D1DatabaseLike } from "./d1-query-adapter";
+import { allActiveEnrollmentId } from "./all-active-enrollment-id.ts";
+import type { D1DatabaseLike } from "./d1-query-adapter.ts";
 import { executeD1 } from "./d1-query-adapter";
 
 /**
