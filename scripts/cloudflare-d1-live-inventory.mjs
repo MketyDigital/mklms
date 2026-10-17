@@ -33,15 +33,15 @@ export async function fetchCloudflareD1Inventory({ accountId, apiToken, installa
   if (typeof fetchImpl !== 'function') throw new Error('A fetch implementation is required');
 
   const headers = { Authorization: `Bearer ${apiToken}`, 'Content-Type': 'application/json' };
-  const databases = [];
+  const accountDatabases = [];
   let totalCount = Infinity;
-  for (let page = 1; page <= MAX_PAGES && databases.length < totalCount; page++) {
+  for (let page = 1; page <= MAX_PAGES && accountDatabases.length < totalCount; page++) {
     const url = new URL(`${API_ROOT}/accounts/${encodeURIComponent(accountId)}/d1/database`);
     url.searchParams.set('page', String(page));
     url.searchParams.set('per_page', String(PAGE_SIZE));
     const body = await cloudflareJson(url, { method: 'GET', headers }, fetchImpl);
     const rows = Array.isArray(body.result) ? body.result : [];
-    databases.push(...rows.map((database) => ({
+    accountDatabases.push(...rows.map((database) => ({
       id: String(database.uuid ?? ''),
       name: String(database.name ?? ''),
       version: database.version ?? null,
@@ -49,13 +49,13 @@ export async function fetchCloudflareD1Inventory({ accountId, apiToken, installa
       createdAt: database.created_at ?? null,
     })));
     const reportedTotal = Number(body.result_info?.total_count);
-    totalCount = Number.isFinite(reportedTotal) ? reportedTotal : databases.length;
+    totalCount = Number.isFinite(reportedTotal) ? reportedTotal : accountDatabases.length;
     if (rows.length === 0) break;
   }
-  if (databases.length < totalCount) throw new Error(`Cloudflare D1 listing exceeded the ${MAX_PAGES}-page safety limit`);
+  if (accountDatabases.length < totalCount) throw new Error(`Cloudflare D1 listing exceeded the ${MAX_PAGES}-page safety limit`);
 
-  const targets = databases.filter((database) => matchesInstallation(database.name, installationId));
-  const catalogs = await Promise.all(targets.map(async (database) => {
+  const databases = accountDatabases.filter((database) => matchesInstallation(database.name, installationId));
+  const catalogs = await Promise.all(databases.map(async (database) => {
     if (!database.id) throw new Error(`Cloudflare D1 database ${database.name || '(unnamed)'} has no ID`);
     const url = `${API_ROOT}/accounts/${encodeURIComponent(accountId)}/d1/database/${encodeURIComponent(database.id)}/query`;
     const body = await cloudflareJson(url, {
@@ -78,6 +78,7 @@ export async function fetchCloudflareD1Inventory({ accountId, apiToken, installa
   return {
     mode: 'read-only-cloudflare-d1-inventory',
     installationId,
+    accountDatabaseCount: accountDatabases.length,
     databases,
     catalogs,
     capturedAt: new Date().toISOString(),
@@ -89,7 +90,7 @@ function markdownSummary(inventory) {
   const lines = [
     `## Cloudflare D1 inventory: ${inventory.installationId}`,
     '',
-    `D1 databases visible in the account: ${inventory.databases.length}. Installation name matches: ${targetNames.size}.`,
+    `D1 databases visible in the account: ${inventory.accountDatabaseCount}. Installation name matches: ${targetNames.size}.`,
     '',
     '| Database | ID | Version | Schema objects |',
     '| --- | --- | --- | ---: |',

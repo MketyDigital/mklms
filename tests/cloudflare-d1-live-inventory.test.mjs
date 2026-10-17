@@ -35,7 +35,8 @@ test('lists D1 databases and reads schema metadata only for the selected install
     fetchImpl,
   });
 
-  assert.deepEqual(inventory.databases.map(({ name }) => name), ['mklms-starpips', 'mklms-mkety-academy', 'starpips-archive', 'unrelated-app']);
+  assert.equal(inventory.accountDatabaseCount, 4);
+  assert.deepEqual(inventory.databases.map(({ name }) => name), ['mklms-starpips']);
   assert.deepEqual(inventory.catalogs.map(({ databaseName }) => databaseName), ['mklms-starpips']);
   assert.deepEqual(inventory.catalogs[0].objects.map(({ type, name }) => [type, name]), [
     ['table', 'students'],
@@ -103,6 +104,8 @@ test('does not treat similarly prefixed databases as the selected installation',
   const inventory = await fetchCloudflareD1Inventory({
     accountId: 'account-id', apiToken: 'token', installationId: 'starpips', fetchImpl,
   });
+  assert.equal(inventory.accountDatabaseCount, 3);
+  assert.deepEqual(inventory.databases.map(({ name }) => name), ['mklms-starpips']);
   assert.deepEqual(queriedIds, ['target']);
   assert.deepEqual(inventory.catalogs.map(({ databaseName }) => databaseName), ['mklms-starpips']);
 });
