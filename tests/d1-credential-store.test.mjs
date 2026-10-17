@@ -7,6 +7,29 @@ function adapter(db){return {prepare(sql){return {bind(...args){return {
  async all(){return {success:true,results:db.prepare(sql).all(...args)}},
  async run(){const r=db.prepare(sql).run(...args);return {success:true,meta:{changes:Number(r.changes)}}}
  }}}},async batch(){throw Error('unused')}}}
+test('D1 credential rotation preserves the original on transaction failure',async()=>{
+ const db=new DatabaseSync(':memory:');
+ try{
+  db.exec(readFileSync('db/d1-migrations/0001_foundation.sql','utf8'));
+  db.prepare("INSERT INTO students(id,display_name,certificate_name) VALUES('s','Student','Student')").run();
+  const bindings={
+    prepare(sql){return {bind(...args){return {sql,args,async all(){return {success:true,results:db.prepare(sql).all(...args)}},async run(){const out=db.prepare(sql).run(...args);return {success:true,meta:{changes:Number(out.changes)}}}}}}},
+    async batch(statements){
+      db.exec('BEGIN');
+      try{const results=statements.map(s=>{db.prepare(s.sql).run(...s.args);return {success:true}});db.exec('COMMIT');return results}
+      catch(error){db.exec('ROLLBACK');throw error}
+    }
+  };
+  const store=new D1CredentialStore(bindings);
+  await store.insertInitial({studentId:'s',lookupHash:'old',hash:'old-hash',salt:'salt',algorithm:'scrypt',prefix:null});
+  await store.rotate({studentId:'s',lookupHash:'new',hash:'new-hash',salt:'salt',algorithm:'scrypt',prefix:null});
+  assert.equal(await store.findActiveByLookupHash('old'),null);
+  assert.equal((await store.findActiveByLookupHash('new'))?.hash,'new-hash');
+  await assert.rejects(store.rotate({studentId:'s',lookupHash:'new',hash:'fail',salt:'salt',algorithm:'scrypt',prefix:null}));
+  assert.equal((await store.findActiveByLookupHash('new'))?.hash,'new-hash');
+  assert.equal(db.prepare("SELECT count(*) AS n FROM student_access_credentials WHERE status='ACTIVE'").get().n,1);
+ }finally{db.close()}
+});
 test('D1 credential lookup refuses inactive student and revoked credentials',async()=>{
  const db=new DatabaseSync(':memory:');
  try{
