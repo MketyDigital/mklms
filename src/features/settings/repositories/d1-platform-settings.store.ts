@@ -1,5 +1,5 @@
-import type { D1DatabaseLike } from "../../../lib/d1-query-adapter";
-import { executeD1, queryD1Rows } from "../../../lib/d1-query-adapter";
+import type { D1DatabaseLike } from "../../../lib/d1-query-adapter.ts";
+import { executeD1, queryD1Rows } from "../../../lib/d1-query-adapter.ts";
 
 export type D1PlatformSettingsRow = {
   id: string;
