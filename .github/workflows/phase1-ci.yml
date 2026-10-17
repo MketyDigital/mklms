@@ -151,6 +151,27 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN" || { echo "Missing CLOUDFLARE_API_TOKEN"; exit 1; }
           node scripts/cloudflare-d1-live-inventory.mjs
 
+      - name: Inspect existing application Worker D1 bindings (read-only)
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          for installation in starpips mkety-academy; do
+            manifest="deploy/installations/${installation}.json"
+            worker=$(jq -r '.appWorker' "$manifest")
+            settings_file=$(mktemp)
+            trap 'rm -f "$settings_file"' EXIT
+            curl --fail-with-body --silent --show-error --request GET \
+              "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${worker}/settings" \
+              --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              --header "Content-Type: application/json" \
+              --output "$settings_file"
+            node scripts/summarize-cloudflare-d1-bindings.mjs "$installation" "$settings_file"
+            rm -f "$settings_file"
+            trap - EXIT
+          done
+
       - name: Verify all read-only schema snapshots were captured
         if: always()
         env:
