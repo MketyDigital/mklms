@@ -130,7 +130,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     installationId,
   });
   const outputPath = process.env.D1_SCHEMA_REPORT_PATH;
-  await writeCloudflareD1Inventory(inventory, outputPath, process.env.GITHUB_STEP_SUMMARY);
+  const summary = await writeCloudflareD1Inventory(inventory, outputPath, process.env.GITHUB_STEP_SUMMARY);
   console.log(`D1 databases: ${inventory.databases.length}; matching schema catalogs: ${inventory.catalogs.length}.`);
+  if (process.env.D1_SCHEMA_SUMMARY_COUNTS_ONLY === '1') console.log(summary.trim());
   if (outputPath) console.log(`Schema inventory written to ${path.basename(outputPath)}.`);
 }

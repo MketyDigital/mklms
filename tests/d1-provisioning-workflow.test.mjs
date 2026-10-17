@@ -16,6 +16,8 @@ test('D1 provisioning creates only named targets and applies schema migrations w
   assert.match(provisioningJob, /for installation in starpips mkety-academy/);
   assert.match(provisioningJob, /wrangler d1 migrations apply "\$database" --remote --config "\$config"/);
   assert.match(provisioningJob, /wrangler d1 migrations list "\$database" --remote --config "\$config"/);
+  assert.match(provisioningJob, /Verify migrated D1 catalogs with counts-only summaries/);
+  assert.match(provisioningJob, /D1_SCHEMA_SUMMARY_COUNTS_ONLY: '1'/);
   assert.doesNotMatch(provisioningJob, /wrangler deploy|opennextjs-cloudflare deploy/i);
 });
 
