@@ -25,9 +25,11 @@ test('D1 credential rotation preserves the original on transaction failure',asyn
   await store.rotate({studentId:'s',lookupHash:'new',hash:'new-hash',salt:'salt',algorithm:'scrypt',prefix:null});
   assert.equal(await store.findActiveByLookupHash('old'),null);
   assert.equal((await store.findActiveByLookupHash('new'))?.hash,'new-hash');
-  await assert.rejects(store.rotate({studentId:'s',lookupHash:'new',hash:'fail',salt:'salt',algorithm:'scrypt',prefix:null}));
+  db.prepare("INSERT INTO students(id,display_name,certificate_name) VALUES('other','Other','Other')").run();
+  await store.insertInitial({studentId:'other',lookupHash:'taken',hash:'other-hash',salt:'salt',algorithm:'scrypt',prefix:null});
+  await assert.rejects(store.rotate({studentId:'s',lookupHash:'taken',hash:'fail',salt:'salt',algorithm:'scrypt',prefix:null}));
   assert.equal((await store.findActiveByLookupHash('new'))?.hash,'new-hash');
-  assert.equal(db.prepare("SELECT count(*) AS n FROM student_access_credentials WHERE status='ACTIVE'").get().n,1);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM student_access_credentials WHERE status='ACTIVE'").get().n,2);
  }finally{db.close()}
 });
 test('D1 credential lookup refuses inactive student and revoked credentials',async()=>{
