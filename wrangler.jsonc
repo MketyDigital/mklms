@@ -11,6 +11,14 @@
   "observability": {
     "enabled": true
   },
+  "d1_databases": [
+    {
+      "binding": "D1_DATABASE",
+      "database_name": "mklms-starpips",
+      "database_id": "cce87337-bcb7-42a2-8e19-358b91b5289a",
+      "migrations_dir": "db/d1-migrations"
+    }
+  ],
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE_FRESH",

@@ -17,6 +17,7 @@ function validConcrete(overrides = {}) {
     publicDomain: 'learn.alpha.example',
     domain: { mode: 'saas-custom-hostname', platformId: 'mkety-saas' },
     r2Bucket: 'alpha-academy-media',
+    d1Database: { name: 'mklms-alpha-academy', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
     hyperdrive: { freshId: 'alpha-fresh', cachedId: 'alpha-cached' },
     rateLimits: {
       auth: 'alpha-rate-auth',
@@ -67,6 +68,8 @@ test('concrete manifests enforce required fields and isolation inside one instal
   const duplicateRate = validConcrete();
   duplicateRate.rateLimits.admin = duplicateRate.rateLimits.auth;
   assert.ok(validateManifest(duplicateRate, { filename: 'x.json', manifestType: 'concrete' }).length > 0);
+
+  assert.ok(validateManifest(validConcrete({ d1Database: { name: 'another-app', id: 'not-a-uuid' } }), { filename: 'x.json', manifestType: 'concrete' }).some((error) => error.includes('d1Database')));
 });
 
 test('all five rate limit namespaces are required', async () => {
@@ -157,6 +160,7 @@ test('cross-installation isolation rejects reused resources', async () => {
     (m) => { m.mediaWorker = alpha.mediaWorker; },
     (m) => { m.publicDomain = alpha.publicDomain; },
     (m) => { m.r2Bucket = alpha.r2Bucket; },
+    (m) => { m.d1Database.id = alpha.d1Database.id; },
     (m) => { m.hyperdrive.freshId = alpha.hyperdrive.cachedId; },
     (m) => { m.rateLimits.auth = alpha.rateLimits.playback; },
     (m) => { m.billingInstallationId = alpha.billingInstallationId; },
@@ -186,6 +190,10 @@ test('Starpips reference manifest exactly matches known non-secret deployment id
     publicDomain: 'learn.starpipsforex.com',
     domain: { mode: 'saas-custom-hostname', platformId: 'mkety-saas' },
     r2Bucket: 'spf-media',
+    d1Database: {
+      name: 'mklms-starpips',
+      id: 'cce87337-bcb7-42a2-8e19-358b91b5289a',
+    },
     hyperdrive: {
       freshId: 'bb7c9f70c2fe402080c22e06d0c0f305',
       cachedId: '14a4baf3773d41c88e4600967ab3b68d',
@@ -202,7 +210,7 @@ test('Starpips reference manifest exactly matches known non-secret deployment id
 
   const appWrangler = readFileSync('wrangler.jsonc', 'utf8');
   const mediaWrangler = readFileSync('workers/media-delivery/wrangler.jsonc', 'utf8');
-  for (const expected of ['"name": "mklms"', 'bb7c9f70c2fe402080c22e06d0c0f305', '14a4baf3773d41c88e4600967ab3b68d', 'spf-media', '51090501', '51090502', '51090503', '51090504', '51090505']) {
+  for (const expected of ['"name": "mklms"', 'cce87337-bcb7-42a2-8e19-358b91b5289a', 'mklms-starpips', 'bb7c9f70c2fe402080c22e06d0c0f305', '14a4baf3773d41c88e4600967ab3b68d', 'spf-media', '51090501', '51090502', '51090503', '51090504', '51090505']) {
     assert.match(appWrangler, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
   assert.match(mediaWrangler, /"name": "mklms-media-delivery"/);

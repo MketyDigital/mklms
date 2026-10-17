@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const workflow = readFileSync('.github/workflows/phase1-ci.yml', 'utf8');
-const auditJob = workflow.split('  live-readonly-schema-audit:\n')[1] ?? '';
+const auditJob = (workflow.split('  live-readonly-schema-audit:\n')[1] ?? '').split('\n  provision-empty-d1-targets:\n')[0];
 const pgExporter = readFileSync('scripts/export-postgres-schema-catalog.mjs', 'utf8');
 
 test('live schema audit is scoped to the current same-repository migration PR', () => {
