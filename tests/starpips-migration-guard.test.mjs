@@ -65,6 +65,36 @@ test('rejects a later target recorded while an earlier target is missing', () =>
 test('rejects a target batch that is not the exact latest contiguous release suffix', () => {
   assert.throws(
     () => validateStarpipsMigrationBatch(recordsThrough(17), migrations, [migrations[16].filename, migrations[20].filename]),
-    /contiguous latest migration suffix/i,
+    /targets must be contiguous/i,
+  );
+});
+
+test('keeps the live release green while known replication migrations remain intentionally deferred', () => {
+  const deferred = [
+    { filename: '022_replication_journal.sql', checksum: 'replication-022' },
+    { filename: '023_transactional_replication_capture.sql', checksum: 'replication-023' },
+    { filename: '024_replication_apply_guard.sql', checksum: 'replication-024' },
+  ];
+  const result = validateStarpipsMigrationBatch(recordsThrough(21), [...migrations, ...deferred], targets);
+  assert.deepEqual(result, { pendingTargets: [], allTargetsApplied: true });
+});
+
+test('blocks a live release if any deferred replication migration is already recorded', () => {
+  const deferred = { filename: '022_replication_journal.sql', checksum: 'replication-022' };
+  const records = [...recordsThrough(21), {
+    filename: deferred.filename,
+    checksum_sha256: deferred.checksum,
+  }];
+  assert.throws(
+    () => validateStarpipsMigrationBatch(records, [...migrations, deferred], targets),
+    /deferred migration 022_replication_journal\.sql is recorded/i,
+  );
+});
+
+test('fails closed when a newer production migration is not explicitly classified', () => {
+  const unknown = { filename: '025_unreviewed_change.sql', checksum: 'unknown-025' };
+  assert.throws(
+    () => validateStarpipsMigrationBatch(recordsThrough(21), [...migrations, unknown], targets),
+    /unclassified migrations follow the guarded Starpips batch/i,
   );
 });

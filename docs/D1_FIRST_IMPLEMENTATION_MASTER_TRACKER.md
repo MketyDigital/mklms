@@ -40,9 +40,9 @@
 - [ ] Verify complete PostgreSQL source state, backups, recovery point objective and per-installation account access without mutating production
 
 ## Phase 1 — complete SQLite schema and data semantics
-- [ ] Compare all tables and final columns from PostgreSQL migrations 001–022; offline D1 column inventory passes, but exact catalog/type/constraint/index/default parity is not proven
+- [ ] Compare all tables and final columns from PostgreSQL migrations 001–024; offline D1 column inventory passes, but exact live catalog/type/constraint/index/default parity is not proven
 - [ ] Close migration compatibility gaps (especially deferred lesson/live media foreign keys and ALTER migrations)
-- [ ] Design reversible mappings for NUMERIC money (USD cents and adjustment sign), timestamps, booleans, JSON and PG-specific types; test with edge-case fixtures
+- [~] Design reversible mappings for NUMERIC money (USD cents and adjustment sign), timestamps, booleans, JSON and PG-specific types; the offline PG-to-D1 applier has exact cents conversion and basic value normalization, but full semantic mappings remain open
 - [ ] Reconcile enrollment ID parity, trigger/event side effects and concurrency under both databases; no unsynchronized enrollment automations
 
 ## Phase 2 — real application persistence
@@ -56,7 +56,7 @@
 
 ## Phase 3 — reliable single-writer synchronization
 - [ ] Specify and implement durable per-installation mutation journal/outbox with strictly monotonic sequence, idempotency, replay, retention and retry/backoff
-- [ ] Implement PostgreSQL→D1 initial snapshot + incremental sync with consistent watermark and catch-up
+- [~] Implement PostgreSQL→D1 initial snapshot + incremental sync with consistent watermark and catch-up; transaction replay/receipts/checkpoint foundation exists, but snapshot creation, watermark protocol, and catch-up orchestration remain open
 - [ ] Implement D1→PostgreSQL standby apply and failback catch-up with integrity proof; validate ordering, duplicates, interruptions and conflict handling
 - [ ] Establish health/readiness indicators: observed sequence lag, schema version, checksums/counts, last successful reconciliation, dead-letter alerts
 - [ ] Enforce fenced epochs and **one** write authority with authenticated coordination and rollback; exercise crashes and stale writers
@@ -76,7 +76,11 @@
 - [ ] Repeat for second installation only after first is stable; retain PG as tested standby
 
 ## Current checkpoint
-As of 2026-10-17, implementation is in draft PR #149 at `feat/d1-cutover-implementation-20261017`; it is not merged and no production database or Worker was changed. Current local evidence: 667 tests pass, TypeScript and focused ESLint pass, strict vendor dependency audit reports zero active references and zero stale allowlist entries, and the D1 offline rehearsal applies 21 migrations with 52 required indexes, 168 triggers, SQLite integrity and foreign-key checks passing. Offline coverage finds 37/37 application source tables across 23 PostgreSQL migrations; catalog export reports 37 tables, 388 columns, 60 indexes, 44 foreign keys, 74 checks and 168 triggers. This is not proof of method/event equivalence or live catalog parity. The journal reader returns complete source transactions and rejects checkpoints that split a transaction; target writes and checkpoint advancement remain unimplemented. GitHub CI run [#39063036764](https://github.com/MketyDigital/mklms/actions/runs/39063036764) passed regular verification, including tests, schema coverage, D1 migration/integrity rehearsal, lint, Next.js/OpenNext builds, and app/media/billing Worker packaging dry-runs. Its guarded live schema audit failed on the initial attempt and one retry: the production PostgreSQL URL returned sanitized `EAI_AGAIN` DNS errors, so no PostgreSQL catalog was captured; Cloudflare API calls succeeded but found no exact installation-name matches for either configured D1 target, so no D1 schema query ran. This does not establish whether D1 databases exist under other names or whether the Cloudflare account/token scope is correct. No application rows were read and no database or Worker was changed. Resolve the production URL's DNS target and confirm the intended Cloudflare account scope and exact D1 target identities before repeating the catalog comparison. D1 runtime remains disabled, and target replay/apply, reconciliation, backup/restore, staging and authority fencing remain absent. **Both productions remain PostgreSQL.** Phase 5 is blocked until these proofs pass and each installation has separate cutover approval.
+As of 2026-10-17, implementation is in draft PR #149 at `feat/d1-cutover-implementation-20261017`; it is not merged and no production database, Worker, or traffic route was changed. Current local evidence: 680 tests pass; TypeScript, focused ESLint, and `git diff --check` pass; strict vendor dependency audit reports zero active references and zero stale allowlist entries. The D1 offline rehearsal applies 22 migrations with 52 required indexes and 168 triggers; SQLite integrity and foreign-key checks pass. Offline coverage finds 37/37 application tables across 24 PostgreSQL migrations, and column parity passes 37/37 tables. These are local/offline results, not proof of live catalog parity or application behavior.
+
+The PostgreSQL journal reader returns one transaction at a time and rejects a cursor that splits one. A new offline-only D1 applier foundation transactionally applies PostgreSQL journal entries, receipts and checkpoint advancement; tests cover replay idempotency, rollback, exact decimal-to-cents conversion, and suppression of source-derived enrollments. PostgreSQL 024 and D1 0022 add an apply-mode guard while retaining integrity checks. This is still not connected to app runtime and does not establish initial snapshots, bidirectional replication, reconciliation, or writer fencing. The Starpips release migration guard allows only the known deferred 022–024 tail and refuses to proceed if a deferred or unknown migration is recorded; it continues to apply only 018–021.
+
+The latest read-only live audit in CI could not resolve the production PostgreSQL host (`EAI_AGAIN`), so it captured no catalog. Cloudflare API calls succeeded, but neither configured installation matched an exact D1 database name, so no D1 schema query ran. This does not establish that databases are absent; account scope or resource naming may differ. No application rows were read. The last successful regular CI run is #39063372756 on the earlier PR head; CI for the current implementation delta is pending. D1 runtime remains disabled, and live catalog parity, snapshots, reverse apply/failback, reconciliation, backup/restore, staging, and authority fencing remain open. **Both production installations remain on PostgreSQL.** Phase 5 is blocked until all proofs pass and each installation has separate cutover approval.
 
 ## Execution order from this checkpoint
 1. [x] Finish D1 persistence slices through managed hosting; commit `8c3ae41`.
@@ -85,7 +89,7 @@ As of 2026-10-17, implementation is in draft PR #149 at `feat/d1-cutover-impleme
 4. [ ] Finish schema semantic mappings and address confirmed migration/catalog differences with forward-only D1 migrations.
 5. [ ] Complete shared repository contracts and explicit D1 runtime composition, then migrate route/job/webhook call sites behind one selected backend.
 6. [ ] Prove complete application behavior on local D1 and isolated PostgreSQL; keep live routing PostgreSQL-only until proven.
-7. [~] Add journal/checkpoint/receipt/dead-letter schema and transactionally capture mutations; implement snapshot/replay in both directions and reconciliation.
+7. [~] Add journal/checkpoint/receipt/dead-letter schema and transactionally capture mutations; PG→D1 transaction replay foundation exists, but snapshot, reverse apply, and reconciliation remain open.
 8. [ ] Implement strongly consistent authority epochs and enforce the write gate across every mutating entry point.
 9. [ ] Add health, restore, runbook, staging, failure-injection and per-installation rehearsal evidence.
 10. [ ] Only after all prior evidence, evaluate separately gated Starpips and Academy cutovers; this tracker does not approve either switch.
