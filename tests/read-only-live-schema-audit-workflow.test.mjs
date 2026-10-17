@@ -17,9 +17,17 @@ test('live schema audit is scoped to the current same-repository migration PR', 
 test('live schema audit exports only catalog metadata and never applies migrations or deploys', () => {
   assert.match(auditJob, /export-postgres-schema-catalog\.mjs/);
   assert.match(auditJob, /cloudflare-d1-live-inventory\.mjs/);
-  assert.match(auditJob, /upload-artifact@v4/);
+  assert.match(auditJob, /continue-on-error: true/);
+  assert.match(auditJob, /if: always\(\)/);
+  assert.match(auditJob, /Verify all read-only schema snapshots were captured/);
+  assert.match(auditJob, /postgres-production\.json/);
+  assert.doesNotMatch(auditJob, /upload-artifact@/);
   assert.doesNotMatch(auditJob, /(?:wrangler\s+deploy|wrangler\s+d1\s+migrations\s+apply|npm\s+run\s+(?:db:migrate|deploy)|\b(?:INSERT|UPDATE|DELETE|DROP|ALTER)\s+(?:INTO|FROM|TABLE|DATABASE))/i);
   assert.doesNotMatch(auditJob, /echo\s+.*\$\{?(?:MKLMS_SCHEMA_AUDIT_DATABASE_URL|CLOUDFLARE_API_TOKEN)/i);
   assert.match(pgExporter, /default_transaction_read_only=on/);
+  assert.match(pgExporter, /BEGIN READ ONLY/);
+  assert.match(pgExporter, /transaction_read_only/);
+  assert.match(pgExporter, /connection details suppressed/);
+  assert.doesNotMatch(pgExporter, /console\.(?:error|log)\([^\n]*(?:error\.message|error\.hostname)/);
   assert.doesNotMatch(pgExporter, /SELECT\s+\*|SELECT\s+.+\bFROM\s+(?!information_schema|pg_catalog|pg_|unnest|LATERAL)/i);
 });

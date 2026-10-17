@@ -85,8 +85,19 @@ export async function fetchCloudflareD1Inventory({ accountId, apiToken, installa
   };
 }
 
-function markdownSummary(inventory) {
+export function markdownSummary(inventory, { countsOnly = false } = {}) {
   const targetNames = new Set(inventory.catalogs.map(({ databaseName }) => databaseName));
+  if (countsOnly) {
+    const objectCount = inventory.catalogs.reduce((total, catalog) => total + catalog.objects.length, 0);
+    return [
+      `## Cloudflare D1 schema audit: ${inventory.installationId}`,
+      '',
+      `Databases visible in the account: ${inventory.accountDatabaseCount}. Exact installation matches: ${targetNames.size}. Schema objects across matching databases: ${objectCount}.`,
+      '',
+      'Only SQLite schema metadata was queried; application rows were not read. Database names, identifiers, and DDL are omitted from this summary.',
+      '',
+    ].join('\n');
+  }
   const lines = [
     `## Cloudflare D1 inventory: ${inventory.installationId}`,
     '',
@@ -106,8 +117,9 @@ function markdownSummary(inventory) {
 
 export async function writeCloudflareD1Inventory(inventory, outputPath, summaryPath) {
   if (outputPath) await writeFile(outputPath, `${JSON.stringify(inventory, null, 2)}\n`, { flag: 'wx' });
-  if (summaryPath) await appendFile(summaryPath, markdownSummary(inventory));
-  return markdownSummary(inventory);
+  const summary = markdownSummary(inventory, { countsOnly: process.env.D1_SCHEMA_SUMMARY_COUNTS_ONLY === '1' });
+  if (summaryPath) await appendFile(summaryPath, summary);
+  return summary;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

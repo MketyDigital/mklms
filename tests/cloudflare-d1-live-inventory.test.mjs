@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { D1_SCHEMA_SQL, fetchCloudflareD1Inventory } from '../scripts/cloudflare-d1-live-inventory.mjs';
+import { D1_SCHEMA_SQL, fetchCloudflareD1Inventory, markdownSummary } from '../scripts/cloudflare-d1-live-inventory.mjs';
 
 const response = (body, status = 200) => ({
   ok: status >= 200 && status < 300,
@@ -116,4 +116,18 @@ test('rejects API errors without echoing response content or credentials', async
     fetchCloudflareD1Inventory({ accountId: 'a', apiToken: 'private-test-token', installationId: 'starpips', fetchImpl }),
     (error) => error.message.includes('Cloudflare D1 request failed (403)') && !error.message.includes('private-test-token'),
   );
+});
+
+test('counts-only summary omits live database names, identifiers, and DDL', () => {
+  const summary = markdownSummary({
+    installationId: 'starpips',
+    accountDatabaseCount: 3,
+    databases: [{ id: 'private-database-id', name: 'mklms-starpips' }],
+    catalogs: [{ databaseId: 'private-database-id', databaseName: 'mklms-starpips', objects: [
+      { type: 'table', name: 'private-table', sql: 'CREATE TABLE private-table(secret TEXT)' },
+    ] }],
+  }, { countsOnly: true });
+  assert.match(summary, /Exact installation matches: 1/);
+  assert.match(summary, /Schema objects .*: 1/);
+  assert.doesNotMatch(summary, /private-database-id|mklms-starpips|private-table|CREATE TABLE/);
 });
