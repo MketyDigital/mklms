@@ -17,6 +17,7 @@ test('lists D1 databases and reads schema metadata only for the selected install
       result: [
         { uuid: 'db-starpips', name: 'mklms-starpips', version: 'production' },
         { uuid: 'db-academy', name: 'mklms-mkety-academy', version: 'production' },
+        { uuid: 'db-starpips-archive', name: 'starpips-archive', version: 'production' },
         { uuid: 'db-other', name: 'unrelated-app', version: 'production' },
       ],
       result_info: { page: 1, per_page: 100, total_count: 3 },
@@ -34,7 +35,7 @@ test('lists D1 databases and reads schema metadata only for the selected install
     fetchImpl,
   });
 
-  assert.deepEqual(inventory.databases.map(({ name }) => name), ['mklms-starpips', 'mklms-mkety-academy', 'unrelated-app']);
+  assert.deepEqual(inventory.databases.map(({ name }) => name), ['mklms-starpips', 'mklms-mkety-academy', 'starpips-archive', 'unrelated-app']);
   assert.deepEqual(inventory.catalogs.map(({ databaseName }) => databaseName), ['mklms-starpips']);
   assert.deepEqual(inventory.catalogs[0].objects.map(({ type, name }) => [type, name]), [
     ['table', 'students'],
@@ -80,6 +81,30 @@ test('does not query unrelated D1 databases and validates credentials and instal
   assert.equal(postCount, 0);
   await assert.rejects(fetchCloudflareD1Inventory({ accountId: '', apiToken: 't', installationId: 'starpips', fetchImpl }), /Cloudflare account ID and API token are required/);
   await assert.rejects(fetchCloudflareD1Inventory({ accountId: 'a', apiToken: 't', installationId: 'unknown', fetchImpl }), /Unsupported installation/);
+});
+
+test('does not treat similarly prefixed databases as the selected installation', async () => {
+  const queriedIds = [];
+  const fetchImpl = async (url, options = {}) => {
+    if (options.method === 'POST') {
+      queriedIds.push(new URL(String(url)).pathname.split('/').at(-2));
+      return response({ success: true, result: [{ success: true, results: [] }] });
+    }
+    return response({
+      success: true,
+      result: [
+        { uuid: 'target', name: 'mklms-starpips' },
+        { uuid: 'archive', name: 'starpips-archive' },
+        { uuid: 'preview', name: 'starpips-preview' },
+      ],
+      result_info: { total_count: 3 },
+    });
+  };
+  const inventory = await fetchCloudflareD1Inventory({
+    accountId: 'account-id', apiToken: 'token', installationId: 'starpips', fetchImpl,
+  });
+  assert.deepEqual(queriedIds, ['target']);
+  assert.deepEqual(inventory.catalogs.map(({ databaseName }) => databaseName), ['mklms-starpips']);
 });
 
 test('rejects API errors without echoing response content or credentials', async () => {

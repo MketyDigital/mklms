@@ -16,7 +16,7 @@ function normalizeName(value) {
 function matchesInstallation(databaseName, installationId) {
   const actual = normalizeName(databaseName);
   const installation = normalizeName(installationId);
-  return actual.startsWith(installation) || actual.startsWith(`mklms${installation}`);
+  return actual === installation || actual === `mklms${installation}`;
 }
 
 async function cloudflareJson(url, options, fetchImpl) {
