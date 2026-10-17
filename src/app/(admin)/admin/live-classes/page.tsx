@@ -1,20 +1,20 @@
 import { AppLayout } from "@/components/layout/app-layout";
 import { AdminLiveChatVisibilityControl } from "@/features/live-classes/components/admin-live-chat-visibility-control";
 import { AdminLiveClassManager } from "@/features/live-classes/components/admin-live-class-manager";
-import { PostgresAdminLiveClassRepository } from "@/features/live-classes/repositories/postgres-admin-live-class.repository";
-import { PostgresLiveClassRepository } from "@/features/live-classes/repositories/postgres-live-class.repository";
-import { PostgresAdminMediaRepository } from "@/features/media/repositories/postgres-admin-media.repository";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresAdminLiveClassRepository } from "@/features/live-classes/repositories/live-class-repository.factory";
+import { createPostgresLiveClassRepository } from "@/features/live-classes/repositories/live-class-repository.factory";
+import { createPostgresAdminMediaRepository } from "@/features/media/repositories/media-repository.factory";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminLiveClassesPage() {
-  const repository = new PostgresAdminLiveClassRepository();
-  const runtimeRepository = new PostgresLiveClassRepository();
+  const repository = createPostgresAdminLiveClassRepository();
+  const runtimeRepository = createPostgresLiveClassRepository();
   const [batchRecords, media, settings] = await Promise.all([
     repository.listBatches(),
-    new PostgresAdminMediaRepository().listAssets(),
-    new PostgresSettingsRepository().getPlatformSettings(),
+    createPostgresAdminMediaRepository().listAssets(),
+    createPostgresSettingsRepository().getPlatformSettings(),
   ]);
 
   const batches = await Promise.all(

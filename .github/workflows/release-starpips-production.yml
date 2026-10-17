@@ -92,20 +92,23 @@ jobs:
           018_certificate_visual_layout_and_starpips_calibration.sql
           019_managed_hosting_daily_ledger.sql
           020_managed_hosting_payment_settlement.sql
+          021_shared_enrollment_id_encoding.sql
 
-      - name: Apply only guarded additive Starpips migrations 018 through 020 when pending
+      - name: Apply only guarded additive Starpips migrations 018 through 021 when pending
         run: >-
           node scripts/starpips-migration-guard.mjs apply
           018_certificate_visual_layout_and_starpips_calibration.sql
           019_managed_hosting_daily_ledger.sql
           020_managed_hosting_payment_settlement.sql
+          021_shared_enrollment_id_encoding.sql
 
-      - name: Verify Starpips migrations 018 through 020 are current
+      - name: Verify Starpips migrations 018 through 021 are current
         run: >-
           node scripts/starpips-migration-guard.mjs verify
           018_certificate_visual_layout_and_starpips_calibration.sql
           019_managed_hosting_daily_ledger.sql
           020_managed_hosting_payment_settlement.sql
+          021_shared_enrollment_id_encoding.sql
 
   release:
     needs: migrate

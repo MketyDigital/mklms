@@ -19,11 +19,11 @@ test("cached Hyperdrive is opt-in for stable public live-page settings only", ()
   assert.match(publicLivePage, /getCachedPostgresPool/);
   assert.match(
     publicLivePage,
-    /new PostgresSettingsRepository\(\s*getCachedPostgresPool\(\),?\s*\)/,
+    /createPostgresSettingsRepository\(\s*getCachedPostgresPool\(\),?\s*\)/,
   );
 
   assert.doesNotMatch(liveState, /getCachedPostgresPool/);
-  assert.match(liveState, /new PostgresLiveClassRepository\(\)/);
+  assert.match(liveState, /createPostgresLiveClassRepository\(\)/);
 });
 
 test("Wrangler remains strict JSON and binds the configured production Hyperdrives", () => {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getCurrentStudentSession } from "@/features/access/server/current-student";
-import { PostgresCertificateRepository } from "@/features/certificates/repositories/postgres-certificate.repository";
+import { createPostgresCertificateRepository } from "@/features/certificates/repositories/certificate-repository.factory";
 import { getConfiguredStorageProvider } from "@/providers/s3-compatible-storage-provider";
 
 function safeCertificateFilename(certificateId: string): string {
@@ -25,7 +25,7 @@ export async function GET(
   }
 
   const { certificateId } = await context.params;
-  const certificate = await new PostgresCertificateRepository().findForStudent(
+  const certificate = await createPostgresCertificateRepository().findForStudent(
     certificateId,
     session.studentId,
   );

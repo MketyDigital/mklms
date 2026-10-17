@@ -44,6 +44,18 @@ jobs:
       - name: Domain tests
         run: npm test
 
+      - name: Verify PostgreSQL to D1 column coverage
+        run: node scripts/d1-column-parity.mjs --require-complete
+
+      - name: Verify PostgreSQL to D1 schema coverage
+        run: node scripts/d1-schema-coverage.mjs --require-complete
+
+      - name: Rehearse all D1 migrations and integrity checks
+        run: node scripts/d1-rehearse-migrations.mjs
+
+      - name: Reject active Supabase references
+        run: node scripts/audit-no-supabase.mjs --strict
+
       - name: Lint
         run: npm run lint
 

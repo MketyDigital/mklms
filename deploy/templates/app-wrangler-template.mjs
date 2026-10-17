@@ -5,7 +5,6 @@ export function buildAppWrangler(manifest) {
     main: '.open-next/worker.js',
     compatibility_date: '2026-08-30',
     compatibility_flags: ['nodejs_compat'],
-    build: { command: 'npm run cf:build' },
     assets: { directory: '.open-next/assets', binding: 'ASSETS' },
     observability: { enabled: true },
     hyperdrive: [

@@ -2,13 +2,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
-import { PostgresMessageRepository } from "@/features/messages/repositories/postgres-message.repository";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresMessageRepository } from "@/features/messages/repositories/message-repository.factory";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 
 const sendSchema = z.object({ text: z.string().trim().min(1).max(5000) });
 
 async function getRepositoryForThread(threadId: string) {
-  const repository = new PostgresMessageRepository();
+  const repository = createPostgresMessageRepository();
   if (!(await repository.getStudentIdForThread(threadId))) return null;
   return repository;
 }
@@ -68,7 +68,7 @@ export async function POST(
     return NextResponse.json({ ok: false, message: "Conversation not found." }, { status: 404 });
   }
 
-  const settings = await new PostgresSettingsRepository().getPlatformSettings();
+  const settings = await createPostgresSettingsRepository().getPlatformSettings();
   const message = await repository.sendAdminReply(
     threadId,
     settings.supportName ?? settings.organizationName,

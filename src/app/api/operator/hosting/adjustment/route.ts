@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { PostgresManagedHostingLedgerRepository } from "@/features/hosting/repositories/postgres-managed-hosting-ledger.repository";
+import { createPostgresManagedHostingLedgerRepository } from "@/features/hosting/repositories/hosting-repository.factory"
 import { isValidManagedHostingOperatorKey } from "@/features/hosting/server/hosting-operator-auth";
 
 const schema = z.object({
@@ -21,7 +21,7 @@ export async function GET(request: Request) {
   if (monthKey && !/^\d{4}-(0[1-9]|1[0-2])$/.test(monthKey)) {
     return NextResponse.json({ ok: false, message: "Invalid month." }, { status: 400 });
   }
-  const repository = new PostgresManagedHostingLedgerRepository();
+  const repository = createPostgresManagedHostingLedgerRepository();
   const [entries, totalAdjustmentUsd] = await Promise.all([
     repository.listMonth(monthKey),
     repository.getMonthAdjustmentTotal(monthKey),
@@ -37,6 +37,6 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ ok: false, message: "Enter a valid adjustment and reason." }, { status: 400 });
   }
-  const entry = await new PostgresManagedHostingLedgerRepository().setDailyOperatorAdjustment(parsed.data);
+  const entry = await createPostgresManagedHostingLedgerRepository().setDailyOperatorAdjustment(parsed.data);
   return NextResponse.json({ ok: true, entry });
 }

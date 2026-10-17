@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { LiveClassRoomMobileFirst } from "@/features/live-classes/components/live-class-room-mobile-first";
 import { LiveMobileViewportAnchor } from "@/features/live-classes/components/live-mobile-viewport-anchor";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 import { getCachedPostgresPool } from "@/lib/postgres";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +25,7 @@ export default async function PublicLiveClassPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const settings = await new PostgresSettingsRepository(
+  const settings = await createPostgresSettingsRepository(
     getCachedPostgresPool(),
   ).getPlatformSettings();
 

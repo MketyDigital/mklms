@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { PostgresAdminLearningRepository } from "@/features/courses/repositories/postgres-admin-learning.repository";
+import { createPostgresAdminLearningRepository } from "@/features/courses/repositories/learning-repository.factory";
 import { AdminLearningService } from "@/features/courses/services/admin-learning.service";
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
 
@@ -24,7 +24,7 @@ export async function POST(
   }
 
   const { courseId } = await context.params;
-  const service = new AdminLearningService(new PostgresAdminLearningRepository());
+  const service = new AdminLearningService(createPostgresAdminLearningRepository());
   const courseModule = await service.createModule(courseId, parsed.data);
 
   return NextResponse.json({ ok: true, module: courseModule }, { status: 201 });

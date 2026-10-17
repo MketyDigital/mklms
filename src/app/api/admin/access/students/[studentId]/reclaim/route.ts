@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 
-import { PostgresAdminAccessRepository } from "@/features/access/repositories/postgres-admin-access.repository";
+import { createPostgresAdminAccessRepository } from "@/features/access/repositories/access-repository.factory";
 import { AccessAdminService } from "@/features/access/services/access-admin.service";
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 
 export async function POST(
   _request: Request,
@@ -16,8 +16,8 @@ export async function POST(
   const { studentId } = await context.params;
 
   try {
-    const settings = await new PostgresSettingsRepository().getPlatformSettings();
-    const service = new AccessAdminService(new PostgresAdminAccessRepository(), {
+    const settings = await createPostgresSettingsRepository().getPlatformSettings();
+    const service = new AccessAdminService(createPostgresAdminAccessRepository(), {
       accessCodePrefix: settings.accessCodePrefix,
       claimCodePrefix: "CLAIM",
     });

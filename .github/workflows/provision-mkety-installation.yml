@@ -18,10 +18,10 @@ jobs:
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      MKETY_DB_HOST: db.vdblajgxrfndjesoyayy.supabase.co
-      MKETY_DB_PORT: 5432
-      MKETY_DB_NAME: postgres
-      MKETY_DB_USER: mkety_academy_app
+      MKETY_DB_HOST: ${{ secrets.MKETY_DB_HOST }}
+      MKETY_DB_PORT: ${{ secrets.MKETY_DB_PORT }}
+      MKETY_DB_NAME: ${{ secrets.MKETY_DB_NAME }}
+      MKETY_DB_USER: ${{ secrets.MKETY_DB_USER }}
       MKETY_DB_PASSWORD: ${{ secrets.MKETY_DB_PASSWORD }}
       INSTALLATION_ID: mkety-academy
       R2_BUCKET: mkety-academy-media
@@ -88,7 +88,9 @@ jobs:
             echo "ready=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          test -n "$MKETY_DB_PASSWORD" || { echo "Missing required Mkety-only database secret: MKETY_DB_PASSWORD"; exit 1; }
+          for name in MKETY_DB_HOST MKETY_DB_PORT MKETY_DB_NAME MKETY_DB_USER MKETY_DB_PASSWORD; do
+            if [ -z "${!name:-}" ]; then echo "Missing required Mkety database secret: $name"; exit 1; fi
+          done
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
       - name: Create or reuse Mkety Hyperdrives
@@ -99,16 +101,32 @@ jobs:
           set -euo pipefail
           API="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/hyperdrive/configs"
           AUTH="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          umask 077
 
           list=$(mktemp)
+          trap 'rm -f "$list"' EXIT
           curl --silent --show-error --fail-with-body --request GET "$API?per_page=100" -H "$AUTH" >"$list"
           jq -e '.success == true' "$list" >/dev/null
+
+          verify_origin() {
+            local id="$1" response status
+            response=$(mktemp)
+            status=$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+              "$API/$id" -H "$AUTH")
+            if [ "$status" != "200" ]; then rm -f "$response"; echo "Unable to verify Mkety Hyperdrive origin."; return 1; fi
+            if ! HYPERDRIVE_ORIGIN_JSON_PATH="$response" node scripts/assert-hyperdrive-origin.mjs; then
+              rm -f "$response"
+              return 1
+            fi
+            rm -f "$response"
+          }
 
           create_or_reuse() {
             local name="$1"
             local existing
             existing=$(jq -r --arg name "$name" '.result[]? | select(.name == $name) | .id' "$list" | head -n1)
             if [ -n "$existing" ]; then
+              verify_origin "$existing" || { echo "Existing Hyperdrive target mismatch; no resource was changed."; return 1; }
               printf '%s' "$existing"
               return
             fi
@@ -127,7 +145,10 @@ jobs:
             curl --silent --show-error --fail-with-body --request POST "$API" \
               -H "$AUTH" -H 'Content-Type: application/json' --data @"$body" >"$response"
             jq -e '.success == true' "$response" >/dev/null
-            jq -r '.result.id' "$response"
+            local created_id
+            created_id=$(jq -r '.result.id' "$response")
+            verify_origin "$created_id"
+            printf '%s' "$created_id"
             rm -f "$body" "$response"
           }
 
@@ -141,7 +162,6 @@ jobs:
           NODE
           echo "fresh_id=$fresh_id" >> "$GITHUB_OUTPUT"
           echo "cached_id=$cached_id" >> "$GITHUB_OUTPUT"
-          rm -f "$list"
 
       - name: Write non-secret provisioning result
         shell: bash

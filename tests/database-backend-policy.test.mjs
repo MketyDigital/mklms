@@ -1,19 +1,33 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { resolveDatabaseBackend } from '../src/lib/database-backend-policy.ts';
 
-const source = readFileSync('src/lib/database-backend-policy.ts', 'utf8');
+const readyForD1 = {
+  backend: 'd1',
+  d1BindingPresent: true,
+  schemaReady: true,
+  reconciliationPassed: true,
+  authorityLeaseVerified: true,
+  replicationHealthy: true,
+  rollbackPlanVerified: true,
+  cutoverApproved: true,
+};
 
-test('PostgreSQL remains the default; D1 cannot be automatically selected', () => {
-  assert.match(source, /config\.backend \?\? "postgresql"/);
-  assert.match(source, /if \(backend === "postgresql"\) return "postgresql"/);
+test('PostgreSQL remains the default and accepts explicit PostgreSQL selection', () => {
+  assert.equal(resolveDatabaseBackend({}), 'postgresql');
+  assert.equal(resolveDatabaseBackend({ backend: 'postgresql' }), 'postgresql');
 });
-test('D1 requires all explicit cutover gates and fails closed', () => {
-  for (const gate of ['d1BindingPresent', 'schemaReady', 'reconciliationPassed', 'cutoverApproved']) {
-    assert.match(source, new RegExp('!config\\.' + gate));
-  }
-  assert.match(source, /throw new Error\(/);
+
+test('caller-supplied readiness booleans cannot authorize D1 without a verifier', () => {
+  assert.throws(
+    () => resolveDatabaseBackend(readyForD1),
+    /D1 is unavailable: production authority verification is not implemented/,
+  );
 });
-test('Selection policy does not connect to databases or mutate live traffic', () => {
-  assert.doesNotMatch(source, /getCloudflareContext|wrangler|\.query\(|\.execute\(|fetch\(/);
+
+test('unsupported backend selections fail closed', () => {
+  assert.throws(
+    () => resolveDatabaseBackend({ ...readyForD1, backend: 'postgres' }),
+    /Unsupported MkLMS database backend/,
+  );
 });

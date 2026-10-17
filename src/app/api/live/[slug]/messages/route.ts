@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { resolveLiveBatchState } from "@/features/live-classes/domain/live-session";
-import { PostgresLiveClassRepository } from "@/features/live-classes/repositories/postgres-live-class.repository";
+import { createPostgresLiveClassRepository } from "@/features/live-classes/repositories/live-class-repository.factory";
 import { getOrCreateLiveViewerIdentity } from "@/features/live-classes/server/live-viewer";
 import { LiveAttendeeMessageService } from "@/features/live-classes/services/live-attendee-message.service";
 import { LiveRoomService } from "@/features/live-classes/services/live-room.service";
@@ -30,7 +30,7 @@ export async function GET(
   context: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await context.params;
-  const repository = new PostgresLiveClassRepository();
+  const repository = createPostgresLiveClassRepository();
   const batch = await repository.findPublicBatchBySlug(slug);
   if (!batch) {
     return NextResponse.json(
@@ -101,7 +101,7 @@ export async function POST(
     return NextResponse.json({ ok: false, message: "Enter a valid comment." }, { status: 400 });
   }
 
-  const repository = new PostgresLiveClassRepository();
+  const repository = createPostgresLiveClassRepository();
   const batch = await repository.findPublicBatchBySlug(slug);
   if (!batch) {
     return NextResponse.json({ ok: false, message: "This live class is not available." }, { status: 404 });

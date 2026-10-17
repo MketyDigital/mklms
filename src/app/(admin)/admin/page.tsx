@@ -13,21 +13,21 @@ import {
 
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PostgresAdminAccessRepository } from "@/features/access/repositories/postgres-admin-access.repository";
-import { PostgresCertificateRepository } from "@/features/certificates/repositories/postgres-certificate.repository";
-import { PostgresAdminLearningRepository } from "@/features/courses/repositories/postgres-admin-learning.repository";
-import { PostgresAdminLiveClassRepository } from "@/features/live-classes/repositories/postgres-admin-live-class.repository";
+import { createPostgresAdminAccessRepository } from "@/features/access/repositories/access-repository.factory";
+import { createPostgresCertificateRepository } from "@/features/certificates/repositories/certificate-repository.factory";
+import { createPostgresAdminLearningRepository } from "@/features/courses/repositories/learning-repository.factory";
+import { createPostgresAdminLiveClassRepository } from "@/features/live-classes/repositories/live-class-repository.factory";
 import {
   getBillingMonthKey,
   resolveManagedHostingPaymentWindow,
 } from "@/features/hosting/domain/managed-hosting";
 import { AdminHostingNoticeRefresh } from "@/features/hosting/components/admin-hosting-notice-refresh";
-import { PostgresManagedHostingRepository } from "@/features/hosting/repositories/postgres-managed-hosting.repository";
+import { createPostgresManagedHostingRepository } from "@/features/hosting/repositories/hosting-repository.factory";
 import { getManagedHostingServiceAccess } from "@/features/hosting/server/managed-hosting-access";
 import { getEffectiveManagedHostingPolicy } from "@/features/hosting/server/managed-hosting-policy";
-import { PostgresAdminMediaRepository } from "@/features/media/repositories/postgres-admin-media.repository";
-import { PostgresMessageRepository } from "@/features/messages/repositories/postgres-message.repository";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresAdminMediaRepository } from "@/features/media/repositories/media-repository.factory";
+import { createPostgresMessageRepository } from "@/features/messages/repositories/message-repository.factory";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +39,7 @@ type AdminHostingNotice = {
 
 async function getAdminHostingNotice(): Promise<AdminHostingNotice | null> {
   try {
-    const repository = new PostgresManagedHostingRepository();
+    const repository = createPostgresManagedHostingRepository();
     const now = new Date();
     const effective = await getEffectiveManagedHostingPolicy(repository);
     if (!effective.policy.enabled) return null;
@@ -101,13 +101,13 @@ async function getAdminHostingNotice(): Promise<AdminHostingNotice | null> {
 }
 
 export default async function AdminHomePage() {
-  const access = new PostgresAdminAccessRepository();
-  const learning = new PostgresAdminLearningRepository();
-  const media = new PostgresAdminMediaRepository();
-  const certificates = new PostgresCertificateRepository();
-  const live = new PostgresAdminLiveClassRepository();
-  const messages = new PostgresMessageRepository();
-  const settingsRepository = new PostgresSettingsRepository();
+  const access = createPostgresAdminAccessRepository();
+  const learning = createPostgresAdminLearningRepository();
+  const media = createPostgresAdminMediaRepository();
+  const certificates = createPostgresCertificateRepository();
+  const live = createPostgresAdminLiveClassRepository();
+  const messages = createPostgresMessageRepository();
+  const settingsRepository = createPostgresSettingsRepository();
 
   const [students, preauthorizations, courses, assets, certificateRows, liveBatches, threads, settings, hostingNotice] = await Promise.all([
     access.listStudents(),

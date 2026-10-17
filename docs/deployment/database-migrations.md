@@ -94,9 +94,9 @@ Do not add migration commands to the Vercel Build Command. Keep Vercel build as 
 
 Do not make each VM/container replica run migrations at startup. Use GitHub Actions or a one-off OCI Cloud Shell/release job instead.
 
-## Supabase / managed PostgreSQL
+## Managed PostgreSQL
 
-Supabase is being used only as PostgreSQL. Put its direct/session PostgreSQL connection string in the migration workflow secret. The app runtime may use its normal pooled/serverless connection separately.
+Use only the approved installation-scoped PostgreSQL endpoint from the authoritative operator record. Keep host, database, role and password in the installation's secret store; never commit coordinates or credentials. Verify the schema and migration ledger before applying any migration. The app runtime may use its normal pooled/serverless connection separately.
 
 ## Multiple MkLMS installations
 

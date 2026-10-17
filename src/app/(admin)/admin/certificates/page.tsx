@@ -1,14 +1,14 @@
 import { AppLayout } from "@/components/layout/app-layout";
 import { AdminCertificateManager } from "@/features/certificates/components/admin-certificate-manager";
-import { PostgresCertificateRepository } from "@/features/certificates/repositories/postgres-certificate.repository";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresCertificateRepository } from "@/features/certificates/repositories/certificate-repository.factory";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminCertificatesPage() {
   const [certificates, settings] = await Promise.all([
-    new PostgresCertificateRepository().listAll(),
-    new PostgresSettingsRepository().getPlatformSettings(),
+    createPostgresCertificateRepository().listAll(),
+    createPostgresSettingsRepository().getPlatformSettings(),
   ]);
 
   return (

@@ -1,17 +1,17 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 
-import { getPostgresPool } from "@/lib/postgres";
-import type { CourseStructure } from "../domain/model";
-import type { PublishedQuizGate } from "../domain/paid-course-progression";
+import { getPostgresPool } from "../../../lib/postgres.ts";
+import type { CourseStructure } from "../domain/model.ts";
+import type { PublishedQuizGate } from "../domain/paid-course-progression.ts";
 import type {
   LearningEnrollmentRecord,
   LearningProgressRepository,
-} from "../services/learning-progress.service";
+} from "../services/learning-progress.service.ts";
 import type {
   LessonProgressRecord,
   StudentLearningRepository,
-} from "../services/student-learning.service";
+} from "../services/student-learning.service.ts";
 
 export class PostgresLearningRepository
   implements LearningProgressRepository, StudentLearningRepository

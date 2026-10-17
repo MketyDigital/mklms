@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
 import { getManagedHostingServiceAccess } from "@/features/hosting/server/managed-hosting-access";
-import { PostgresAdminMediaRepository } from "@/features/media/repositories/postgres-admin-media.repository";
+import { createPostgresAdminMediaRepository } from "@/features/media/repositories/media-repository.factory";
 import { consumeDistributedRateLimit, getRequestClientKey, rateLimitHeaders } from "@/lib/security/rate-limit";
 import { getConfiguredStorageProvider } from "@/providers/s3-compatible-storage-provider";
 
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
   });
 
   try {
-    const asset = await new PostgresAdminMediaRepository().createAsset({
+    const asset = await createPostgresAdminMediaRepository().createAsset({
       title,
       provider: "private-storage",
       sourceType: "DIRECT",

@@ -38,11 +38,13 @@ test("monthly operator amount is a floor and usage can increase the amount due",
   assert.equal(explicitHighFloor.amountDueUsd, 65);
 });
 
-test("Wrangler always creates the OpenNext bundle before upload or deploy", async () => {
+test("Wrangler consumes the explicitly built OpenNext bundle without rebuilding it", async () => {
   const source = await readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8");
   const config = JSON.parse(source);
   assert.equal(config.main, ".open-next/worker.js");
-  assert.equal(config.build?.command, "npm run cf:build");
+  assert.equal(config.build, undefined);
+  const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  assert.match(packageJson.scripts["cf:build"], /opennextjs-cloudflare build$/);
 });
 
 test("mobile live room has one visual LIVE badge and a sticky player", async () => {

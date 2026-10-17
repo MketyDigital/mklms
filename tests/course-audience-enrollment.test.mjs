@@ -27,6 +27,15 @@ test('future active students are enrolled into all-active courses by a database 
   assert.match(migration, /WHEN enrollments\.status = 'COMPLETED' THEN 'COMPLETED'/i);
 });
 
+test('forward migration aligns new PostgreSQL trigger IDs with the D1 JSON tuple and preserves existing IDs', () => {
+  const migration = read('db/migrations/021_shared_enrollment_id_encoding.sql');
+  assert.match(migration, /CREATE OR REPLACE FUNCTION mklms_enroll_active_student_in_all_courses/i);
+  assert.match(migration, /encode\(convert_to\('\[' \|\| to_json\(NEW\.id\)::text \|\| ',' \|\| to_json\(c\.id\)::text \|\| ',"all-active"\]'?, 'UTF8'\), 'hex'\)/i);
+  assert.match(migration, /pg_advisory_xact_lock\(764551001\)/i);
+  assert.match(migration, /ON CONFLICT \(student_id, course_id\)/i);
+  assert.doesNotMatch(migration, /UPDATE\s+enrollments\s+SET\s+id\s*=/i);
+});
+
 test('all-active course transition is serialized with concurrent student activation', () => {
   const migration = read('db/migrations/016_course_audience_assignment.sql');
   const repo = read('src/features/courses/repositories/postgres-course-audience.repository.ts');
@@ -55,6 +64,8 @@ test('admin audience repository bulk synchronizes active enrollments and preserv
   assert.match(repo, /INSERT INTO enrollments[\s\S]*SELECT/i);
   assert.match(repo, /ON CONFLICT \(student_id, course_id\)/i);
   assert.match(repo, /WHEN enrollments\.status = 'COMPLETED' THEN 'COMPLETED'/i);
+  assert.equal((repo.match(/encode\(convert_to\('/g) ?? []).length, 2);
+  assert.doesNotMatch(repo, /md5\(student\.id \|\| ':' \|\| \$1 \|\| ':course-audience'\)/i);
   assert.match(repo, /UPDATE enrollments[\s\S]*SET status = 'REVOKED'[\s\S]*AND status = 'ACTIVE'/i);
 });
 

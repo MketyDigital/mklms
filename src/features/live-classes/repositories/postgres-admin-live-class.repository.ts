@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 
-import { getPostgresPool } from "@/lib/postgres";
+import { getPostgresPool } from "../../../lib/postgres.ts";
 import type { ImportedLiveChatItem } from "../domain/import-live-chat";
 import type { ViewerDisplayMode } from "../domain/live-session";
 import type { AttendeeChatVisibility } from "../services/live-room.service";

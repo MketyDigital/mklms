@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
 import { isAllowedZoomUrl } from "@/features/paid-live/domain/model";
-import { PostgresPaidLiveRepository } from "@/features/paid-live/repositories/postgres-paid-live.repository";
+import { createPostgresPaidLiveRepository } from "@/features/paid-live/repositories/paid-live-repository.factory"
 
 const schema = z.object({
   title: z.string().trim().min(1).max(200),
@@ -25,7 +25,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cou
   if (!parsed.success) return NextResponse.json({ ok: false, message: "Invalid paid live session details." }, { status: 400 });
   const { courseId } = await params;
   try {
-    const sessionId = await new PostgresPaidLiveRepository().createSession({
+    const sessionId = await createPostgresPaidLiveRepository().createSession({
       courseId,
       title: parsed.data.title,
       description: parsed.data.description,

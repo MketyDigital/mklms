@@ -4,7 +4,7 @@ import { getCurrentStudentSession } from "@/features/access/server/current-stude
 import { ensureCourseCertificate } from "@/features/certificates/server/ensure-course-certificate";
 import { getNextDestinationAfterLesson } from "@/features/courses/domain/paid-course-progression";
 import { getPublishedCourseStructure } from "@/features/courses/domain/publication";
-import { PostgresLearningRepository } from "@/features/courses/repositories/postgres-learning.repository";
+import { createPostgresLearningRepository } from "@/features/courses/repositories/learning-repository.factory";
 import { LearningProgressService } from "@/features/courses/services/learning-progress.service";
 import { consumeDistributedRateLimit, rateLimitHeaders } from "@/lib/security/rate-limit";
 
@@ -31,7 +31,7 @@ export async function POST(
     );
   }
 
-  const repository = new PostgresLearningRepository();
+  const repository = createPostgresLearningRepository();
   const service = new LearningProgressService(repository);
   const result = await service.completeLesson(session.studentId, courseId, lessonId);
 

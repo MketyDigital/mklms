@@ -21,7 +21,7 @@ test('generated Starpips app config matches manifest resources', async () => {
   assert.equal(config.main, '.open-next/worker.js');
   assert.equal(config.compatibility_date, '2026-08-30');
   assert.deepEqual(config.compatibility_flags, ['nodejs_compat']);
-  assert.equal(config.build.command, 'npm run cf:build');
+  assert.equal(config.build, undefined);
   assert.deepEqual(config.assets, { directory: '.open-next/assets', binding: 'ASSETS' });
   assert.equal(config.observability.enabled, true);
   assert.deepEqual(config.hyperdrive, [

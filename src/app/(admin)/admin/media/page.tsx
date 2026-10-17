@@ -2,15 +2,15 @@ import { AppLayout } from "@/components/layout/app-layout";
 import { AdminMediaManager } from "@/features/media/components/admin-media-manager";
 import { MediaUploadPanel } from "@/features/media/components/media-upload-panel";
 import { StorageMediaBrowser } from "@/features/media/components/storage-media-browser";
-import { PostgresAdminMediaRepository } from "@/features/media/repositories/postgres-admin-media.repository";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresAdminMediaRepository } from "@/features/media/repositories/media-repository.factory";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminMediaPage() {
   const [assets, settings] = await Promise.all([
-    new PostgresAdminMediaRepository().listAssets(),
-    new PostgresSettingsRepository().getPlatformSettings(),
+    createPostgresAdminMediaRepository().listAssets(),
+    createPostgresSettingsRepository().getPlatformSettings(),
   ]);
 
   return (

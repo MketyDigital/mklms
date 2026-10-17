@@ -26,12 +26,47 @@ jobs:
       R2_DIRECT_UPLOAD_ACCESS_KEY_ID: ${{ secrets.MKETY_R2_DIRECT_UPLOAD_ACCESS_KEY_ID }}
       R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY: ${{ secrets.MKETY_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY }}
 
-  # Mkety Academy's isolated database schema is pre-migrated and audited through Supabase
-  # before the production pointer is moved. GitHub-hosted runners do not mutate this
-  # database because the direct endpoint is IPv6-only and shared-pooler routing for the
-  # isolated custom role is not a reliable release dependency.
+  # Database schema changes are operator-managed. Application releases do not
+  # run migrations or otherwise mutate PostgreSQL from GitHub-hosted runners.
+  production-database-preflight:
+    if: github.ref_name == 'production/mkety-academy'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      MKETY_DB_HOST: ${{ secrets.MKETY_DB_HOST }}
+      MKETY_DB_PORT: ${{ secrets.MKETY_DB_PORT }}
+      MKETY_DB_NAME: ${{ secrets.MKETY_DB_NAME }}
+      MKETY_DB_USER: ${{ secrets.MKETY_DB_USER }}
+    steps:
+      - name: Checkout exact release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Confirm release configuration targets the approved PostgreSQL endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN MKETY_DB_HOST MKETY_DB_PORT MKETY_DB_NAME MKETY_DB_USER; do
+            if [ -z "${!name:-}" ]; then echo "Missing required database release setting: $name"; exit 1; fi
+          done
+          umask 077
+          mapfile -t ids < <(jq -r '.hyperdrive.freshId, .hyperdrive.cachedId' deploy/installations/mkety-academy.json)
+          test -n "${ids[0]}" && test -n "${ids[1]}" && test "${ids[0]}" != "${ids[1]}"
+          response=$(mktemp)
+          trap 'rm -f "$response"' EXIT
+          for id in "${ids[@]}"; do
+            status=$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/hyperdrive/configs/$id" \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+            test "$status" = "200" || { echo "Unable to verify Mkety Hyperdrive origin; release blocked."; exit 1; }
+            HYPERDRIVE_ORIGIN_JSON_PATH="$response" node scripts/assert-hyperdrive-origin.mjs
+          done
+
   production:
     if: github.ref_name == 'production/mkety-academy'
+    needs: production-database-preflight
     uses: ./.github/workflows/deploy-installation-production.yml
     with:
       installation_id: mkety-academy

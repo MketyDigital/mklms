@@ -101,7 +101,7 @@ R2 public access stays disabled. The app and media Worker may bind the same inst
 
 ## Database migrations
 
-Current numbered migrations are `001` through `020`.
+Current numbered migrations are `001` through `023`.
 
 Latest migrations:
 
@@ -109,14 +109,15 @@ Latest migrations:
 - `018_certificate_visual_layout_and_starpips_calibration.sql` — certificate visual-layout support and Starpips calibration.
 - `019_managed_hosting_daily_ledger.sql` — managed-hosting daily usage ledger.
 - `020_managed_hosting_payment_settlement.sql` — immutable invoice settlement metadata for managed-hosting payments.
+- `021_shared_enrollment_id_encoding.sql` — aligns new PostgreSQL all-active enrollment trigger IDs with D1's UTF-8 JSON tuple encoding; existing IDs are preserved.
+- `022_replication_journal.sql` — adds local durable journal/checkpoint/receipt/dead-letter tables only. It does not capture or replay changes and is not in any production release allowlist.
+- `023_transactional_replication_capture.sql` — adds disabled-by-default PostgreSQL row-capture triggers; the paired D1 triggers are in `0021_transactional_replication_capture.sql`. When enabled, PostgreSQL capture serializes application write transactions with an advisory lock to preserve commit-ordered journal sequences. Neither migration is in a production release allowlist; staging must measure this cost before use.
 
 Never edit an applied historical migration. Add a new numbered migration instead. Migration manifest/checksum tests must remain green.
 
 ### Mkety Academy migration ownership caveat
 
-Mkety Academy's isolated Supabase schema is `mkety_academy` in project `vdblajgxrfndjesoyayy`, using role `mkety_academy_app` with an isolated `search_path`.
-
-The schema was pre-created/audited outside the preview deployment flow while `_mklms_migrations` exists with an empty ledger. Therefore preview/production deployment must not blindly replay migrations into Mkety and the ledger must never be blindly backfilled. Any future normalization must first prove the live schema matches the expected numbered migrations.
+Mkety Academy's database target must be the separately approved self-hosted PostgreSQL service, using an installation-scoped least-privilege role and isolated database/schema. The destination endpoint, schema state and migration ledger must be verified from the authoritative operator source before any migration or connection change. Preview/production deployment must not blindly replay migrations or backfill `_mklms_migrations`.
 
 For brand-new installations, migrations should run against an empty isolated database/schema before production deployment and should own their checksum ledger normally.
 
@@ -130,7 +131,7 @@ The Starpips guard must remain fail-closed:
 - historical migrations must be present with matching checksums;
 - a release may not replay historical migrations;
 - historical releases may whitelist only the exact additive migrations approved for that release;
-- the current Starpips release guard explicitly verifies/applies additive migrations `018_certificate_visual_layout_and_starpips_calibration.sql`, `019_managed_hosting_daily_ledger.sql`, and `020_managed_hosting_payment_settlement.sql` when pending;
+- the current Starpips release guard explicitly verifies/applies additive migrations `018_certificate_visual_layout_and_starpips_calibration.sql`, `019_managed_hosting_daily_ledger.sql`, `020_managed_hosting_payment_settlement.sql`, and `021_shared_enrollment_id_encoding.sql` when pending;
 - database verification must finish successfully before Worker deployment can start.
 
 Migration `017` was successfully applied and verified on Starpips during production release run `34248552737`; subsequent guarded releases must continue to use the exact migration allowlist in the release workflow.

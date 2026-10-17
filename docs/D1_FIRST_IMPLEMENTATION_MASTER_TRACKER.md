@@ -15,26 +15,44 @@
 - [x] completed and merged with green CI (limited scope explicitly described)
 - [ ] still required, even if some foundation exists
 
+## Latest local checkpoint — 2026-10-17
+
+- Latest local change closes a concrete shared-ID parity bug: newly generated all-active and course-audience enrollment IDs now use the same UTF-8 JSON tuple bytes in PostgreSQL and D1. Explicit claim enrollments use random UUIDs in both implementations. Additive PostgreSQL migration 021 updates only future trigger-generated IDs and preserves existing IDs; it is guarded in the Starpips release workflow and has not been applied to either production database.
+- Latest verification: all 654 repository tests pass; TypeScript, full ESLint (0 errors, 4 warnings), Next.js/OpenNext builds, application/media/billing Worker dry-runs, strict vendor-dependency audit, schema coverage (37/37 application tables across 23 PostgreSQL migrations), offline D1 migration rehearsal (21 migrations), SQLite integrity/FK checks and diff checks pass. D1 catalog export reports 37 application tables, 388 columns, 60 indexes, 44 foreign keys, 74 checks and 168 triggers, with no unsupported objects. These are local/offline results, not proof of live PostgreSQL catalog parity or production behavior. Repeated local Next builds exposed a corrupt generated Turbopack cache; the preserved cache copy is outside the repo, and a fresh generated cache passed the build.
+- The backend selector now rejects D1 unconditionally until a production authority verifier exists; caller-provided readiness booleans cannot enable it. PostgreSQL remains the only selectable backend.
+- Local forward-only migrations 022/0020 define journal, directional checkpoint, idempotent apply-receipt and dead-letter tables. Migrations 023/0021 add disabled-by-default PostgreSQL/D1 capture configuration and row triggers for all 32 application tables; D1 tests prove same-transaction insert/update/delete capture and rollback atomicity, and parity checks block missing event triggers. PostgreSQL capture serializes source write transactions with an advisory lock so journal sequences follow commit order; staging must benchmark the throughput cost. Neither migration pair is in a production release workflow. A read-only journal reader pages by installation/backend/epoch, validates events and ordering, preserves 64-bit sequence values as strings, and caps batches at 500. It does not apply target writes or advance checkpoints. Replay/apply workers, snapshots, source watermarks, reconciliation and live PostgreSQL trigger execution remain unimplemented/unverified.
+- Latest local replication work makes D1 atomic batches share a transaction ID: migration 0021 has a temporary `active_transaction_id`, D1 triggers use it when present, and the central D1 repository composition sets/resets it inside the same D1 batch. SQLite integration tests verify shared transaction IDs, distinct idempotency keys and cleanup. This composition remains unused by runtime routes; replay/apply, checkpoints, snapshots, reconciliation, live PostgreSQL capture and authority fencing remain unimplemented/unverified.
+- OpenNext build flow is repeatable: the build command removes only its generated Wrangler environment module, Wrangler no longer reruns the explicit OpenNext build, and the Starpips config template matches the committed root config. A local dry-run passed for the app, protected-media and billing Workers. The pre-existing untracked `.open-next/` directory was preserved and restored after these checks.
+
+- Local implementation branch contains journal-reader work after `9da1ab3`; implementation changes remain local and are not pushed or merged.
+- Full-repository lint previously exceeded the container's 2 GB Node heap and is not claimed as green; changed-file ESLint passes.
+- Expanded offline runtime audit: 0 direct PostgreSQL or D1 repository instantiations across app and feature runtime files, including pages, handlers, and server helpers. API routes also have 0 direct constructors. All 19 PostgreSQL repository files pair with 18 D1 files (media playback/progress intentionally share a D1 implementation). Runtime currently makes 154 PostgreSQL-pinned factory calls and has 5 explicit PostgreSQL environment/pool references, all in settings-health, public-live, layout, or integration-status code; no route selects D1. The compatibility inventory's 489 PostgreSQL repository references include imports and explicit PG-pinned factories, so are not 489 direct database accesses.
+- TypeScript-AST method inventory finds zero public PostgreSQL repository methods missing from the paired D1 repositories, accounting for inherited methods. This verifies surface coverage only; method behavior, transactional guarantees and side effects still require paired integration tests.
+- Strict dependency audit: no active vendor references, 78 narrowly allowlisted historical/audit references, and 0 stale allowlist entries.
+- Local D1 migration/SQLite rehearsal passes, but it is not a PostgreSQL catalog comparison. `MKLMS_SCHEMA_AUDIT_DATABASE_URL` is absent and `psql` is unavailable, so complete schema parity cannot be verified here.
+- Durable bidirectional replication, strongly consistent per-installation writer fencing, complete D1 runtime integration, backup/restore proof and per-installation staging/rehearsal evidence remain incomplete. Production stays on PostgreSQL. No production Worker, R2 object or live-class resource has been changed.
+- D1 runtime selection remains disabled: the pure selector rejects D1 unconditionally because verified fenced authority, replication and rollback services do not exist. PostgreSQL remains the only selectable backend.
+
 ## Phase 0 — baseline and protection
 - [x] D1-first plan, fail-closed policy, single-authority cutover contract, migration rehearsal, schema/table/column gap audits
-- [x] Nonproduction SQLite foundations for core students, learning, live, messaging, playback, hosting, quizzes and settlement
-- [ ] Lock down full DB object inventory and schema/column/index/trigger/constraint parity across **all** PostgreSQL migrations; run `node scripts/d1-column-parity.mjs --require-complete` green
+- [x] Nonproduction SQLite repositories for access, learning/admin, certificates, quizzes, paid/free live, media/playback/ingest, messages/settings, and managed-hosting usage/invoices/settlement/ledger (local SQLite tests only; not production parity)
+- [ ] Lock down full DB object inventory and schema/column/index/trigger/constraint parity across **all** PostgreSQL migrations; offline column inventory passes, but full catalog parity is not proven
 - [ ] Verify complete PostgreSQL source state, backups, recovery point objective and per-installation account access without mutating production
 
 ## Phase 1 — complete SQLite schema and data semantics
-- [ ] Cover all tables and final columns from PostgreSQL migrations 001–020; include indexes, unique/partial indexes, CHECKs, FKs, JSON, time precision and sequences/defaults
+- [ ] Compare all tables and final columns from PostgreSQL migrations 001–022; offline D1 column inventory passes, but exact catalog/type/constraint/index/default parity is not proven
 - [ ] Close migration compatibility gaps (especially deferred lesson/live media foreign keys and ALTER migrations)
 - [ ] Design reversible mappings for NUMERIC money (USD cents and adjustment sign), timestamps, booleans, JSON and PG-specific types; test with edge-case fixtures
 - [ ] Reconcile enrollment ID parity, trigger/event side effects and concurrency under both databases; no unsynchronized enrollment automations
 
 ## Phase 2 — real application persistence
 - [x] Implement tested *slices* for platform settings, student records, preauthorizations, credentials including atomic rotation, sessions and course-enrollment primitives
-- [ ] Implement complete D1 AccessRepository: **one atomic verified claim** covering preauth/student/credentials/enrollment, login, credential rotation, revocation and session transitions; exercise entire service/route contract
+- [x] Implement D1 access repository slices including atomic verified claim, login, credential rotation/revocation and session transitions (local SQLite/service tests pass; route runtime still PostgreSQL)
 - [ ] Implement complete learning and admin repositories (courses, lesson progress, enrollments, audience assignment, certificates, quiz attempts and paid live)
 - [ ] Implement complete live-class repositories (schedule, timeline, viewers, messages, admin controls), respecting unchanged live playback clock
-- [ ] Implement complete message, media, playback grant/progress, settings, notification and hosting/payment repositories
-- [ ] Ensure every runtime codepath uses the selected backend; remove unguarded direct PostgreSQL access in D1 mode
-- [ ] Make D1 binding/installation config explicit, optional until ready and fail-closed; preserve PG-only live runtime
+- [x] Implement local D1 persistence for messages, media/playback/progress, settings, and hosting/payment; notification delivery remains provider-side and requires runtime flow verification
+- [ ] Ensure every runtime codepath uses the selected backend; runtime call sites now use explicit PostgreSQL-pinned factories, but no durable authority selector or D1 route composition exists
+- [ ] Add an installation-scoped D1 binding/configuration only after the durable writer-authority gate exists; preserve PG-only live runtime
 
 ## Phase 3 — reliable single-writer synchronization
 - [ ] Specify and implement durable per-installation mutation journal/outbox with strictly monotonic sequence, idempotency, replay, retention and retry/backoff
@@ -58,4 +76,16 @@
 - [ ] Repeat for second installation only after first is stable; retain PG as tested standby
 
 ## Current checkpoint
-As of 2026-10-17, PR #146 merged. **D1 is not the active production backend.** The sliced stores are not yet a complete running D1 application and the bidirectional synchronization engine has not been delivered. Phase 5 is blocked until the preceding checklists and evidence are complete.
+As of 2026-10-17, PR #148 and the foundational plan are merged, while implementation remains local on `feat/d1-cutover-implementation-20261017`. Current local evidence is 654 tests passed; TypeScript, full lint, Next/OpenNext builds, three Worker dry-runs, manifest validation, strict vendor audit, D1 migration rehearsal and diff check pass. Offline rehearsal applies 21 D1 migrations and validates journal constraints, 52 named indexes, 168 triggers (including all 96 source-capture triggers), primary-key/media-FK guards, SQLite integrity and foreign keys. Offline coverage finds all 37 application source tables across 23 PostgreSQL migrations; D1 catalog export reports 37 application tables, 388 columns, 60 indexes, 44 foreign keys, 74 checks and 168 triggers, with no unsupported objects. Repository-file audit pairs all 19 PostgreSQL repository files with 18 D1 repository files; video progress is covered by `D1MediaPlaybackRepository`. Runtime audit finds zero direct repository construction and 154 PostgreSQL-pinned factory calls. This mapping is not proof of method/event/side-effect equivalence. No PostgreSQL audit catalog is available; this execution environment has no database credentials, `psql`, Docker or Wrangler auth, so no live D1/PostgreSQL access or production changes were made. D1 runtime is not connected to routes; target replay/apply, reconciliation, backup/restore, staging and authority fencing remain absent. **Both productions remain PostgreSQL.** Phase 5 remains blocked until earlier proofs pass, followed by separate installation cutover approvals.
+
+## Execution order from this checkpoint
+1. [x] Finish D1 persistence slices through managed hosting; commit `8c3ae41`.
+2. [x] Strengthen offline D1 catalog/integrity rehearsal; commit `c4a8724`.
+3. [~] Add fixture-driven full-object parity comparison and catalog exporters; type/money normalization, structural index/FK comparison, expression indexes, partial predicates and basic CHECK normalization exist. Default normalization is partial; trigger semantic comparison and actual isolated-PG comparison remain open.
+4. [ ] Finish schema semantic mappings and address confirmed migration/catalog differences with forward-only D1 migrations.
+5. [ ] Complete shared repository contracts and explicit D1 runtime composition, then migrate route/job/webhook call sites behind one selected backend.
+6. [ ] Prove complete application behavior on local D1 and isolated PostgreSQL; keep live routing PostgreSQL-only until proven.
+7. [~] Add journal/checkpoint/receipt/dead-letter schema and transactionally capture mutations; implement snapshot/replay in both directions and reconciliation.
+8. [ ] Implement strongly consistent authority epochs and enforce the write gate across every mutating entry point.
+9. [ ] Add health, restore, runbook, staging, failure-injection and per-installation rehearsal evidence.
+10. [ ] Only after all prior evidence, evaluate separately gated Starpips and Academy cutovers; this tracker does not approve either switch.

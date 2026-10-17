@@ -14,7 +14,7 @@ Status: **design and read-only audit only**. No production database cutover, no 
 - `src/lib/postgres.ts` uses `pg` and Cloudflare `HYPERDRIVE_FRESH`/`HYPERDRIVE_CACHED`, falling back to `DATABASE_URL` outside Workers.
 - `scripts/migrate.mjs` and 20 migrations in `db/migrations` execute PostgreSQL SQL and track checksums in `_mklms_migrations`.
 - `wrangler.jsonc` binds two Hyperdrive connections and R2, not D1.
-- `deploy/installations/mkety-academy.json` currently identifies a Supabase-hosted PostgreSQL endpoint. Starpips also uses PostgreSQL via Hyperdrive.
+- Mkety Academy's previous provider endpoint has been removed from source configuration. Its approved self-hosted PostgreSQL target and existing data/schema still require independent verification before migration or cutover. Starpips uses its separately isolated PostgreSQL via Hyperdrive.
 - `MketyDigital/mksaas` has a Drizzle/PostgreSQL implementation (`src/shared/db/index.ts`), documentation for PostgreSQL 15+ with pgvector (`docs/DATABASE.md`), and Worker Hyperdrive integration. **Its documentation also mentions AWS RDS in cloud environments**; do not assume the active self-hosted instance, routing, credentials, tenant schemas, security boundaries, or available capacity until independently verified. Never reuse mksaas's application tables as MkLMS tables.
 - Neither PostgreSQL nor D1 is a media store; both existing R2 buckets, protected delivery Worker, and signed media URLs remain unchanged.
 
@@ -40,7 +40,7 @@ Status: **design and read-only audit only**. No production database cutover, no 
 6. **Shadow**: compare read-only results for a representative workload. Specifically verify live state transitions, chat ordering, student permissions, course access, certificates, and financial records without shadow-side writes.
 7. **Load tests**: burst chat, playback auth, login, progress and payment webhook concurrency, D1 row/DB size limits and query/CPU/latency budgets; observe steady peak class load and failure recovery.
 8. **Cutover**: during a scheduled class-free window, backup, write-fence mutable app routes, drain in-flight jobs, replay through final PostgreSQL checkpoint, validate counts/hashes and identity/certificate/payment invariants, atomically select D1 for *one* installation, resume and smoke test. Keep a clear abort path before writes unfreeze.
-9. **Rollback/retention**: retain verified PostgreSQL source and separately backed-up self-hosted target; if D1 already accepted writes, apply tested reverse replay before rollback. Remove Supabase dependencies and secrets only after the retention/verification window and source-of-truth audit close.
+9. **Rollback/retention**: retain verified PostgreSQL source and separately backed-up self-hosted target; if D1 already accepted writes, apply tested reverse replay before rollback. Remove retired provider credentials only after the retention/verification window and source-of-truth audit close.
 
 ## Non-negotiable release criteria
 

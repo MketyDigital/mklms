@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
-import { PostgresAdminLearningRepository } from "@/features/courses/repositories/postgres-admin-learning.repository";
+import { createPostgresAdminLearningRepository } from "@/features/courses/repositories/learning-repository.factory";
 import { AdminLearningService } from "@/features/courses/services/admin-learning.service";
 
 const schema = z.object({ status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]) });
@@ -21,7 +21,7 @@ export async function PATCH(
   }
 
   const { lessonId } = await context.params;
-  const service = new AdminLearningService(new PostgresAdminLearningRepository());
+  const service = new AdminLearningService(createPostgresAdminLearningRepository());
   await service.setLessonStatus(lessonId, parsed.data.status);
 
   return NextResponse.json({ ok: true, status: parsed.data.status });

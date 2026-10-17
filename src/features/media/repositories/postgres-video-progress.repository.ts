@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 
-import { getPostgresPool } from "@/lib/postgres";
-import { PostgresLearningRepository } from "@/features/courses/repositories/postgres-learning.repository";
+import { getPostgresPool } from "../../../lib/postgres.ts";
+import { PostgresLearningRepository } from "../../courses/repositories/postgres-learning.repository.ts";
 import type {
   PlaybackGrantRecord,
   VideoProgressRepository,

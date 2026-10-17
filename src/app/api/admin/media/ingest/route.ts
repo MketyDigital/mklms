@@ -6,7 +6,7 @@ import {
   conservativeLiveClassProfile,
   estimateOciMediaFlowStandardH264Cost,
 } from "@/features/media/domain/oci-media-flow-cost";
-import { PostgresMediaIngestRepository } from "@/features/media/repositories/postgres-media-ingest.repository";
+import { createPostgresMediaIngestRepository } from "@/features/media/repositories/media-repository.factory";
 
 const estimateSchema = z.object({
   title: z.string().trim().min(1).max(200),
@@ -17,7 +17,7 @@ export async function GET() {
   if (!(await hasValidAdminSession())) {
     return NextResponse.json({ ok: false, message: "Unauthorized." }, { status: 401 });
   }
-  const jobs = await new PostgresMediaIngestRepository().listJobs();
+  const jobs = await createPostgresMediaIngestRepository().listJobs();
   return NextResponse.json({ ok: true, jobs });
 }
 
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     durationMinutes: parsed.data.durationMinutes,
     outputs: conservativeLiveClassProfile(),
   });
-  const job = await new PostgresMediaIngestRepository().createEstimate({
+  const job = await createPostgresMediaIngestRepository().createEstimate({
     title: parsed.data.title,
     durationMinutes: parsed.data.durationMinutes,
     estimatedCostUsd: estimate.usd,

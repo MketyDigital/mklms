@@ -9,6 +9,7 @@ const TARGET_MIGRATIONS = [
   '018_certificate_visual_layout_and_starpips_calibration.sql',
   '019_managed_hosting_daily_ledger.sql',
   '020_managed_hosting_payment_settlement.sql',
+  '021_shared_enrollment_id_encoding.sql',
 ];
 
 export function validateStarpipsMigrationBatch(

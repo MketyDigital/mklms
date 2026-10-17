@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
-import { PostgresAdminLearningRepository } from "@/features/courses/repositories/postgres-admin-learning.repository";
+import { createPostgresAdminLearningRepository } from "@/features/courses/repositories/learning-repository.factory";
 import { AdminLearningService } from "@/features/courses/services/admin-learning.service";
 
 const updateSchema = z.object({
@@ -18,7 +18,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ co
   if (!parsed.success) return NextResponse.json({ ok: false, message: "Invalid course details." }, { status: 400 });
   const { courseId } = await params;
   try {
-    await new AdminLearningService(new PostgresAdminLearningRepository()).updateCourse(courseId, parsed.data);
+    await new AdminLearningService(createPostgresAdminLearningRepository()).updateCourse(courseId, parsed.data);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "Could not update course." }, { status: 400 });
@@ -31,7 +31,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   }
   const { courseId } = await params;
   try {
-    await new AdminLearningService(new PostgresAdminLearningRepository()).deleteCourse(courseId);
+    await new AdminLearningService(createPostgresAdminLearningRepository()).deleteCourse(courseId);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "Could not delete course." }, { status: 409 });

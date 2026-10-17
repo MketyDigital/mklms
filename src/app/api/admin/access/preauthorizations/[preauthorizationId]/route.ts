@@ -3,9 +3,9 @@ import { z } from "zod";
 
 import { ACTIVE_CLAIM_VERIFICATION_STRATEGIES } from "@/features/access/domain/claim-verification";
 import { hashClaimCode } from "@/features/access/domain/claim-code";
-import { PostgresAdminAccessRepository } from "@/features/access/repositories/postgres-admin-access.repository";
+import { createPostgresAdminAccessRepository } from "@/features/access/repositories/access-repository.factory";
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
-import { PostgresAdminLearningRepository } from "@/features/courses/repositories/postgres-admin-learning.repository";
+import { createPostgresAdminLearningRepository } from "@/features/courses/repositories/learning-repository.factory";
 
 const updateSchema = z.object({
   nameHint: z.string().max(160).nullable().optional(),
@@ -20,7 +20,7 @@ const updateSchema = z.object({
 
 async function validateCourse(courseId?: string | null): Promise<void> {
   if (!courseId) return;
-  const courses = await new PostgresAdminLearningRepository().listCourses();
+  const courses = await createPostgresAdminLearningRepository().listCourses();
   if (!courses.some((course) => course.id === courseId)) {
     throw new Error("The selected course no longer exists.");
   }
@@ -40,7 +40,7 @@ export async function PATCH(
   try {
     await validateCourse(parsed.data.courseId);
     const { preauthorizationId } = await params;
-    await new PostgresAdminAccessRepository().updatePendingPreauthorization(preauthorizationId, {
+    await createPostgresAdminAccessRepository().updatePendingPreauthorization(preauthorizationId, {
       nameHint: parsed.data.nameHint ?? null,
       courseId: parsed.data.courseId ?? null,
       claimStrategy: parsed.data.claimStrategy,
@@ -63,7 +63,7 @@ export async function DELETE(
   }
   try {
     const { preauthorizationId } = await params;
-    await new PostgresAdminAccessRepository().cancelPendingPreauthorization(preauthorizationId);
+    await createPostgresAdminAccessRepository().cancelPendingPreauthorization(preauthorizationId);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "Authorization could not be cancelled." }, { status: 409 });

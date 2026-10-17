@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { ACTIVE_CLAIM_VERIFICATION_STRATEGIES } from "@/features/access/domain/claim-verification";
-import { PostgresAdminAccessRepository } from "@/features/access/repositories/postgres-admin-access.repository";
+import { createPostgresAdminAccessRepository } from "@/features/access/repositories/access-repository.factory";
 import { AccessAdminService } from "@/features/access/services/access-admin.service";
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
-import { PostgresAdminLearningRepository } from "@/features/courses/repositories/postgres-admin-learning.repository";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresAdminLearningRepository } from "@/features/courses/repositories/learning-repository.factory";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 
 const schema = z.object({
   mode: z.enum(["csv", "paste"]),
@@ -21,10 +21,10 @@ export async function POST(request: Request) {
   if (!parsed.success) return NextResponse.json({ ok: false, message: "Invalid bulk authorization request." }, { status: 400 });
 
   const [settings, courses] = await Promise.all([
-    new PostgresSettingsRepository().getPlatformSettings(),
-    new PostgresAdminLearningRepository().listCourses(),
+    createPostgresSettingsRepository().getPlatformSettings(),
+    createPostgresAdminLearningRepository().listCourses(),
   ]);
-  const service = new AccessAdminService(new PostgresAdminAccessRepository(), {
+  const service = new AccessAdminService(createPostgresAdminAccessRepository(), {
     accessCodePrefix: settings.accessCodePrefix,
     validCourseIds: new Set(courses.map((course) => course.id)),
   });

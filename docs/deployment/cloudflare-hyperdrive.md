@@ -21,13 +21,13 @@ You do not create a second database and you do not need a separate Hyperdrive ac
 
 Do not delete or replace the installation's existing `DATABASE_URL` secret just because Hyperdrive is added.
 
-For this installation the existing `DATABASE_URL` may remain the working Supabase **session pooler** URL for:
+For this installation the existing `DATABASE_URL` may remain the working PostgreSQL connection URL for:
 
 - GitHub Actions database migrations,
 - Vercel/Node deployments,
 - local/non-Worker fallback where appropriate.
 
-For the **Hyperdrive configurations themselves**, use the Supabase **Direct connection** string. Do not point Hyperdrive at Supabase's transaction/session pooler because Hyperdrive performs the Worker-side pooling.
+For the **Hyperdrive configurations themselves**, use the approved PostgreSQL service's direct connection endpoint. Do not point Hyperdrive at a transaction pooler because Hyperdrive performs the Worker-side pooling.
 
 ## Why MkLMS uses two Hyperdrive bindings
 
@@ -74,17 +74,15 @@ as a backwards-compatible fresh binding fallback.
 
 The second-by-second live-room API stays on the fresh path. Do not move live viewer identity, chat, access checks or playback authorization to cached Hyperdrive simply to reduce query counts.
 
-## Step 1 — Copy the Supabase Direct connection
+## Step 1 — Obtain the approved PostgreSQL connection
 
-In Supabase, open the project and use the **Connect** / database connection section.
-
-Copy the **Direct connection** URI, which has the normal PostgreSQL form:
+Obtain the direct endpoint from the authoritative operator record and verify that it is the correct isolated installation database. The URI has the normal PostgreSQL form:
 
 ```text
 postgres://USER:PASSWORD@HOST:PORT/postgres
 ```
 
-This is used only while creating the Hyperdrive configuration. Do not commit it to GitHub.
+Use it only while creating the Hyperdrive configuration. Do not commit it to GitHub.
 
 ## Step 2 — Create the fresh Hyperdrive configuration
 
@@ -99,7 +97,7 @@ This is used only while creating the Hyperdrive configuration. Do not commit it 
 mklms-fresh
 ```
 
-5. Paste the Supabase **Direct** connection string.
+5. Paste the approved PostgreSQL direct connection string.
 6. Disable query caching.
 7. Create the configuration.
 8. Copy the configuration ID Cloudflare gives you.
@@ -118,7 +116,7 @@ Cloudflare prints a Hyperdrive configuration containing an `id`. Save that ID; d
 
 ## Step 3 — Create the optional public cached configuration
 
-Use the same Supabase Direct database, but allow query caching with a conservative short lifetime.
+Use the same approved PostgreSQL database, but allow query caching with a conservative short lifetime.
 
 Example:
 

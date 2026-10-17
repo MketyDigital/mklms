@@ -7,14 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AdminCourseAudienceManager } from "@/features/courses/components/admin/admin-course-audience-manager";
 import { AdminCourseBuilder } from "@/features/courses/components/admin/admin-course-builder";
-import { PostgresCourseAudienceRepository } from "@/features/courses/repositories/postgres-course-audience.repository";
-import { PostgresLearningRepository } from "@/features/courses/repositories/postgres-learning.repository";
-import { PostgresAdminMediaRepository } from "@/features/media/repositories/postgres-admin-media.repository";
+import { createPostgresCourseAudienceRepository } from "@/features/courses/repositories/course-audience-repository.factory";
+import { createPostgresLearningRepository } from "@/features/courses/repositories/learning-repository.factory";
+import { createPostgresAdminMediaRepository } from "@/features/media/repositories/media-repository.factory";
 import { AdminPaidLiveEditor } from "@/features/paid-live/components/admin-paid-live-editor";
-import { PostgresPaidLiveRepository } from "@/features/paid-live/repositories/postgres-paid-live.repository";
+import { createPostgresPaidLiveRepository } from "@/features/paid-live/repositories/paid-live-repository.factory"
 import { AdminQuizEditor } from "@/features/quizzes/components/admin-quiz-editor";
-import { PostgresQuizRepository } from "@/features/quizzes/repositories/postgres-quiz.repository";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresQuizRepository } from "@/features/quizzes/repositories/quiz-repository.factory";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 
 export const dynamic = "force-dynamic";
 
@@ -24,13 +24,13 @@ export default async function AdminCourseBuilderPage({
   params: Promise<{ courseId: string }>;
 }) {
   const { courseId } = await params;
-  const audienceRepository = new PostgresCourseAudienceRepository();
+  const audienceRepository = createPostgresCourseAudienceRepository();
   const [course, mediaAssets, settings, quizzes, paidLiveSessions, activeStudents, audience] = await Promise.all([
-    new PostgresLearningRepository().getCourseStructure(courseId),
-    new PostgresAdminMediaRepository().listAssets(),
-    new PostgresSettingsRepository().getPlatformSettings(),
-    new PostgresQuizRepository().listByCourse(courseId),
-    new PostgresPaidLiveRepository().listByCourse(courseId),
+    createPostgresLearningRepository().getCourseStructure(courseId),
+    createPostgresAdminMediaRepository().listAssets(),
+    createPostgresSettingsRepository().getPlatformSettings(),
+    createPostgresQuizRepository().listByCourse(courseId),
+    createPostgresPaidLiveRepository().listByCourse(courseId),
     audienceRepository.listActiveStudents(),
     audienceRepository.getCourseAudience(courseId),
   ]);

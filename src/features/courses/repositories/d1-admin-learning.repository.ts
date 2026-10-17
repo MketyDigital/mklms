@@ -1,0 +1,33 @@
+import { randomUUID } from "node:crypto";
+import type { D1DatabaseLike } from "../../../lib/d1-query-adapter.ts";
+import { executeD1, queryD1Rows } from "../../../lib/d1-query-adapter.ts";
+import type { CourseModuleRecord, CourseRecord, CourseStatus, LessonRecord, LessonStatus } from "../domain/model";
+import type { AdminLearningRepository, UpdateCourseAdminInput, UpdateLessonAdminInput, UpdateModuleAdminInput } from "../services/admin-learning.service";
+
+type CourseRow = CourseRecord;
+type ModuleRow = { id:string; course_id:string; title:string; description:string|null; position:number };
+type LessonRow = { id:string; module_id:string; title:string; description:string|null; position:number; status:LessonRecord["status"]; media_asset_id:string|null; completion_mode:LessonRecord["completionMode"]; completion_threshold_percent:number; duration_seconds:number|null };
+
+/** D1 implementation of course, module and lesson administration. */
+export class D1AdminLearningRepository implements AdminLearningRepository {
+  private readonly db:D1DatabaseLike;
+  constructor(db:D1DatabaseLike){this.db=db;}
+
+  async listCourses():Promise<CourseRecord[]>{return queryD1Rows<CourseRow>(this.db,{sql:"SELECT id,slug,title,description,status,position FROM courses ORDER BY position,created_at"});}
+  async createCourse(input:Omit<CourseRecord,"id"|"position"|"status">&{status?:CourseStatus}):Promise<CourseRecord>{const id=randomUUID();await executeD1(this.db,{sql:"INSERT INTO courses(id,slug,title,description,status,position) VALUES(?,?,?,?,?,COALESCE((SELECT MAX(position)+1 FROM courses),1))",params:[id,input.slug,input.title,input.description??null,input.status??"DRAFT"]});return(await queryD1Rows<CourseRow>(this.db,{sql:"SELECT id,slug,title,description,status,position FROM courses WHERE id=?",params:[id]}))[0];}
+  async updateCourse(courseId:string,input:UpdateCourseAdminInput):Promise<void>{if(await executeD1(this.db,{sql:"UPDATE courses SET title=?,description=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",params:[input.title,input.description??null,courseId]})!==1)throw new Error("Course not found.");}
+  async deleteCourse(courseId:string):Promise<void>{const history=await queryD1Rows<{used:number}>(this.db,{sql:`SELECT (EXISTS(SELECT 1 FROM enrollments WHERE course_id=?) OR EXISTS(SELECT 1 FROM lesson_progress WHERE course_id=?) OR EXISTS(SELECT 1 FROM certificates WHERE course_id=?)) AS used`,params:[courseId,courseId,courseId]});if(history[0]?.used)throw new Error("This course has student history and cannot be deleted. Return it to draft instead.");if(await executeD1(this.db,{sql:"DELETE FROM courses WHERE id=?",params:[courseId]})!==1)throw new Error("Course not found.");}
+
+  async createModule(courseId:string,input:Omit<CourseModuleRecord,"id"|"courseId"|"position">):Promise<CourseModuleRecord>{const id=randomUUID();await executeD1(this.db,{sql:"INSERT INTO course_modules(id,course_id,title,description,position) VALUES(?,?,?, ?,COALESCE((SELECT MAX(position)+1 FROM course_modules WHERE course_id=?),1))",params:[id,courseId,input.title,input.description??null,courseId]});const row=(await queryD1Rows<ModuleRow>(this.db,{sql:"SELECT id,course_id,title,description,position FROM course_modules WHERE id=?",params:[id]}))[0];return{id:row.id,courseId:row.course_id,title:row.title,description:row.description,position:row.position};}
+  async updateModule(moduleId:string,input:UpdateModuleAdminInput):Promise<void>{if(await executeD1(this.db,{sql:"UPDATE course_modules SET title=?,description=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",params:[input.title,input.description??null,moduleId]})!==1)throw new Error("Module not found.");}
+  async deleteModule(moduleId:string):Promise<void>{const rows=await queryD1Rows<{used:number}>(this.db,{sql:"SELECT EXISTS(SELECT 1 FROM lesson_progress lp JOIN lessons l ON l.id=lp.lesson_id WHERE l.module_id=?) AS used",params:[moduleId]});if(rows[0]?.used)throw new Error("This module contains student progress and cannot be deleted.");if(await executeD1(this.db,{sql:"DELETE FROM course_modules WHERE id=?",params:[moduleId]})!==1)throw new Error("Module not found.");}
+
+  async createLesson(moduleId:string,input:Omit<LessonRecord,"id"|"moduleId"|"position"|"status">):Promise<LessonRecord>{const id=randomUUID();await executeD1(this.db,{sql:`INSERT INTO lessons(id,module_id,title,description,position,status,media_asset_id,completion_mode,completion_threshold_percent,duration_seconds)
+    VALUES(?,?,?,?,COALESCE((SELECT MAX(position)+1 FROM lessons WHERE module_id=?),1),'DRAFT',?,?,?,?)`,params:[id,moduleId,input.title,input.description??null,moduleId,input.mediaAssetId??null,input.completionMode,input.completionThresholdPercent,input.durationSeconds??null]});return this.getLesson(id);}
+  async updateLesson(lessonId:string,input:UpdateLessonAdminInput):Promise<void>{if(await executeD1(this.db,{sql:`UPDATE lessons SET title=?,description=?,media_asset_id=?,completion_mode=?,completion_threshold_percent=?,duration_seconds=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`,params:[input.title,input.description??null,input.mediaAssetId??null,input.completionMode??"VIDEO_PROGRESS",input.completionThresholdPercent??90,input.durationSeconds??null,lessonId]})!==1)throw new Error("Lesson not found.");}
+  async deleteLesson(lessonId:string):Promise<void>{const rows=await queryD1Rows<{used:number}>(this.db,{sql:"SELECT EXISTS(SELECT 1 FROM lesson_progress WHERE lesson_id=?) AS used",params:[lessonId]});if(rows[0]?.used)throw new Error("This lesson has student progress and cannot be deleted.");if(await executeD1(this.db,{sql:"DELETE FROM lessons WHERE id=?",params:[lessonId]})!==1)throw new Error("Lesson not found.");}
+  async setCourseStatus(courseId:string,status:CourseStatus):Promise<void>{await executeD1(this.db,{sql:"UPDATE courses SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",params:[status,courseId]});}
+  async setLessonStatus(lessonId:string,status:LessonStatus):Promise<void>{await executeD1(this.db,{sql:"UPDATE lessons SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",params:[status,lessonId]});}
+
+  private async getLesson(id:string):Promise<LessonRecord>{const row=(await queryD1Rows<LessonRow>(this.db,{sql:"SELECT id,module_id,title,description,position,status,media_asset_id,completion_mode,completion_threshold_percent,duration_seconds FROM lessons WHERE id=?",params:[id]}))[0];if(!row)throw new Error("Lesson not found.");return{id:row.id,moduleId:row.module_id,title:row.title,description:row.description,position:row.position,status:row.status,mediaAssetId:row.media_asset_id,completionMode:row.completion_mode,completionThresholdPercent:row.completion_threshold_percent,durationSeconds:row.duration_seconds};}
+}

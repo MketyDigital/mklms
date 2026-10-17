@@ -88,5 +88,8 @@ test('provisioning and deploy workflows are manual Mkety-only and protect Starpi
 
   assert.match(provision, /accounts\/\$\{?CLOUDFLARE_ACCOUNT_ID\}?\/r2\/buckets|accounts\/\$CLOUDFLARE_ACCOUNT_ID\/r2\/buckets/);
   assert.match(provision, /hyperdrive\/configs/);
+  assert.match(provision, /verify_origin\s*\(\)/);
+  assert.match(provision, /assert-hyperdrive-origin\.mjs/);
+  assert.match(provision, /Existing Hyperdrive target mismatch; no resource was changed/);
   assert.match(deploy, /generate-installation-config/);
 });
