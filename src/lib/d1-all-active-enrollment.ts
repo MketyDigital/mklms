@@ -1,6 +1,6 @@
 import { allActiveEnrollmentId } from "./all-active-enrollment-id.ts";
 import type { D1DatabaseLike } from "./d1-query-adapter.ts";
-import { executeD1 } from "./d1-query-adapter";
+import { executeD1 } from "./d1-query-adapter.ts";
 
 /**
  * Atomically enroll an active student in a single ALL_ACTIVE_STUDENTS course.
