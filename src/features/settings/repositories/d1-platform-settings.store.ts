@@ -27,7 +27,8 @@ export type D1PlatformSettingsRow = {
 };
 
 export class D1PlatformSettingsStore {
-  constructor(private readonly db: D1DatabaseLike) {}
+  private readonly db: D1DatabaseLike;
+  constructor(db: D1DatabaseLike) { this.db = db; }
 
   async read(): Promise<D1PlatformSettingsRow | null> {
     const rows = await queryD1Rows<D1PlatformSettingsRow>(this.db, {
