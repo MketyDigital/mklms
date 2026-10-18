@@ -54,6 +54,7 @@ test('executor obtains only the matching managed database catalog and suppresses
   assert.match(container, /run-coolify-pg-catalog-audit\.mjs 2>&1/);
   assert.match(coolify, /Coolify executor reported a PostgreSQL schema metadata export failure/);
   assert.match(coolify, /Safe PostgreSQL catalog diagnostic/);
+  assert.match(coolify, /schemas contain tables and no unique MkLMS migration ledger was found/);
   assert.match(pgExporter, /process\.stdout\.write\(`PostgreSQL catalog export failed/);
   assert.match(pgExporter, /default_transaction_read_only=on/);
   assert.match(pgExporter, /BEGIN READ ONLY/);

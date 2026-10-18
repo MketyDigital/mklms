@@ -248,9 +248,8 @@ if (isMain) {
       if (issue) lastLogsIssue = issue;
       if (logs.includes('MKLMS_CATALOG_ERROR:')) {
         const errorCode = logs.match(/PostgreSQL catalog export failed \(([A-Z0-9_]+)/)?.[1] ?? 'UNKNOWN';
-        const schemaState = logs.includes('Could not select one PostgreSQL application schema safely') || logs.includes('Multiple MkLMS migration-ledger schemas')
-          ? 'missing_or_ambiguous'
-          : 'other';
+        const schemaDiagnostic = logs.match(/Could not select one PostgreSQL application schema safely \(\d+ schemas contain tables and no unique MkLMS migration ledger was found\)|Multiple MkLMS migration-ledger schemas (?:contain application tables|were found) \(\d+\)/)?.[0];
+        const schemaState = schemaDiagnostic ? schemaDiagnostic.replace(/[^A-Za-z0-9 _-]/g, '') : 'other';
         process.stderr.write(`Safe PostgreSQL catalog diagnostic: code=${errorCode}; schema=${schemaState}.\n`);
         throw new Error('Coolify executor reported a PostgreSQL schema metadata export failure.');
       }
