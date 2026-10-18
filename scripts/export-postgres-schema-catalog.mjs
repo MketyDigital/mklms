@@ -3,6 +3,7 @@
 import { writeFile } from 'node:fs/promises';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
+import { selectPostgresCatalogSchema } from './postgres-schema-catalog-selection.mjs';
 
 const output = process.argv[2];
 const connectionString = process.env.MKLMS_SCHEMA_AUDIT_DATABASE_URL;
@@ -25,9 +26,8 @@ try {
   await client.query('BEGIN READ ONLY');
   const readOnly = await client.query('SHOW transaction_read_only');
   if (readOnly.rows[0]?.transaction_read_only !== 'on') throw new Error('Unable to enforce read-only PostgreSQL transaction.');
-  const schemaRows = await client.query("SELECT table_schema AS name FROM information_schema.tables WHERE table_name='_mklms_migrations' AND table_type='BASE TABLE' ORDER BY table_schema");
-  if (schemaRows.rows.length !== 1) throw new Error(`Expected exactly one MkLMS migration-ledger schema; found ${schemaRows.rows.length}.`);
-  const schemaName = schemaRows.rows[0].name;
+  const schemaRows = await client.query(`SELECT table_schema AS name,BOOL_OR(table_name='_mklms_migrations') AS "hasMigrationLedger",COUNT(*) FILTER (WHERE table_name <> '_mklms_migrations') AS "applicationTableCount" FROM information_schema.tables WHERE table_type='BASE TABLE' AND table_schema NOT IN ('pg_catalog','information_schema') AND table_schema NOT LIKE 'pg_toast%' GROUP BY table_schema ORDER BY table_schema`);
+  const schemaName = selectPostgresCatalogSchema(schemaRows.rows);
   const tableRows = await client.query(`SELECT table_name AS name FROM information_schema.tables WHERE table_schema=$1 AND table_type='BASE TABLE' AND table_name <> '_mklms_migrations' ORDER BY table_name`, [schemaName]);
   const columns = await client.query(`SELECT c.table_name AS "table",c.column_name AS name,CASE WHEN c.data_type='numeric' THEN format('numeric(%s,%s)',c.numeric_precision,c.numeric_scale) WHEN c.data_type='character varying' THEN format('varchar(%s)',c.character_maximum_length) WHEN c.data_type='character' THEN format('char(%s)',c.character_maximum_length) WHEN c.data_type LIKE 'timestamp%' THEN format('%s(%s)',c.udt_name,c.datetime_precision) ELSE c.udt_name END AS type,c.is_nullable='YES' AS nullable,c.column_default AS "default",c.ordinal_position AS position,COALESCE(pk.primary_key_position,0) AS "primaryKeyPosition" FROM information_schema.columns c LEFT JOIN LATERAL (SELECT array_position(k.conkey,a.attnum) AS primary_key_position FROM pg_constraint k JOIN pg_class t ON t.oid=k.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace JOIN pg_attribute a ON a.attrelid=t.oid AND a.attname=c.column_name WHERE k.contype='p' AND n.nspname=c.table_schema AND t.relname=c.table_name AND a.attnum=ANY(k.conkey) LIMIT 1) pk ON true WHERE c.table_schema=$1 AND c.table_name <> '_mklms_migrations' ORDER BY c.table_name,c.ordinal_position`, [schemaName]);
   const indexes = await client.query(`SELECT t.relname AS "table",i.relname AS name,ix.indisunique AS "unique",ix.indpred IS NOT NULL AS partial,ARRAY(SELECT COALESCE(a.attname,pg_get_indexdef(ix.indexrelid,k.ord::int,true)) FROM unnest(ix.indkey) WITH ORDINALITY k(attnum,ord) LEFT JOIN pg_attribute a ON a.attrelid=t.oid AND a.attnum=k.attnum WHERE k.ord<=ix.indnkeyatts ORDER BY k.ord) AS columns,pg_get_expr(ix.indpred,ix.indrelid) AS predicate,EXISTS(SELECT 1 FROM unnest(ix.indkey) k(attnum) WHERE k.attnum=0) AS has_expressions FROM pg_index ix JOIN pg_class t ON t.oid=ix.indrelid JOIN pg_class i ON i.oid=ix.indexrelid JOIN pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname=$1 AND t.relname <> '_mklms_migrations' AND NOT ix.indisprimary ORDER BY t.relname,i.relname`, [schemaName]);
@@ -56,7 +56,8 @@ try {
 } catch (error) {
   if (client) await client.query('ROLLBACK').catch(() => {});
   const code = typeof error?.code === 'string' && /^[A-Z0-9_]+$/.test(error.code) ? error.code : 'UNKNOWN';
-  process.stderr.write(`PostgreSQL catalog export failed (${code}); connection details suppressed.\n`);
+  const schemaSelectionFailure = /^(?:Multiple MkLMS migration-ledger schemas|Could not select one PostgreSQL application schema safely)/.test(String(error?.message));
+  process.stderr.write(`PostgreSQL catalog export failed (${code}${schemaSelectionFailure ? '; schema selection is missing or ambiguous' : ''}); connection details suppressed.\n`);
   process.exitCode = 1;
 } finally {
   client?.release();

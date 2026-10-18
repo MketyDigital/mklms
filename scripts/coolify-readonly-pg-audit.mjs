@@ -246,6 +246,7 @@ if (isMain) {
       }
       const { logs, issue } = await readAppLogs();
       if (issue) lastLogsIssue = issue;
+      if (logs.includes('MKLMS_CATALOG_ERROR:')) throw new Error('Coolify executor reported a PostgreSQL schema metadata export failure.');
       if (logs.includes('MKLMS_CATALOG_END')) {
         catalog = decodeCatalogChunks(logs);
         break;
