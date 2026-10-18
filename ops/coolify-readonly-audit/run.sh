@@ -5,7 +5,7 @@ cd /app
 export MKLMS_SCHEMA_AUDIT_DATABASE_URL="${DATABASE_URL:?DATABASE_URL is required}"
 export PGAPPNAME=mklms-readonly-schema-audit
 set +e
-node scripts/run-coolify-pg-catalog-audit.mjs
+node scripts/run-coolify-pg-catalog-audit.mjs 2>&1
 audit_status=$?
 set -e
 if [ "$audit_status" -ne 0 ]; then

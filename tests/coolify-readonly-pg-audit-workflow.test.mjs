@@ -50,8 +50,10 @@ test('executor obtains only the matching managed database catalog and suppresses
   assert.match(runner, /MKLMS_CATALOG_CHUNK/);
   assert.match(container, /MKLMS_SCHEMA_AUDIT_DATABASE_URL/);
   assert.match(container, /MKLMS_CATALOG_ERROR/);
+  assert.match(container, /run-coolify-pg-catalog-audit\.mjs 2>&1/);
   assert.match(coolify, /Coolify executor reported a PostgreSQL schema metadata export failure/);
   assert.match(coolify, /Safe PostgreSQL catalog diagnostic/);
+  assert.match(pgExporter, /process\.stdout\.write\(`PostgreSQL catalog export failed/);
   assert.match(pgExporter, /default_transaction_read_only=on/);
   assert.match(pgExporter, /BEGIN READ ONLY/);
   assert.match(pgExporter, /rejectUnauthorized:\s*true/);
