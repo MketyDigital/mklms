@@ -10,6 +10,7 @@ const runner = readFileSync('scripts/run-coolify-pg-catalog-audit.mjs', 'utf8');
 const coolify = readFileSync('scripts/coolify-readonly-pg-audit.mjs', 'utf8');
 const container = readFileSync('ops/coolify-readonly-audit/run.sh', 'utf8');
 const dockerfile = readFileSync('ops/coolify-readonly-audit/Dockerfile', 'utf8');
+const auditPackage = JSON.parse(readFileSync('ops/coolify-readonly-audit/package.json', 'utf8'));
 const pgExporter = readFileSync('scripts/export-postgres-schema-catalog.mjs', 'utf8');
 
 test('Coolify fallback is limited to the same-repository migration PR and uses the supplied token', () => {
@@ -28,6 +29,8 @@ test('Coolify executor is pinned, private, ephemeral, and always cleaned up', ()
   assert.match(coolify, /instant_deploy:\s*false/);
   assert.match(coolify, /method:\s*'DELETE'/);
   assert.match(coolify, /finally\s*\{/);
+  assert.doesNotMatch(dockerfile, /package-lock\.json/);
+  assert.equal(auditPackage.dependencies.pg, '8.16.3');
   assert.match(auditJob, /if:\s*always\(\)/);
 });
 
