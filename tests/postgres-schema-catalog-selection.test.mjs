@@ -24,6 +24,25 @@ test('selects one schema matching the full MkLMS core-table signature', () => {
   ]), 'application');
 });
 
+test('selects a unique partial core signature so missing source tables remain auditable', () => {
+  assert.equal(selectPostgresCatalogSchema([
+    { name: 'auth', hasMigrationLedger: false, applicationTableCount: 8, mklmsSignatureTableCount: 0 },
+    { name: 'application', hasMigrationLedger: false, applicationTableCount: 35, mklmsSignatureTableCount: 4 },
+    { name: 'billing', hasMigrationLedger: false, applicationTableCount: 12, mklmsSignatureTableCount: 1 },
+  ]), 'application');
+});
+
+test('fails closed when the strongest core signature is tied or too weak', () => {
+  assert.throws(() => selectPostgresCatalogSchema([
+    { name: 'one', hasMigrationLedger: false, applicationTableCount: 12, mklmsSignatureTableCount: 4 },
+    { name: 'two', hasMigrationLedger: false, applicationTableCount: 13, mklmsSignatureTableCount: 4 },
+  ]), /Multiple PostgreSQL schemas share the strongest MkLMS core-table signature/);
+  assert.throws(() => selectPostgresCatalogSchema([
+    { name: 'one', hasMigrationLedger: false, applicationTableCount: 12, mklmsSignatureTableCount: 2 },
+    { name: 'two', hasMigrationLedger: false, applicationTableCount: 13, mklmsSignatureTableCount: 1 },
+  ]), /no unique MkLMS migration ledger was found/);
+});
+
 test('fails closed for missing or ambiguous application schemas', () => {
   assert.throws(() => selectPostgresCatalogSchema([]), /Could not select one PostgreSQL application schema safely/);
   assert.throws(() => selectPostgresCatalogSchema([
