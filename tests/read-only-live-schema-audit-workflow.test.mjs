@@ -34,7 +34,8 @@ test('live schema audit exports only catalog metadata and never applies migratio
   assert.match(pgExporter, /transaction_read_only/);
   assert.match(pgExporter, /table_name='_mklms_migrations'/);
   assert.match(pgExporter, /selectPostgresCatalogSchema\(schemaRows\.rows\)/);
-  assert.match(pgExporter, /'students','courses','preauthorizations','enrollments','live_sessions'/);
+  assert.match(pgExporter, /table_name = ANY\(\$1::text\[\]\)/);
+  assert.match(pgExporter, /MKLMS_D1_TABLE_SIGNATURE/);
   assert.doesNotMatch(pgExporter, /current_schema\(\)/);
   assert.match(pgExporter, /n\.nspname=\$1/);
   assert.match(pgExporter, /connection details suppressed/);

@@ -18,28 +18,28 @@ test('selects the only non-system schema with tables when no ledger exists', () 
 
 test('selects one schema matching the full MkLMS core-table signature', () => {
   assert.equal(selectPostgresCatalogSchema([
-    { name: 'public', hasMigrationLedger: false, applicationTableCount: 22, mklmsSignatureTableCount: 0 },
-    { name: 'application', hasMigrationLedger: false, applicationTableCount: 37, mklmsSignatureTableCount: 5 },
-    { name: 'billing', hasMigrationLedger: false, applicationTableCount: 5, mklmsSignatureTableCount: 0 },
+    { name: 'public', hasMigrationLedger: false, applicationTableCount: 22, mklmsTableMatchCount: 0 },
+    { name: 'application', hasMigrationLedger: false, applicationTableCount: 37, mklmsTableMatchCount: 38 },
+    { name: 'billing', hasMigrationLedger: false, applicationTableCount: 5, mklmsTableMatchCount: 0 },
   ]), 'application');
 });
 
 test('selects a unique partial core signature so missing source tables remain auditable', () => {
   assert.equal(selectPostgresCatalogSchema([
-    { name: 'auth', hasMigrationLedger: false, applicationTableCount: 8, mklmsSignatureTableCount: 0 },
-    { name: 'application', hasMigrationLedger: false, applicationTableCount: 35, mklmsSignatureTableCount: 4 },
-    { name: 'billing', hasMigrationLedger: false, applicationTableCount: 12, mklmsSignatureTableCount: 1 },
+    { name: 'auth', hasMigrationLedger: false, applicationTableCount: 8, mklmsTableMatchCount: 0 },
+    { name: 'application', hasMigrationLedger: false, applicationTableCount: 35, mklmsTableMatchCount: 22 },
+    { name: 'billing', hasMigrationLedger: false, applicationTableCount: 12, mklmsTableMatchCount: 4 },
   ]), 'application');
 });
 
 test('fails closed when the strongest core signature is tied or too weak', () => {
   assert.throws(() => selectPostgresCatalogSchema([
-    { name: 'one', hasMigrationLedger: false, applicationTableCount: 12, mklmsSignatureTableCount: 4 },
-    { name: 'two', hasMigrationLedger: false, applicationTableCount: 13, mklmsSignatureTableCount: 4 },
-  ]), /Multiple PostgreSQL schemas share the strongest MkLMS core-table signature/);
+    { name: 'one', hasMigrationLedger: false, applicationTableCount: 12, mklmsTableMatchCount: 12 },
+    { name: 'two', hasMigrationLedger: false, applicationTableCount: 13, mklmsTableMatchCount: 12 },
+  ]), /Multiple PostgreSQL schemas share the strongest MkLMS table signature/);
   assert.throws(() => selectPostgresCatalogSchema([
-    { name: 'one', hasMigrationLedger: false, applicationTableCount: 12, mklmsSignatureTableCount: 2 },
-    { name: 'two', hasMigrationLedger: false, applicationTableCount: 13, mklmsSignatureTableCount: 1 },
+    { name: 'one', hasMigrationLedger: false, applicationTableCount: 12, mklmsTableMatchCount: 2 },
+    { name: 'two', hasMigrationLedger: false, applicationTableCount: 13, mklmsTableMatchCount: 1 },
   ]), /no unique MkLMS migration ledger was found/);
 });
 
