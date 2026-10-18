@@ -14,6 +14,11 @@ const tlsCertificateVerified = new URL(connectionString).searchParams.get('sslmo
 const { Pool } = pg;
 const caFile = process.env.MKLMS_SCHEMA_AUDIT_PG_CA_FILE;
 const poolOptions = { connectionString, max: 1, application_name: 'mklms-schema-audit', options: '-c default_transaction_read_only=on' };
+if (allowUnverifiedRequire && new URL(connectionString).searchParams.get('sslmode') === 'require') {
+  // The pg package's connection-string parser defaults to strict validation
+  // for `require`; pass the same TLS policy as the current Worker explicitly.
+  poolOptions.ssl = { rejectUnauthorized: false };
+}
 if (caFile) {
   // Keep the source host from DATABASE_URL while verifying it against the
   // mounted CA; pg's URL sslmode parsing would otherwise override the CA.
@@ -60,7 +65,14 @@ try {
   if (client) await client.query('ROLLBACK').catch(() => {});
   const code = typeof error?.code === 'string' && /^[A-Z0-9_]+$/.test(error.code) ? error.code : 'UNKNOWN';
   const schemaSelectionMessage = String(error?.message).match(/^(?:Multiple MkLMS migration-ledger schemas (?:contain application tables|were found)|Could not select one PostgreSQL application schema safely) \(\d+[^\n]*\)\.$/)?.[0];
-  process.stdout.write(`PostgreSQL catalog export failed (${code}${schemaSelectionMessage ? `; ${schemaSelectionMessage}` : ''}); connection details suppressed.\n`);
+  const errorText = String(error?.message ?? '');
+  const safeTlsMessage = /self[- ]signed certificate/i.test(errorText)
+    ? 'TLS certificate is self-signed'
+    : /certificate.*(?:verify|validation|expired|hostname)|(?:verify|validation).*certificate/i.test(errorText)
+      ? 'TLS certificate validation failed'
+      : undefined;
+  const safeFailureClass = safeTlsMessage ? `; ${safeTlsMessage}` : '';
+  process.stdout.write(`PostgreSQL catalog export failed (${code}${safeFailureClass}${schemaSelectionMessage ? `; ${schemaSelectionMessage}` : ''}); connection details suppressed.\n`);
   process.exitCode = 1;
 } finally {
   client?.release();

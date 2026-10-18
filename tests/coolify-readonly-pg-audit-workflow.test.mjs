@@ -66,6 +66,8 @@ test('executor reads the exact configured production source without logging the 
   assert.match(pgExporter, /BEGIN READ ONLY/);
   assert.match(pgExporter, /options: '-c default_transaction_read_only=on'/);
   assert.match(pgExporter, /rejectUnauthorized:\s*true/);
+  assert.match(pgExporter, /allowUnverifiedRequire[\s\S]*poolOptions\.ssl = \{ rejectUnauthorized: false \}/);
+  assert.match(pgExporter, /TLS certificate is self-signed/);
   assert.match(pgExporter, /verifiedPostgresUrl\(configuredUrl, process\.env\.MKLMS_SCHEMA_AUDIT_DATABASE_SSL, \{ allowUnverifiedRequire \}\)/);
   assert.match(pgExporter, /information_schema/);
   assert.doesNotMatch(container, /(?:INSERT|UPDATE|DELETE|DROP|ALTER)\s+(?:INTO|FROM|TABLE|DATABASE)/i);
