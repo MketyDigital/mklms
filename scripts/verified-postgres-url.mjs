@@ -4,7 +4,7 @@ const VERIFIED_TLS_MODES = new Set(['verify-full', 'verify-ca', 'require']);
  * Keep the configured host intact while requiring TLS for a migration source.
  * The repository stores SSL mode separately for some legacy database secrets.
  */
-export function verifiedPostgresUrl(connectionString, configuredSslMode) {
+export function verifiedPostgresUrl(connectionString, configuredSslMode, { allowUnverifiedRequire = false } = {}) {
   let url;
   try {
     url = new URL(connectionString);
@@ -24,8 +24,13 @@ export function verifiedPostgresUrl(connectionString, configuredSslMode) {
   if (!VERIFIED_TLS_MODES.has(sslMode)) {
     throw new Error('Production PostgreSQL audit URL must require verified TLS.');
   }
-  // pg-connection-string treats libpq's "require" as encryption without
-  // hostname validation; normalize it to the stricter certificate check.
-  url.searchParams.set('sslmode', sslMode === 'require' ? 'verify-full' : sslMode);
+  // By default, strengthen libpq's "require" to verify-full. The explicit
+  // compatibility option is only for read-only catalog audits against the
+  // existing Starpips endpoint, whose self-signed chain has no available CA.
+  // node-postgres interprets sslmode=require as encrypted TLS without
+  // certificate verification, matching the live application's current mode.
+  const preserveRequire = allowUnverifiedRequire && sslMode === 'require';
+  url.searchParams.set('sslmode', sslMode === 'require' && !preserveRequire ? 'verify-full' : sslMode);
+  if (preserveRequire) url.searchParams.set('uselibpqcompat', 'true');
   return url.toString();
 }

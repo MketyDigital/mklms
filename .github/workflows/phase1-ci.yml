@@ -146,6 +146,7 @@ jobs:
           MKLMS_SCHEMA_AUDIT_DATABASE_URL: ${{ secrets.MKLMS_DATABASE_URL }}
           MKLMS_SCHEMA_AUDIT_DATABASE_SSL: ${{ secrets.MKLMS_DATABASE_SSL }}
           MKLMS_DATABASE_SSL_CA: ${{ secrets.MKLMS_DATABASE_SSL_CA }}
+          MKLMS_SCHEMA_AUDIT_ALLOW_UNVERIFIED_TLS: 'true'
         run: |
           set -euo pipefail
           test -n "$MKLMS_SCHEMA_AUDIT_DATABASE_URL" || { echo "Missing database-migrations MKLMS_DATABASE_URL"; exit 1; }

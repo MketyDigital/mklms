@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
+import { parse as parsePostgresConnectionString } from 'pg-connection-string';
 import { classifyCoolifyFailure, decodeCatalogChunks, isTerminalCoolifyAppStatus, safeCoolifyDiagnostic, validateReadOnlyAuditSourceUrl } from '../scripts/coolify-readonly-pg-audit.mjs';
 import { verifiedPostgresUrl } from '../scripts/verified-postgres-url.mjs';
 
@@ -65,7 +66,7 @@ test('executor reads the exact configured production source without logging the 
   assert.match(pgExporter, /BEGIN READ ONLY/);
   assert.match(pgExporter, /options: '-c default_transaction_read_only=on'/);
   assert.match(pgExporter, /rejectUnauthorized:\s*true/);
-  assert.match(pgExporter, /verifiedPostgresUrl\(configuredUrl, process\.env\.MKLMS_SCHEMA_AUDIT_DATABASE_SSL\)/);
+  assert.match(pgExporter, /verifiedPostgresUrl\(configuredUrl, process\.env\.MKLMS_SCHEMA_AUDIT_DATABASE_SSL, \{ allowUnverifiedRequire \}\)/);
   assert.match(pgExporter, /information_schema/);
   assert.doesNotMatch(container, /(?:INSERT|UPDATE|DELETE|DROP|ALTER)\s+(?:INTO|FROM|TABLE|DATABASE)/i);
 });
@@ -85,6 +86,11 @@ test('source URL adds the separately configured TLS mode without changing its ho
   assert.equal(verified.hostname, 'source.example');
   assert.equal(verified.port, '5432');
   assert.equal(verified.searchParams.get('sslmode'), 'verify-full');
+  const compatible = new URL(verifiedPostgresUrl(source, 'require', { allowUnverifiedRequire: true }));
+  assert.equal(compatible.searchParams.get('sslmode'), 'require');
+  assert.equal(compatible.searchParams.get('uselibpqcompat'), 'true');
+  assert.equal(parsePostgresConnectionString(compatible.toString()).ssl.rejectUnauthorized, false);
+  assert.equal(new URL(verifiedPostgresUrl(source, 'verify-full', { allowUnverifiedRequire: true })).searchParams.get('sslmode'), 'verify-full');
   assert.equal(verified.searchParams.get('application_name'), 'audit');
   assert.equal(verifiedPostgresUrl('postgresql://mklms:secret@source.example/mklms?sslmode=verify-full', 'verify-full'), 'postgresql://mklms:secret@source.example/mklms?sslmode=verify-full');
   assert.throws(() => verifiedPostgresUrl(source, undefined), /verified TLS/);

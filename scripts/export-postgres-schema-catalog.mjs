@@ -8,7 +8,9 @@ import { verifiedPostgresUrl } from './verified-postgres-url.mjs';
 const output = process.argv[2];
 const configuredUrl = process.env.MKLMS_SCHEMA_AUDIT_DATABASE_URL;
 if (!output || !configuredUrl) throw new Error('Set MKLMS_SCHEMA_AUDIT_DATABASE_URL to a read-only PostgreSQL schema and provide <output.json>.');
-const connectionString = verifiedPostgresUrl(configuredUrl, process.env.MKLMS_SCHEMA_AUDIT_DATABASE_SSL);
+const allowUnverifiedRequire = process.env.MKLMS_SCHEMA_AUDIT_ALLOW_UNVERIFIED_TLS === 'true';
+const connectionString = verifiedPostgresUrl(configuredUrl, process.env.MKLMS_SCHEMA_AUDIT_DATABASE_SSL, { allowUnverifiedRequire });
+const tlsCertificateVerified = new URL(connectionString).searchParams.get('sslmode') !== 'require';
 const { Pool } = pg;
 const caFile = process.env.MKLMS_SCHEMA_AUDIT_PG_CA_FILE;
 const poolOptions = { connectionString, max: 1, application_name: 'mklms-schema-audit', options: '-c default_transaction_read_only=on' };
@@ -16,7 +18,7 @@ if (caFile) {
   // Keep the source host from DATABASE_URL while verifying it against the
   // mounted CA; pg's URL sslmode parsing would otherwise override the CA.
   const secureUrl = new URL(connectionString);
-  for (const name of ['sslmode', 'sslrootcert', 'sslcert', 'sslkey']) secureUrl.searchParams.delete(name);
+  for (const name of ['sslmode', 'sslrootcert', 'sslcert', 'sslkey', 'uselibpqcompat']) secureUrl.searchParams.delete(name);
   poolOptions.connectionString = secureUrl.toString();
   poolOptions.ssl = { ca: await readFile(caFile, 'utf8'), rejectUnauthorized: true };
 }
@@ -52,7 +54,7 @@ try {
     ],
   };
   await writeFile(output, `${JSON.stringify(catalog, null, 2)}\n`, { flag: 'wx' });
-  process.stdout.write(JSON.stringify({ mode: 'read-only-postgres-catalog', output, tables: catalog.tables.length, columns: catalog.columns.length, indexes: catalog.indexes.length, foreignKeys: catalog.foreignKeys.length, checks: catalog.checks.length, triggers: catalog.triggers.length, unsupported: catalog.unsupported.length }) + '\n');
+  process.stdout.write(JSON.stringify({ mode: 'read-only-postgres-catalog', tlsCertificateVerified: tlsCertificateVerified || Boolean(caFile), output, tables: catalog.tables.length, columns: catalog.columns.length, indexes: catalog.indexes.length, foreignKeys: catalog.foreignKeys.length, checks: catalog.checks.length, triggers: catalog.triggers.length, unsupported: catalog.unsupported.length }) + '\n');
   await client.query('COMMIT');
 } catch (error) {
   if (client) await client.query('ROLLBACK').catch(() => {});

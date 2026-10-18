@@ -26,6 +26,7 @@ test('live schema audit exports only catalog metadata and never applies migratio
   assert.match(auditJob, /Read Starpips source PostgreSQL catalog \(read-only\)/);
   assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_DATABASE_URL: \$\{\{ secrets\.MKLMS_DATABASE_URL \}\}/);
   assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_DATABASE_SSL: \$\{\{ secrets\.MKLMS_DATABASE_SSL \}\}/);
+  assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_ALLOW_UNVERIFIED_TLS: 'true'/);
   assert.match(auditJob, /MKLMS_DATABASE_SSL_CA/);
   assert.match(auditJob, /umask 077[\s\S]*mktemp[\s\S]*MKLMS_SCHEMA_AUDIT_PG_CA_FILE/);
   assert.match(auditJob, /postgres-starpips\.json/);
