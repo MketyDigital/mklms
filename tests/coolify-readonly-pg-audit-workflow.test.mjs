@@ -41,7 +41,9 @@ test('executor reads the exact configured production source without logging the 
   assert.match(coolify, /validateReadOnlyAuditSourceUrl\(configuredDatabaseUrl\)/);
   assert.match(coolify, /Do not replace its host with Coolify's/);
   assert.doesNotMatch(coolify, /internal_db_url/);
-  assert.doesNotMatch(coolify, /MKLMS_SCHEMA_AUDIT_PG_CA_FILE/);
+  assert.match(coolify, /MKLMS_SCHEMA_AUDIT_PG_CA_FILE/);
+  assert.match(coolify, /TLS client still verifies the configured source hostname/);
+  assert.match(coolify, /\/data\/coolify\/ssl\/coolify-ca\.crt/);
   assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_DATABASE_URL/);
   assert.match(dockerfile, /export-postgres-schema-catalog\.mjs/);
   assert.match(dockerfile, /postgres-schema-catalog-selection\.mjs/);
@@ -57,6 +59,8 @@ test('executor reads the exact configured production source without logging the 
   assert.match(pgExporter, /default_transaction_read_only=on/);
   assert.match(pgExporter, /BEGIN READ ONLY/);
   assert.match(pgExporter, /options: '-c default_transaction_read_only=on'/);
+  assert.match(pgExporter, /rejectUnauthorized:\s*true/);
+  assert.match(pgExporter, /MKLMS_SCHEMA_AUDIT_PG_CA_FILE/);
   assert.match(pgExporter, /information_schema/);
   assert.doesNotMatch(container, /(?:INSERT|UPDATE|DELETE|DROP|ALTER)\s+(?:INTO|FROM|TABLE|DATABASE)/i);
 });

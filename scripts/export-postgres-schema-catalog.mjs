@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** Export DDL metadata only; never selects application row data or prints credentials. */
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import pg from 'pg';
 import { MKLMS_D1_TABLE_SIGNATURE, selectPostgresCatalogSchema } from './postgres-schema-catalog-selection.mjs';
 
@@ -8,7 +8,16 @@ const output = process.argv[2];
 const connectionString = process.env.MKLMS_SCHEMA_AUDIT_DATABASE_URL;
 if (!output || !connectionString) throw new Error('Set MKLMS_SCHEMA_AUDIT_DATABASE_URL to a read-only PostgreSQL schema and provide <output.json>.');
 const { Pool } = pg;
+const caFile = process.env.MKLMS_SCHEMA_AUDIT_PG_CA_FILE;
 const poolOptions = { connectionString, max: 1, application_name: 'mklms-schema-audit', options: '-c default_transaction_read_only=on' };
+if (caFile) {
+  // Keep the source host from DATABASE_URL while verifying it against the
+  // mounted CA; pg's URL sslmode parsing would otherwise override the CA.
+  const secureUrl = new URL(connectionString);
+  for (const name of ['sslmode', 'sslrootcert', 'sslcert', 'sslkey']) secureUrl.searchParams.delete(name);
+  poolOptions.connectionString = secureUrl.toString();
+  poolOptions.ssl = { ca: await readFile(caFile, 'utf8'), rejectUnauthorized: true };
+}
 const pool = new Pool(poolOptions);
 let client;
 try {
