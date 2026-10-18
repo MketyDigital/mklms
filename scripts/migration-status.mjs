@@ -5,6 +5,7 @@ import process from "node:process";
 import pg from "pg";
 
 import { ensureMigrationLedger } from "./migration-ledger.mjs";
+import { prepareMigrationSchema } from "./migration-schema.mjs";
 
 const { Client } = pg;
 const connectionString = process.env.DATABASE_URL;
@@ -20,12 +21,19 @@ const client = new Client({
 
 const checksum = (content) => createHash("sha256").update(content).digest("hex");
 
+const dir = path.join(process.cwd(), "db", "migrations");
+const files = (await readdir(dir)).filter((name) => name.endsWith(".sql")).sort();
+const migrations = await Promise.all(files.map(async (filename) => ({
+  filename,
+  checksum: checksum(await readFile(path.join(dir, filename))),
+})));
+
 await client.connect();
 try {
+  if (process.env.MKLMS_DATABASE_SCHEMA) {
+    await prepareMigrationSchema(client, process.env.MKLMS_DATABASE_SCHEMA, migrations);
+  }
   await ensureMigrationLedger(client);
-
-  const dir = path.join(process.cwd(), "db", "migrations");
-  const files = (await readdir(dir)).filter((name) => name.endsWith(".sql")).sort();
   const applied = await client.query(
     `SELECT filename, checksum_sha256, applied_at
      FROM _mklms_migrations

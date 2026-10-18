@@ -2,6 +2,7 @@ name: MkLMS CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
     branches:
       - main
       - architecture/mklms-reusable-platform
@@ -289,6 +290,40 @@ jobs:
           fi
           exit "$failed"
 
+  postgres-schema-isolation-rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mklms_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mklms_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/mklms_test
+      DATABASE_SSL: disable
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Rehearse all PostgreSQL migrations in an isolated schema
+        run: node scripts/postgres-schema-isolation-rehearsal.mjs
+
   provision-empty-d1-targets:
     if: >-
       github.event_name == 'pull_request' &&
@@ -350,3 +385,46 @@ jobs:
               D1_SCHEMA_REPORT_PATH=".generated/d1-schema-audit/${installation}.json" \
               node scripts/cloudflare-d1-live-inventory.mjs
           done
+  apply-academy-schema-to-starpips:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.action == 'edited' &&
+      github.event.pull_request.number == 149 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(github.event.pull_request.body, '<!-- APPLY_MKETY_ACADEMY_SCHEMA_TO_STARPIPS -->')
+    needs:
+      - verify
+      - postgres-schema-isolation-rehearsal
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: database-migrations
+    concurrency:
+      group: mklms-starpips-academy-schema
+      cancel-in-progress: false
+    env:
+      DATABASE_URL: ${{ secrets.MKLMS_DATABASE_URL }}
+      DATABASE_SSL: ${{ secrets.MKLMS_DATABASE_SSL }}
+      MKLMS_DATABASE_SCHEMA: mkety_academy
+    steps:
+      - name: Checkout selected PR commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Apply only the isolated Academy schema migrations to Starpips PostgreSQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$DATABASE_URL" || { echo "Missing MKLMS_DATABASE_URL"; exit 1; }
+          test -n "$DATABASE_SSL" || { echo "Missing MKLMS_DATABASE_SSL"; exit 1; }
+          node scripts/migrate.mjs
+          node scripts/migration-status.mjs
+
