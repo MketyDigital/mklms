@@ -71,6 +71,7 @@ test('executor reads the exact configured production source without logging the 
   assert.match(pgExporter, /verifiedPostgresUrl\(configuredUrl, process\.env\.MKLMS_SCHEMA_AUDIT_DATABASE_SSL, \{ allowUnverifiedRequire \}\)/);
   assert.match(pgExporter, /information_schema/);
   assert.match(pgExporter, /to_json\(ARRAY\(SELECT COALESCE\(a\.attname,pg_get_indexdef/);
+  assert.match(pgExporter, /to_json\(array_agg\(a\.attname ORDER BY k\.ord\)\) AS columns/);
   assert.doesNotMatch(container, /(?:INSERT|UPDATE|DELETE|DROP|ALTER)\s+(?:INTO|FROM|TABLE|DATABASE)/i);
 });
 
