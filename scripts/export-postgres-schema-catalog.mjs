@@ -88,7 +88,15 @@ try {
   const safeFailureMessage = safeTlsMessage ?? safeTransportMessage;
   const safeFailureClass = safeFailureMessage ? `; ${safeFailureMessage}` : '';
   const safeName = typeof error?.name === 'string' && /^[A-Za-z]+(?:Error)?$/.test(error.name) ? ` ${error.name}` : '';
-  process.stdout.write(`PostgreSQL catalog export failed (${code}${safeName}${safeFailureClass}${schemaSelectionMessage ? `; ${schemaSelectionMessage}` : ''}); connection details suppressed.\n`);
+  const safeTypeError = error?.name === 'TypeError'
+    ? errorText.split(/\r?\n/, 1)[0]
+      .replace(/postgres(?:ql)?:\/\/[^\s"'<>]+/gi, 'postgresql://***')
+      .replace(/Bearer\s+[^\s"'<>]+/gi, 'Bearer ***')
+      .replace(/(PASSWORD|TOKEN|SECRET|DATABASE_URL)=?[^\s,;]+/gi, '$1=***')
+      .replace(/[\r\n\t]/g, ' ')
+      .slice(0, 180)
+    : undefined;
+  process.stdout.write(`PostgreSQL catalog export failed (${code}${safeName}${safeFailureClass}${schemaSelectionMessage ? `; ${schemaSelectionMessage}` : ''}${safeTypeError ? `; ${safeTypeError}` : ''}); connection details suppressed.\n`);
   process.exitCode = 1;
 } finally {
   client?.release();
