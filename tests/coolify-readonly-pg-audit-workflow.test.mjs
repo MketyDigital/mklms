@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
-import { decodeCatalogChunks, resolveMatchingDatabaseUrl } from '../scripts/coolify-readonly-pg-audit.mjs';
+import { classifyCoolifyFailure, decodeCatalogChunks, resolveMatchingDatabaseUrl } from '../scripts/coolify-readonly-pg-audit.mjs';
 
 const workflow = readFileSync('.github/workflows/phase1-ci.yml', 'utf8');
 const auditJob = (workflow.split('  live-readonly-schema-audit:\n')[1] ?? '').split('\n  provision-empty-d1-targets:\n')[0];
@@ -61,4 +61,11 @@ test('Coolify log transport reconstructs only a complete compressed schema catal
   const logs = chunks.map((chunk, index) => `MKLMS_CATALOG_CHUNK:${index + 1}/${chunks.length}:${chunk}`).join('\n');
   assert.deepEqual(decodeCatalogChunks(logs), catalog);
   assert.throws(() => decodeCatalogChunks(logs.split('\n').slice(0, -1).join('\n')), /complete PostgreSQL catalog/);
+});
+
+test('Coolify deployment failures are reduced to a safe diagnostic class', () => {
+  assert.equal(classifyCoolifyFailure('fatal: repository not found'), 'source_checkout');
+  assert.equal(classifyCoolifyFailure('failed to read dockerfile'), 'dockerfile');
+  assert.equal(classifyCoolifyFailure('getaddrinfo EAI_AGAIN'), 'network');
+  assert.equal(classifyCoolifyFailure('private value should never be printed'), 'unclassified');
 });

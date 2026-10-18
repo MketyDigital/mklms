@@ -57,6 +57,15 @@ export function decodeCatalogChunks(logs) {
   return catalog;
 }
 
+export function classifyCoolifyFailure(...diagnostics) {
+  const text = diagnostics.map(value => typeof value === 'string' ? value : '').join('\n');
+  if (/repository not found|could not read from remote repository|authentication failed.*github|repository access denied/i.test(text)) return 'source_checkout';
+  if (/failed to read dockerfile|dockerfile.*not found|no such file or directory.*dockerfile/i.test(text)) return 'dockerfile';
+  if (/EAI_AGAIN|ENOTFOUND|could not resolve host|network is unreachable|connection timed out/i.test(text)) return 'network';
+  if (/npm ERR|npm error|failed to solve|executor failed running/i.test(text)) return 'container_build';
+  return 'unclassified';
+}
+
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
 if (isMain) {
   const token = process.env.OCI_COOLIFY_TOKEN;
@@ -143,7 +152,15 @@ if (isMain) {
       const deployment = await request(`/deployments/${encodeURIComponent(deploymentUuid)}`);
       const status = String(deployment.status || '').toLowerCase();
       if (['finished', 'success', 'successful', 'succeeded', 'completed'].includes(status)) { finished = true; break; }
-      if (['failed', 'failure', 'error', 'cancelled', 'canceled'].includes(status)) throw new Error(`Coolify executor build failed (${status}).`);
+      if (['failed', 'failure', 'error', 'cancelled', 'canceled'].includes(status)) {
+        let appLogs = '';
+        try {
+          const response = await request(`/applications/${appUuid}/logs?lines=1000&show_timestamps=false`);
+          if (typeof response.logs === 'string') appLogs = response.logs;
+        } catch {}
+        const failureClass = classifyCoolifyFailure(deployment.logs, deployment.message, appLogs);
+        throw new Error(`Coolify executor build failed (${status}; ${failureClass}).`);
+      }
       await delay(5_000);
     }
     if (!finished) throw new Error('Timed out waiting for the Coolify executor build.');
