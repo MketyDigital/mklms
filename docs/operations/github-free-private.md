@@ -47,6 +47,8 @@ These are shared control-plane credentials for the Mkety Cloudflare account. Ins
 
 These repository-level secrets are used by the Starpips migration gate, production release, and read-only schema audit. Keep them scoped to Starpips and never point them at another installation's database. The URL and SSL mode must be the authoritative Starpips connection settings; workflow logs report only whether the values are present and never print them.
 
+If a PostgreSQL endpoint uses a private or self-signed certificate chain, provide its trusted PEM CA as optional repository secret `MKLMS_DATABASE_SSL_CA` for the read-only schema audit. The audit keeps certificate verification enabled and does not fall back to an unverified TLS connection.
+
 ### Mkety Academy application
 
 - `MKETY_ADMIN_ACCESS_KEY`

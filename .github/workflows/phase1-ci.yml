@@ -145,10 +145,18 @@ jobs:
         env:
           MKLMS_SCHEMA_AUDIT_DATABASE_URL: ${{ secrets.MKLMS_DATABASE_URL }}
           MKLMS_SCHEMA_AUDIT_DATABASE_SSL: ${{ secrets.MKLMS_DATABASE_SSL }}
+          MKLMS_DATABASE_SSL_CA: ${{ secrets.MKLMS_DATABASE_SSL_CA }}
         run: |
           set -euo pipefail
           test -n "$MKLMS_SCHEMA_AUDIT_DATABASE_URL" || { echo "Missing database-migrations MKLMS_DATABASE_URL"; exit 1; }
           test -n "$MKLMS_SCHEMA_AUDIT_DATABASE_SSL" || { echo "Missing database-migrations MKLMS_DATABASE_SSL"; exit 1; }
+          if [ -n "${MKLMS_DATABASE_SSL_CA:-}" ]; then
+            umask 077
+            ca_file=$(mktemp "$RUNNER_TEMP/mklms-postgres-ca.XXXXXX")
+            printf '%s\n' "$MKLMS_DATABASE_SSL_CA" > "$ca_file"
+            export MKLMS_SCHEMA_AUDIT_PG_CA_FILE="$ca_file"
+            trap 'rm -f "$ca_file"' EXIT
+          fi
           node scripts/export-postgres-schema-catalog.mjs schema-audit-output/postgres-starpips.json
 
       - name: Confirm PostgreSQL catalog source succeeded
