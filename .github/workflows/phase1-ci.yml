@@ -95,7 +95,7 @@ jobs:
       github.event.pull_request.number == 149 &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -120,6 +120,34 @@ jobs:
           set -euo pipefail
           test -n "$MKLMS_SCHEMA_AUDIT_DATABASE_URL" || { echo "Missing MKLMS_PG_STAGING_DATABASE_URL"; exit 1; }
           node scripts/export-postgres-schema-catalog.mjs schema-audit-output/postgres-production.json
+
+      - name: Read PostgreSQL catalog through the private Coolify network when runner DNS fails
+        id: coolify-catalog
+        if: steps.postgres-catalog.outcome == 'failure'
+        continue-on-error: true
+        env:
+          OCI_COOLIFY_TOKEN: ${{ secrets.OCI_COOLIFY_TOKEN }}
+          COOLIFY_URL: https://deploy.mkety.com
+          MKLMS_PG_STAGING_DATABASE_URL: ${{ secrets.MKLMS_PG_STAGING_DATABASE_URL }}
+          MKLMS_COOLIFY_GIT_BRANCH: ${{ github.event.pull_request.head.ref }}
+          MKLMS_COOLIFY_GIT_SHA: ${{ github.event.pull_request.head.sha }}
+          MKLMS_SCHEMA_AUDIT_OUTPUT: schema-audit-output/postgres-production.json
+        run: node scripts/coolify-readonly-pg-audit.mjs
+
+      - name: Confirm PostgreSQL catalog source succeeded
+        if: always()
+        env:
+          POSTGRES_CATALOG_OUTCOME: ${{ steps.postgres-catalog.outcome }}
+          COOLIFY_CATALOG_OUTCOME: ${{ steps.coolify-catalog.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "$POSTGRES_CATALOG_OUTCOME" = success ] || [ "$COOLIFY_CATALOG_OUTCOME" = success ]; then
+            test -s schema-audit-output/postgres-production.json
+            echo 'Production PostgreSQL catalog captured through a read-only route.'
+          else
+            echo 'Both the GitHub runner and private Coolify PostgreSQL catalog paths failed.'
+            exit 1
+          fi
 
       - name: Read exact-match Starpips D1 catalog
         id: starpips-catalog
@@ -176,11 +204,12 @@ jobs:
         if: always()
         env:
           POSTGRES_CATALOG_OUTCOME: ${{ steps.postgres-catalog.outcome }}
+          COOLIFY_CATALOG_OUTCOME: ${{ steps.coolify-catalog.outcome }}
           STARPIPS_CATALOG_OUTCOME: ${{ steps.starpips-catalog.outcome }}
           ACADEMY_CATALOG_OUTCOME: ${{ steps.academy-catalog.outcome }}
         run: |
           set -euo pipefail
-          test "$POSTGRES_CATALOG_OUTCOME" = success || { echo "Production PostgreSQL catalog export failed"; exit 1; }
+          test "$POSTGRES_CATALOG_OUTCOME" = success || test "$COOLIFY_CATALOG_OUTCOME" = success || { echo "Production PostgreSQL catalog export failed"; exit 1; }
           test "$STARPIPS_CATALOG_OUTCOME" = success || { echo "Starpips D1 catalog export failed"; exit 1; }
           test "$ACADEMY_CATALOG_OUTCOME" = success || { echo "Mkety Academy D1 catalog export failed"; exit 1; }
           test -s schema-audit-output/postgres-production.json || { echo "Production PostgreSQL schema snapshot is missing"; exit 1; }
