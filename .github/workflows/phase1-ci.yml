@@ -90,6 +90,7 @@ jobs:
         run: npx wrangler deploy --dry-run --config workers/billing/wrangler.jsonc --outdir .billing-worker-dry-run
 
   live-readonly-schema-audit:
+    needs: provision-empty-d1-targets
     if: >-
       github.event_name == 'pull_request' &&
       github.event.pull_request.number == 149 &&

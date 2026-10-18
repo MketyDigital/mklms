@@ -7,6 +7,7 @@ const auditJob = (workflow.split('  live-readonly-schema-audit:\n')[1] ?? '').sp
 const pgExporter = readFileSync('scripts/export-postgres-schema-catalog.mjs', 'utf8');
 
 test('live schema audit is scoped to the current same-repository migration PR', () => {
+  assert.match(workflow, /live-readonly-schema-audit:\n\s+needs: provision-empty-d1-targets/);
   assert.match(workflow, /github\.event_name == 'pull_request'/);
   assert.match(workflow, /github\.event\.pull_request\.number == 149/);
   assert.match(workflow, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
