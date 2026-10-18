@@ -71,6 +71,8 @@ test('column type normalization covers verified UUID, timestamp, boolean, JSON a
     { table: 'managed_hosting_months', name: 'enabled', type: 'bool', nullable: false, default: 'true' },
     { table: 'managed_hosting_months', name: 'layout_config_json', type: 'jsonb', nullable: false, default: "'{}'::jsonb" },
     { table: 'managed_hosting_months', name: 'minimum_floor_usd', type: 'numeric', nullable: false, default: '15' },
+    { table: 'media_ingest_jobs', name: 'duration_minutes', type: 'numeric(12,3)', nullable: true, default: null },
+    { table: 'media_ingest_jobs', name: 'estimated_cost_usd', type: 'numeric(12,6)', nullable: true, default: null },
   ] };
   const d1 = { tables: structuredClone(postgres.tables), columns: [
     { table: 'managed_hosting_months', name: 'id', type: 'TEXT', nullable: false, default: null },
@@ -78,8 +80,26 @@ test('column type normalization covers verified UUID, timestamp, boolean, JSON a
     { table: 'managed_hosting_months', name: 'enabled', type: 'INTEGER', nullable: false, default: '1' },
     { table: 'managed_hosting_months', name: 'layout_config_json', type: 'TEXT', nullable: false, default: "'{}'" },
     { table: 'managed_hosting_months', name: 'minimum_floor_cents', type: 'INTEGER', nullable: false, default: '1500' },
+    { table: 'media_ingest_jobs', name: 'duration_minutes', type: 'TEXT', nullable: true, default: null },
+    { table: 'media_ingest_jobs', name: 'estimated_cost_usd', type: 'TEXT', nullable: true, default: null },
   ] };
   const report = buildSchemaParityReport(postgres, d1);
+  assert.deepEqual(report.differences, []);
+});
+
+test('text defaults ignore PostgreSQL casts and catalog-only index expression flags', () => {
+  const postgres = {
+    tables: [{ name: 'courses' }],
+    columns: [{ table: 'courses', name: 'status', type: 'text', nullable: false, default: "'DRAFT'::text" }],
+    indexes: [{ table: 'courses', name: 'courses_status_idx', unique: false, partial: false, columns: ['status'], predicate: null, has_expressions: false }],
+  };
+  const d1 = {
+    tables: structuredClone(postgres.tables),
+    columns: [{ table: 'courses', name: 'status', type: 'TEXT', nullable: false, default: "'DRAFT'" }],
+    indexes: [{ table: 'courses', name: 'courses_status_idx', unique: false, partial: false, columns: ['status'], predicate: null }],
+  };
+  const report = buildSchemaParityReport(postgres, d1);
+  assert.equal(report.complete, true);
   assert.deepEqual(report.differences, []);
 });
 

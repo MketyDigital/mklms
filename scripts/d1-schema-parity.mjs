@@ -56,13 +56,13 @@ const jsonTextColumns = new Set([
 function normalizedType(table, column, value) {
   const type = String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
   if (centColumns.has(`${table}.${column}`)) return 'INTEGER_CENTS';
+  if (table === 'media_ingest_jobs' && ['duration_minutes', 'estimated_cost_usd'].includes(column)) return 'DECIMAL_TEXT';
   if (/^(?:bool|boolean)$/.test(type) || booleanColumns.has(`${table}.${column}`) || /^(?:active|enabled|configured|enforcement_enabled|is_correct|passed|correct)$/.test(column)) return 'BOOLEAN';
   if (/^(?:int2|int4|int8|integer|smallint|bigint)$/.test(type)) return 'INTEGER';
   if (/^(?:timestamptz|timestamp with time zone|timestamp without time zone|timestamp)$/.test(type) || /(?:_at|_date)$/.test(column)) return 'TIMESTAMP_TEXT';
   if (/^(?:json|jsonb)$/.test(type) || /_json$/.test(column) || jsonTextColumns.has(`${table}.${column}`)) return 'JSON_TEXT';
   if (/^(?:uuid|text|varchar|character varying|bpchar|char|character)$/.test(type)) return 'TEXT';
   if (/^(?:numeric|decimal)(?:\([^)]*\))?$/.test(type)) {
-    if (table === 'media_ingest_jobs' && ['duration_minutes', 'estimated_cost_usd'].includes(column)) return 'DECIMAL_TEXT';
     return `NUMERIC:${type.replace(/\s/g, '')}`;
   }
   if (/^(?:real|float4|float8|double precision)$/.test(type)) return 'REAL';
@@ -91,6 +91,7 @@ function normalizeDefault(value, type, side) {
   }
   if (type === 'JSON_TEXT') return result.replace(/::(?:jsonb?|text)\b/gi, '').replace(/^\((.*)\)$/s, '$1').trim();
   if (type === 'TIMESTAMP_TEXT' && /^(?:now\(\)|current_timestamp(?:\(\d*\))?)$/i.test(result)) return 'CURRENT_TIMESTAMP';
+  if (type === 'TEXT') result = result.replace(/::(?:text|character varying|character)\b/gi, '').trim();
   if (type === 'INTEGER_CENTS') {
     result = result.replace(/::(?:numeric|decimal)(?:\([^)]*\))?/gi, '').trim();
     if (side === 'postgres' && /^-?\d+(?:\.\d+)?$/.test(result)) {
@@ -239,6 +240,7 @@ function normalizeCatalog(catalog, side) {
         if (kind === 'foreignKeys') delete normalizedItem.enforcement;
       }
       if (kind === 'indexes') {
+        delete normalizedItem.has_expressions;
         normalizedItem.columns = normalizedItem.columns.map(normalizeSqlExpression);
         normalizedItem.predicate = normalizedItem.predicate === null ? null : normalizeSqlExpression(normalizedItem.predicate);
       }
