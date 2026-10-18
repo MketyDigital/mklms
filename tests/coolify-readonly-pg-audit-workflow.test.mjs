@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { classifyCoolifyFailure, decodeCatalogChunks, isTerminalCoolifyAppStatus, safeCoolifyDiagnostic, validateReadOnlyAuditSourceUrl } from '../scripts/coolify-readonly-pg-audit.mjs';
+import { verifiedPostgresUrl } from '../scripts/verified-postgres-url.mjs';
 
 const workflow = readFileSync('.github/workflows/phase1-ci.yml', 'utf8');
 const auditJob = (workflow.split('  live-readonly-schema-audit:\n')[1] ?? '').split('\n  provision-empty-d1-targets:\n')[0];
@@ -37,19 +38,23 @@ test('Coolify executor is pinned, private, ephemeral, and always cleaned up', ()
 });
 
 test('executor reads the exact configured production source without logging the connection URL', () => {
-  assert.match(auditJob, /MKLMS_PG_STAGING_DATABASE_URL/);
-  assert.match(coolify, /validateReadOnlyAuditSourceUrl\(configuredDatabaseUrl\)/);
-  assert.match(coolify, /Do not replace its host with Coolify's/);
+  assert.match(auditJob, /MKLMS_DATABASE_URL/);
+  assert.match(auditJob, /MKLMS_SUPABASE_SOURCE_DATABASE_URL/);
+  assert.match(auditJob, /MKLMS_SUPABASE_SOURCE_DATABASE_SSL/);
+  assert.match(auditJob, /environment: database-migrations/);
+  assert.match(coolify, /validateReadOnlyAuditSourceUrl\(configuredDatabaseUrl, configuredDatabaseSsl\)/);
+  assert.match(coolify, /Supabase source URL\. Do not replace its host with Coolify's/);
   assert.doesNotMatch(coolify, /internal_db_url/);
-  assert.match(coolify, /MKLMS_SCHEMA_AUDIT_PG_CA_FILE/);
-  assert.match(coolify, /TLS client still verifies the configured source hostname/);
-  assert.match(coolify, /\/data\/coolify\/ssl\/coolify-ca\.crt/);
+  assert.doesNotMatch(coolify, /coolify-ca\.crt|MKLMS_SCHEMA_AUDIT_PG_CA_FILE/);
+  assert.match(coolify, /MKLMS_SCHEMA_AUDIT_DATABASE_SSL/);
   assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_DATABASE_URL/);
   assert.match(dockerfile, /export-postgres-schema-catalog\.mjs/);
   assert.match(dockerfile, /postgres-schema-catalog-selection\.mjs/);
+  assert.match(dockerfile, /verified-postgres-url\.mjs/);
   assert.match(runner, /gzipSync/);
   assert.match(runner, /MKLMS_CATALOG_CHUNK/);
   assert.match(container, /MKLMS_SCHEMA_AUDIT_DATABASE_URL/);
+  assert.match(container, /MKLMS_SCHEMA_AUDIT_DATABASE_SSL/);
   assert.match(container, /MKLMS_CATALOG_ERROR/);
   assert.match(container, /run-coolify-pg-catalog-audit\.mjs 2>&1/);
   assert.match(coolify, /Coolify executor reported a PostgreSQL schema metadata export failure/);
@@ -60,16 +65,31 @@ test('executor reads the exact configured production source without logging the 
   assert.match(pgExporter, /BEGIN READ ONLY/);
   assert.match(pgExporter, /options: '-c default_transaction_read_only=on'/);
   assert.match(pgExporter, /rejectUnauthorized:\s*true/);
-  assert.match(pgExporter, /MKLMS_SCHEMA_AUDIT_PG_CA_FILE/);
+  assert.match(pgExporter, /verifiedPostgresUrl\(configuredUrl, process\.env\.MKLMS_SCHEMA_AUDIT_DATABASE_SSL\)/);
   assert.match(pgExporter, /information_schema/);
   assert.doesNotMatch(container, /(?:INSERT|UPDATE|DELETE|DROP|ALTER)\s+(?:INTO|FROM|TABLE|DATABASE)/i);
 });
 
 test('production source URL is preserved and requires verified TLS', () => {
   const source = 'postgresql://mklms_user:source-secret@source.example/mklms?sslmode=require';
-  assert.equal(validateReadOnlyAuditSourceUrl(source), source);
+  const verified = new URL(validateReadOnlyAuditSourceUrl(source));
+  assert.equal(verified.hostname, 'source.example');
+  assert.equal(verified.searchParams.get('sslmode'), 'verify-full');
   assert.throws(() => validateReadOnlyAuditSourceUrl('postgresql://user:secret@source.example/mklms'), /verified TLS/);
   assert.throws(() => validateReadOnlyAuditSourceUrl('postgresql://user:secret@source.example/mklms?sslmode=disable'), /verified TLS/);
+});
+
+test('source URL adds the separately configured TLS mode without changing its host', () => {
+  const source = 'postgresql://mklms_user:source-secret@source.example:5432/mklms?application_name=audit';
+  const verified = new URL(verifiedPostgresUrl(source, 'require'));
+  assert.equal(verified.hostname, 'source.example');
+  assert.equal(verified.port, '5432');
+  assert.equal(verified.searchParams.get('sslmode'), 'verify-full');
+  assert.equal(verified.searchParams.get('application_name'), 'audit');
+  assert.equal(verifiedPostgresUrl('postgresql://mklms:secret@source.example/mklms?sslmode=verify-full', 'verify-full'), 'postgresql://mklms:secret@source.example/mklms?sslmode=verify-full');
+  assert.throws(() => verifiedPostgresUrl(source, undefined), /verified TLS/);
+  assert.throws(() => verifiedPostgresUrl(source, 'disable'), /verified TLS/);
+  assert.throws(() => verifiedPostgresUrl(`${source}&sslmode=disable`, 'require'), /conflicts/);
 });
 
 test('Coolify log transport reconstructs only a complete compressed schema catalog', () => {

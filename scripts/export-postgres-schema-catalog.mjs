@@ -3,10 +3,12 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import pg from 'pg';
 import { MKLMS_D1_TABLE_SIGNATURE, selectPostgresCatalogSchema } from './postgres-schema-catalog-selection.mjs';
+import { verifiedPostgresUrl } from './verified-postgres-url.mjs';
 
 const output = process.argv[2];
-const connectionString = process.env.MKLMS_SCHEMA_AUDIT_DATABASE_URL;
-if (!output || !connectionString) throw new Error('Set MKLMS_SCHEMA_AUDIT_DATABASE_URL to a read-only PostgreSQL schema and provide <output.json>.');
+const configuredUrl = process.env.MKLMS_SCHEMA_AUDIT_DATABASE_URL;
+if (!output || !configuredUrl) throw new Error('Set MKLMS_SCHEMA_AUDIT_DATABASE_URL to a read-only PostgreSQL schema and provide <output.json>.');
+const connectionString = verifiedPostgresUrl(configuredUrl, process.env.MKLMS_SCHEMA_AUDIT_DATABASE_SSL);
 const { Pool } = pg;
 const caFile = process.env.MKLMS_SCHEMA_AUDIT_PG_CA_FILE;
 const poolOptions = { connectionString, max: 1, application_name: 'mklms-schema-audit', options: '-c default_transaction_read_only=on' };

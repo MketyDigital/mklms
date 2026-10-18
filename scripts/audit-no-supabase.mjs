@@ -7,6 +7,8 @@ const root = process.cwd();
 const ignored = new Set(['.git', 'node_modules', '.next', '.open-next', 'dist', 'build', '.superpowers']);
 const extensions = /\.(?:ts|tsx|js|jsx|mjs|cjs|sql|json|jsonc|md|yml|yaml|toml|sh|txt)$/i;
 const allowlisted = new Set([
+  '.github/workflows/phase1-ci.yml',
+  'README.md',
   'docs/d1-audit-baseline-2026-10-17.md',
   'docs/superpowers/plans/2026-08-30-mklms-production-audit-repair.md',
   'docs/superpowers/plans/2026-08-31-cloudflare-hyperdrive-r2-hardening.md',
@@ -23,7 +25,10 @@ const allowlisted = new Set([
   'scripts/audit-d1-compat.mjs',
   'scripts/audit-d1-runtime-coverage.mjs',
   'scripts/audit-no-supabase.mjs',
+  'scripts/coolify-readonly-pg-audit.mjs',
   'tests/d1-runtime-coverage-audit.test.mjs',
+  'tests/coolify-readonly-pg-audit-workflow.test.mjs',
+  'tests/read-only-live-schema-audit-workflow.test.mjs',
   'tests/mkety-release-wrapper.test.mjs',
   'tests/mkety-database-wiring.test.mjs',
   'tests/no-supabase-audit.test.mjs',

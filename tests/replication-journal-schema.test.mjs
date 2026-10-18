@@ -111,6 +111,10 @@ test('PostgreSQL and D1 replication migrations define the same durable journal d
   assert.match(postgres, /No source capture or replay is enabled/);
   assert.match(d1, /no capture or replay triggers are enabled/);
   assert.match(postgresCapture, /capture_enabled BOOLEAN NOT NULL DEFAULT FALSE/);
+  assert.match(postgresCapture, /target_schema TEXT := current_schema\(\)/);
+  assert.match(postgresCapture, /to_regclass\(format\('%I\._mklms_migrations', target_schema\)\)/);
+  assert.equal((postgresCapture.match(/namespace\.nspname = target_schema/g) ?? []).length, 2);
+  assert.doesNotMatch(postgresCapture, /namespace\.nspname = 'public'/);
   assert.match(postgresCapture, /CREATE TRIGGER %I AFTER %s/);
   assert.match(postgresCapture, /Replication capture requires a primary key on every application table/);
   assert.match(postgresCapture, /source_backend = 'postgresql' AND capture_enabled = TRUE/);

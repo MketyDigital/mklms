@@ -3,6 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
+import { verifiedPostgresUrl } from './verified-postgres-url.mjs';
 
 export const centralPostgres = Object.freeze({
   projectUuid: '0zqhpkprlhtvlacmsgmfyyhs',
@@ -20,14 +21,9 @@ function urlIdentity(value) {
   };
 }
 
-export function validateReadOnlyAuditSourceUrl(sourceUrl) {
+export function validateReadOnlyAuditSourceUrl(sourceUrl, configuredSslMode) {
   urlIdentity(sourceUrl);
-  const parsed = new URL(sourceUrl);
-  const sslMode = parsed.searchParams.get('sslmode')?.toLowerCase();
-  if (!['verify-full', 'verify-ca', 'require'].includes(sslMode)) {
-    throw new Error('Production PostgreSQL audit URL must require verified TLS.');
-  }
-  return sourceUrl;
+  return verifiedPostgresUrl(sourceUrl, configuredSslMode);
 }
 
 export function decodeCatalogChunks(logs) {
@@ -104,13 +100,14 @@ const isMain = process.argv[1] && import.meta.url === pathToFileURL(resolve(proc
 if (isMain) {
   const token = process.env.OCI_COOLIFY_TOKEN;
   const baseUrl = (process.env.COOLIFY_URL || 'https://deploy.mkety.com').replace(/\/+$/, '');
-  const configuredDatabaseUrl = process.env.MKLMS_PG_STAGING_DATABASE_URL;
+  const configuredDatabaseUrl = process.env.MKLMS_DATABASE_URL;
+  const configuredDatabaseSsl = process.env.MKLMS_DATABASE_SSL;
   const branch = process.env.MKLMS_COOLIFY_GIT_BRANCH;
   const sha = process.env.MKLMS_COOLIFY_GIT_SHA;
   const runId = process.env.GITHUB_RUN_ID || 'local';
-  const outputPath = process.env.MKLMS_SCHEMA_AUDIT_OUTPUT || 'schema-audit-output/postgres-production.json';
+  const outputPath = process.env.MKLMS_SCHEMA_AUDIT_OUTPUT || 'schema-audit-output/postgres-source.json';
   if (!token) throw new Error('Missing OCI_COOLIFY_TOKEN.');
-  if (!configuredDatabaseUrl) throw new Error('Missing MKLMS_PG_STAGING_DATABASE_URL.');
+  if (!configuredDatabaseUrl) throw new Error('Missing MKLMS_DATABASE_URL.');
   if (!branch || !/^[0-9a-f]{40}$/.test(sha || '')) throw new Error('An exact repository branch and 40-character commit SHA are required.');
   if (new URL(baseUrl).origin !== 'https://deploy.mkety.com') throw new Error('Coolify URL must use https://deploy.mkety.com.');
 
@@ -148,9 +145,9 @@ if (isMain) {
   };
   const health = await fetch(`${baseUrl}/api/v1/health`, { signal: AbortSignal.timeout(15_000) });
   if (!health.ok) throw new Error(`Coolify health check failed with HTTP ${health.status}.`);
-  // This is the production source URL. Do not replace its host with Coolify's
+  // This is the Supabase source URL. Do not replace its host with Coolify's
   // central PostgreSQL URL, which could identify a different empty database.
-  const safeUrl = validateReadOnlyAuditSourceUrl(configuredDatabaseUrl);
+  const safeUrl = validateReadOnlyAuditSourceUrl(configuredDatabaseUrl, configuredDatabaseSsl);
   process.stdout.write(`::add-mask::${safeUrl}\n`);
 
   try {
@@ -177,18 +174,6 @@ if (isMain) {
     appUuid = created.uuid;
     process.stdout.write('::add-mask::' + appUuid + '\n');
 
-    // Trust the Coolify CA without substituting Coolify's internal database
-    // hostname; the TLS client still verifies the configured source hostname.
-    await request(`/applications/${appUuid}/storages`, {
-      method: 'POST',
-      body: {
-        type: 'file',
-        is_host_file: true,
-        fs_path: '/data/coolify/ssl/coolify-ca.crt',
-        mount_path: '/etc/ssl/certs/coolify-ca.crt',
-      },
-    });
-
     const env = await request(`/applications/${appUuid}/envs`, {
       method: 'POST',
       body: {
@@ -201,7 +186,7 @@ if (isMain) {
     await request(`/applications/${appUuid}/envs`, {
       method: 'POST',
       body: {
-        key: 'MKLMS_SCHEMA_AUDIT_PG_CA_FILE', value: '/etc/ssl/certs/coolify-ca.crt',
+        key: 'MKLMS_SCHEMA_AUDIT_DATABASE_SSL', value: configuredDatabaseSsl || new URL(safeUrl).searchParams.get('sslmode'),
         is_preview: false, is_literal: true, is_multiline: false, is_shown_once: true,
       },
     });

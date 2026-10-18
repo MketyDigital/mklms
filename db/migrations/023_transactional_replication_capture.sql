@@ -72,12 +72,17 @@ DECLARE
   table_row RECORD;
   trigger_name TEXT;
   event_name TEXT;
+  target_schema TEXT := current_schema();
 BEGIN
+  IF target_schema IS NULL OR to_regclass(format('%I._mklms_migrations', target_schema)) IS NULL THEN
+    RAISE EXCEPTION 'Replication capture must run in the schema containing the MkLMS migration ledger';
+  END IF;
+
   IF EXISTS (
     SELECT 1
     FROM pg_class relation
     JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
-    WHERE namespace.nspname = 'public'
+    WHERE namespace.nspname = target_schema
       AND relation.relkind = 'r'
       AND relation.relname <> '_mklms_migrations'
       AND left(relation.relname, length('mklms_replication_')) <> 'mklms_replication_'
@@ -99,7 +104,7 @@ BEGIN
     JOIN LATERAL unnest(primary_index.indkey) WITH ORDINALITY AS key_column(attnum, ordinality)
       ON key_column.ordinality <= primary_index.indnkeyatts
     JOIN pg_attribute attribute ON attribute.attrelid = relation.oid AND attribute.attnum = key_column.attnum
-    WHERE namespace.nspname = 'public'
+    WHERE namespace.nspname = target_schema
       AND relation.relkind = 'r'
       AND relation.relname <> '_mklms_migrations'
       AND left(relation.relname, length('mklms_replication_')) <> 'mklms_replication_'

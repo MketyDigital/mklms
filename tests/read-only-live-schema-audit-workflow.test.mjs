@@ -11,7 +11,8 @@ test('live schema audit is scoped to the current same-repository migration PR', 
   assert.match(workflow, /github\.event_name == 'pull_request'/);
   assert.match(workflow, /github\.event\.pull_request\.number == 149/);
   assert.match(workflow, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
-  assert.match(workflow, /MKLMS_PG_STAGING_DATABASE_URL/);
+  assert.match(workflow, /MKLMS_SUPABASE_SOURCE_DATABASE_URL/);
+  assert.match(workflow, /MKLMS_SUPABASE_SOURCE_DATABASE_SSL/);
   assert.match(workflow, /CLOUDFLARE_API_TOKEN/);
 });
 
@@ -25,7 +26,10 @@ test('live schema audit exports only catalog metadata and never applies migratio
   assert.match(auditJob, /continue-on-error: true/);
   assert.match(auditJob, /if: always\(\)/);
   assert.match(auditJob, /Verify all read-only schema snapshots were captured/);
-  assert.match(auditJob, /postgres-production\.json/);
+  assert.match(auditJob, /postgres-source\.json/);
+  assert.match(auditJob, /Read full Starpips D1 schema catalog \(metadata only\)[\s\S]*?if: always\(\)/);
+  assert.match(auditJob, /Read full Mkety Academy D1 schema catalog \(metadata only\)[\s\S]*?if: always\(\)/);
+  assert.match(auditJob, /Inspect existing application Worker D1 bindings \(read-only\)[\s\S]*?if: always\(\)/);
   assert.doesNotMatch(auditJob, /upload-artifact@/);
   assert.doesNotMatch(auditJob, /(?:wrangler\s+deploy|wrangler\s+d1\s+migrations\s+apply|npm\s+run\s+(?:db:migrate|deploy)|\b(?:INSERT|UPDATE|DELETE|DROP|ALTER)\s+(?:INTO|FROM|TABLE|DATABASE))/i);
   assert.doesNotMatch(auditJob, /echo\s+.*\$\{?(?:MKLMS_SCHEMA_AUDIT_DATABASE_URL|CLOUDFLARE_API_TOKEN)/i);
