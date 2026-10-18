@@ -46,6 +46,7 @@ test('executor obtains only the matching managed database catalog and suppresses
   assert.match(coolify, /configured MkLMS database and user/);
   assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_DATABASE_URL/);
   assert.match(dockerfile, /export-postgres-schema-catalog\.mjs/);
+  assert.match(dockerfile, /postgres-schema-catalog-selection\.mjs/);
   assert.match(runner, /gzipSync/);
   assert.match(runner, /MKLMS_CATALOG_CHUNK/);
   assert.match(container, /MKLMS_SCHEMA_AUDIT_DATABASE_URL/);
