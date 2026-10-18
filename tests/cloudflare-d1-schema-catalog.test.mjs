@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFile } from 'node:fs/promises';
-import { buildD1SchemaCatalog, exportD1SchemaOnly, fetchCloudflareD1SchemaCatalog } from '../scripts/cloudflare-d1-schema-catalog.mjs';
+import { buildD1SchemaCatalog, buildD1SchemaCatalogFromSql, exportD1SchemaOnly, fetchCloudflareD1SchemaCatalog } from '../scripts/cloudflare-d1-schema-catalog.mjs';
 
 const response = (body, status = 200) => ({ ok: status >= 200 && status < 300, status, async json() { return body; } });
 
@@ -71,6 +71,29 @@ test('uses Wrangler schema-only remote export and removes its temporary file', a
   assert.ok(argsSeen.includes('--skip-confirmation'));
   assert.match(sql, /^CREATE TABLE/);
   await assert.rejects(import('node:fs/promises').then(fs => fs.access(exportedPath)));
+});
+
+test('reconstructs live columns, foreign keys, indexes and checks from schema DDL only', () => {
+  const catalog = buildD1SchemaCatalogFromSql(`
+    CREATE TABLE parents (id TEXT PRIMARY KEY NOT NULL);
+    CREATE TABLE children (
+      id TEXT PRIMARY KEY NOT NULL,
+      parent_id TEXT NOT NULL,
+      CHECK (length(parent_id) > 0),
+      FOREIGN KEY (parent_id) REFERENCES parents(id) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX children_parent_uq ON children(parent_id);
+  `);
+  assert.equal(catalog.columns.length, 3);
+  assert.deepEqual(catalog.foreignKeys.map(({ table, columns, refTable, refColumns, onDelete }) => ({ table, columns, refTable, refColumns, onDelete })), [
+    { table: 'children', columns: ['parent_id'], refTable: 'parents', refColumns: ['id'], onDelete: 'CASCADE' },
+  ]);
+  assert.deepEqual(catalog.indexes.map(({ table, name, unique, columns }) => ({ table, name, unique, columns })), [
+    { table: 'children', name: 'children_parent_uq', unique: true, columns: ['parent_id'] },
+  ]);
+  assert.deepEqual(catalog.checks.map(({ table, expression }) => ({ table, expression })), [
+    { table: 'children', expression: 'length(parent_id) > 0' },
+  ]);
 });
 
 test('fetches a schema-only export for the exact installation D1 database', async () => {

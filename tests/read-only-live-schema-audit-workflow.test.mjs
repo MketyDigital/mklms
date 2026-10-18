@@ -32,6 +32,10 @@ test('live schema audit exports only catalog metadata and never applies migratio
   assert.match(pgExporter, /default_transaction_read_only=on/);
   assert.match(pgExporter, /BEGIN READ ONLY/);
   assert.match(pgExporter, /transaction_read_only/);
+  assert.match(pgExporter, /table_name='_mklms_migrations'/);
+  assert.match(pgExporter, /schemaRows\.rows\.length !== 1/);
+  assert.doesNotMatch(pgExporter, /current_schema\(\)/);
+  assert.match(pgExporter, /n\.nspname=\$1/);
   assert.match(pgExporter, /connection details suppressed/);
   assert.doesNotMatch(pgExporter, /console\.(?:error|log)\([^\n]*(?:error\.message|error\.hostname)/);
   assert.doesNotMatch(pgExporter, /SELECT\s+\*|SELECT\s+.+\bFROM\s+(?!information_schema|pg_catalog|pg_|unnest|LATERAL)/i);
