@@ -34,6 +34,7 @@ test('live schema audit exports only catalog metadata and never applies migratio
   assert.match(auditJob, /cloudflare-d1-schema-catalog\.mjs mkety-academy/);
   assert.match(auditJob, /--summary-only --require-complete/);
   assert.match(auditJob, /Require PostgreSQL parity with each live D1 schema/);
+  assert.match(auditJob, /Require PostgreSQL parity with each live D1 schema\n\s+if: always\(\)/);
   assert.match(auditJob, /GITHUB_STEP_SUMMARY/);
   assert.match(auditJob, /continue-on-error: true/);
   assert.match(auditJob, /if: always\(\)/);
