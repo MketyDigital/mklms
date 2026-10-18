@@ -19,7 +19,7 @@ test('Coolify fallback is limited to the same-repository migration PR and uses t
   assert.match(auditJob, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
   assert.match(auditJob, /OCI_COOLIFY_TOKEN/);
   assert.match(auditJob, /https:\/\/deploy\.mkety\.com/);
-  assert.match(auditJob, /steps\.postgres-catalog\.outcome == 'failure'/);
+  assert.match(auditJob, /steps\.academy-postgres-catalog\.outcome == 'failure'/);
   assert.match(auditJob, /MKLMS_COOLIFY_GIT_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
 });
 

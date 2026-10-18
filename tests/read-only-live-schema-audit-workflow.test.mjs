@@ -13,11 +13,20 @@ test('live schema audit is scoped to the current same-repository migration PR', 
   assert.match(workflow, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
   assert.match(workflow, /MKLMS_SUPABASE_SOURCE_DATABASE_URL/);
   assert.match(workflow, /MKLMS_SUPABASE_SOURCE_DATABASE_SSL/);
+  assert.match(workflow, /STARPIPS_DATABASE_URL/);
+  assert.match(workflow, /STARPIPS_DATABASE_SSL/);
   assert.match(workflow, /CLOUDFLARE_API_TOKEN/);
 });
 
 test('live schema audit exports only catalog metadata and never applies migrations or deploys', () => {
   assert.match(auditJob, /export-postgres-schema-catalog\.mjs/);
+  assert.match(auditJob, /Read Mkety Academy Supabase source PostgreSQL catalog \(read-only\)/);
+  assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_DATABASE_URL: \$\{\{ secrets\.MKLMS_SUPABASE_SOURCE_DATABASE_URL \}\}/);
+  assert.match(auditJob, /postgres-mkety-academy\.json/);
+  assert.match(auditJob, /Read Starpips source PostgreSQL catalog \(read-only\)/);
+  assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_DATABASE_URL: \$\{\{ secrets\.STARPIPS_DATABASE_URL \}\}/);
+  assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_DATABASE_SSL: \$\{\{ secrets\.STARPIPS_DATABASE_SSL \}\}/);
+  assert.match(auditJob, /postgres-starpips\.json/);
   assert.match(auditJob, /cloudflare-d1-schema-catalog\.mjs starpips/);
   assert.match(auditJob, /cloudflare-d1-schema-catalog\.mjs mkety-academy/);
   assert.match(auditJob, /--summary-only --require-complete/);
@@ -26,7 +35,11 @@ test('live schema audit exports only catalog metadata and never applies migratio
   assert.match(auditJob, /continue-on-error: true/);
   assert.match(auditJob, /if: always\(\)/);
   assert.match(auditJob, /Verify all read-only schema snapshots were captured/);
-  assert.match(auditJob, /postgres-source\.json/);
+  assert.match(auditJob, /postgres-mkety-academy\.json/);
+  assert.match(auditJob, /postgres-starpips\.json/);
+  assert.match(auditJob, /compare_schema starpips schema-audit-output\/postgres-starpips\.json schema-audit-output\/d1-starpips\.json/);
+  assert.match(auditJob, /compare_schema mkety-academy schema-audit-output\/postgres-mkety-academy\.json schema-audit-output\/d1-mkety-academy\.json/);
+  assert.doesNotMatch(auditJob, /MKLMS_PG_STAGING_DATABASE_URL/);
   assert.match(auditJob, /Read full Starpips D1 schema catalog \(metadata only\)[\s\S]*?if: always\(\)/);
   assert.match(auditJob, /Read full Mkety Academy D1 schema catalog \(metadata only\)[\s\S]*?if: always\(\)/);
   assert.match(auditJob, /Inspect existing application Worker D1 bindings \(read-only\)[\s\S]*?if: always\(\)/);

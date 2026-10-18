@@ -113,8 +113,8 @@ jobs:
       - name: Prepare schema audit output directory
         run: mkdir -p schema-audit-output
 
-      - name: Read Supabase source PostgreSQL catalog (read-only)
-        id: postgres-catalog
+      - name: Read Mkety Academy Supabase source PostgreSQL catalog (read-only)
+        id: academy-postgres-catalog
         continue-on-error: true
         env:
           MKLMS_SCHEMA_AUDIT_DATABASE_URL: ${{ secrets.MKLMS_SUPABASE_SOURCE_DATABASE_URL }}
@@ -123,11 +123,11 @@ jobs:
           set -euo pipefail
           test -n "$MKLMS_SCHEMA_AUDIT_DATABASE_URL" || { echo "Missing database-migrations MKLMS_SUPABASE_SOURCE_DATABASE_URL"; exit 1; }
           test -n "$MKLMS_SCHEMA_AUDIT_DATABASE_SSL" || { echo "Missing database-migrations MKLMS_SUPABASE_SOURCE_DATABASE_SSL"; exit 1; }
-          node scripts/export-postgres-schema-catalog.mjs schema-audit-output/postgres-source.json
+          node scripts/export-postgres-schema-catalog.mjs schema-audit-output/postgres-mkety-academy.json
 
       - name: Read PostgreSQL catalog through the private Coolify network when runner DNS fails
         id: coolify-catalog
-        if: steps.postgres-catalog.outcome == 'failure'
+        if: steps.academy-postgres-catalog.outcome == 'failure'
         continue-on-error: true
         env:
           OCI_COOLIFY_TOKEN: ${{ secrets.OCI_COOLIFY_TOKEN }}
@@ -136,23 +136,41 @@ jobs:
           MKLMS_DATABASE_SSL: ${{ secrets.MKLMS_SUPABASE_SOURCE_DATABASE_SSL }}
           MKLMS_COOLIFY_GIT_BRANCH: ${{ github.event.pull_request.head.ref }}
           MKLMS_COOLIFY_GIT_SHA: ${{ github.event.pull_request.head.sha }}
-          MKLMS_SCHEMA_AUDIT_OUTPUT: schema-audit-output/postgres-source.json
+          MKLMS_SCHEMA_AUDIT_OUTPUT: schema-audit-output/postgres-mkety-academy.json
         run: node scripts/coolify-readonly-pg-audit.mjs
+
+      - name: Read Starpips source PostgreSQL catalog (read-only)
+        id: starpips-postgres-catalog
+        continue-on-error: true
+        env:
+          MKLMS_SCHEMA_AUDIT_DATABASE_URL: ${{ secrets.STARPIPS_DATABASE_URL }}
+          MKLMS_SCHEMA_AUDIT_DATABASE_SSL: ${{ secrets.STARPIPS_DATABASE_SSL }}
+        run: |
+          set -euo pipefail
+          test -n "$MKLMS_SCHEMA_AUDIT_DATABASE_URL" || { echo "Missing repository secret STARPIPS_DATABASE_URL"; exit 1; }
+          test -n "$MKLMS_SCHEMA_AUDIT_DATABASE_SSL" || { echo "Missing repository secret STARPIPS_DATABASE_SSL"; exit 1; }
+          node scripts/export-postgres-schema-catalog.mjs schema-audit-output/postgres-starpips.json
 
       - name: Confirm PostgreSQL catalog source succeeded
         if: always()
         env:
-          POSTGRES_CATALOG_OUTCOME: ${{ steps.postgres-catalog.outcome }}
+          ACADEMY_POSTGRES_CATALOG_OUTCOME: ${{ steps.academy-postgres-catalog.outcome }}
           COOLIFY_CATALOG_OUTCOME: ${{ steps.coolify-catalog.outcome }}
+          STARPIPS_POSTGRES_CATALOG_OUTCOME: ${{ steps.starpips-postgres-catalog.outcome }}
         run: |
           set -euo pipefail
-          if [ "$POSTGRES_CATALOG_OUTCOME" = success ] || [ "$COOLIFY_CATALOG_OUTCOME" = success ]; then
-            test -s schema-audit-output/postgres-source.json
-            echo 'Supabase source PostgreSQL catalog captured through a read-only route.'
+          if [ "$ACADEMY_POSTGRES_CATALOG_OUTCOME" = success ] || [ "$COOLIFY_CATALOG_OUTCOME" = success ]; then
+            test -s schema-audit-output/postgres-mkety-academy.json
           else
-            echo 'Both the GitHub runner and private Coolify PostgreSQL catalog paths failed.'
+            echo 'Mkety Academy Supabase source catalog could not be read through the GitHub runner or private Coolify network.'
             exit 1
           fi
+          if [ "$STARPIPS_POSTGRES_CATALOG_OUTCOME" != success ]; then
+            echo 'Starpips PostgreSQL source catalog could not be read using the repository source secret.'
+            exit 1
+          fi
+          test -s schema-audit-output/postgres-starpips.json
+          echo 'Both installation-specific PostgreSQL source catalogs were captured read-only.'
 
       - name: Read full Starpips D1 schema catalog (metadata only)
         id: starpips-catalog
@@ -205,16 +223,19 @@ jobs:
       - name: Verify all read-only schema snapshots were captured
         if: always()
         env:
-          POSTGRES_CATALOG_OUTCOME: ${{ steps.postgres-catalog.outcome }}
+          ACADEMY_POSTGRES_CATALOG_OUTCOME: ${{ steps.academy-postgres-catalog.outcome }}
           COOLIFY_CATALOG_OUTCOME: ${{ steps.coolify-catalog.outcome }}
+          STARPIPS_POSTGRES_CATALOG_OUTCOME: ${{ steps.starpips-postgres-catalog.outcome }}
           STARPIPS_CATALOG_OUTCOME: ${{ steps.starpips-catalog.outcome }}
           ACADEMY_CATALOG_OUTCOME: ${{ steps.academy-catalog.outcome }}
         run: |
           set -euo pipefail
-          test "$POSTGRES_CATALOG_OUTCOME" = success || test "$COOLIFY_CATALOG_OUTCOME" = success || { echo "Supabase source PostgreSQL catalog export failed"; exit 1; }
+          test "$ACADEMY_POSTGRES_CATALOG_OUTCOME" = success || test "$COOLIFY_CATALOG_OUTCOME" = success || { echo "Mkety Academy Supabase source catalog export failed"; exit 1; }
+          test "$STARPIPS_POSTGRES_CATALOG_OUTCOME" = success || { echo "Starpips PostgreSQL source catalog export failed"; exit 1; }
           test "$STARPIPS_CATALOG_OUTCOME" = success || { echo "Starpips D1 catalog export failed"; exit 1; }
           test "$ACADEMY_CATALOG_OUTCOME" = success || { echo "Mkety Academy D1 catalog export failed"; exit 1; }
-          test -s schema-audit-output/postgres-source.json || { echo "Supabase source PostgreSQL schema snapshot is missing"; exit 1; }
+          test -s schema-audit-output/postgres-mkety-academy.json || { echo "Mkety Academy PostgreSQL schema snapshot is missing"; exit 1; }
+          test -s schema-audit-output/postgres-starpips.json || { echo "Starpips PostgreSQL schema snapshot is missing"; exit 1; }
           test -s schema-audit-output/d1-starpips.json || { echo "Starpips D1 schema snapshot is missing"; exit 1; }
           test -s schema-audit-output/d1-mkety-academy.json || { echo "Mkety Academy D1 schema snapshot is missing"; exit 1; }
 
@@ -223,11 +244,12 @@ jobs:
           set -euo pipefail
           compare_schema() {
             local installation="$1"
-            local d1_catalog="$2"
+            local postgres_catalog="$2"
+            local d1_catalog="$3"
             local summary_file="schema-audit-output/parity-${installation}.json"
             local report status
             set +e
-            report=$(node scripts/d1-schema-parity.mjs schema-audit-output/postgres-source.json "$d1_catalog" --summary-only --require-complete)
+            report=$(node scripts/d1-schema-parity.mjs "$postgres_catalog" "$d1_catalog" --summary-only --require-complete)
             status=$?
             set -e
             printf '%s\n' "$report" > "$summary_file"
@@ -243,8 +265,8 @@ jobs:
             return "$status"
           }
           failed=0
-          compare_schema starpips schema-audit-output/d1-starpips.json || failed=1
-          compare_schema mkety-academy schema-audit-output/d1-mkety-academy.json || failed=1
+          compare_schema starpips schema-audit-output/postgres-starpips.json schema-audit-output/d1-starpips.json || failed=1
+          compare_schema mkety-academy schema-audit-output/postgres-mkety-academy.json schema-audit-output/d1-mkety-academy.json || failed=1
           exit "$failed"
 
   provision-empty-d1-targets:
