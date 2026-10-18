@@ -5,7 +5,6 @@ import { pathToFileURL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 
 export const centralPostgres = Object.freeze({
-  uuid: 'hgxwkiyxgbmb2i3pl57kmxc8',
   projectUuid: '0zqhpkprlhtvlacmsgmfyyhs',
   environmentUuid: 'rtebcetyfvzlaiqitzcp0gl8',
   serverUuid: 'ynkdc4tx6bi7cyxf0kuy8kte',
@@ -21,13 +20,14 @@ function urlIdentity(value) {
   };
 }
 
-export function resolveMatchingDatabaseUrl(configuredUrl, internalUrl) {
-  const configured = urlIdentity(configuredUrl);
-  const internal = urlIdentity(internalUrl);
-  if (!configured.database || !configured.user || configured.database !== internal.database || configured.user !== internal.user) {
-    throw new Error('Coolify PostgreSQL identity does not match the configured MkLMS database and user.');
+export function validateReadOnlyAuditSourceUrl(sourceUrl) {
+  urlIdentity(sourceUrl);
+  const parsed = new URL(sourceUrl);
+  const sslMode = parsed.searchParams.get('sslmode')?.toLowerCase();
+  if (!['verify-full', 'verify-ca', 'require'].includes(sslMode)) {
+    throw new Error('Production PostgreSQL audit URL must require verified TLS.');
   }
-  return internalUrl;
+  return sourceUrl;
 }
 
 export function decodeCatalogChunks(logs) {
@@ -146,18 +146,12 @@ if (isMain) {
     }
     return { logs: '', issue: lastStatus };
   };
-  const safeUrl = await (async () => {
-    const health = await fetch(`${baseUrl}/api/v1/health`, { signal: AbortSignal.timeout(15_000) });
-    if (!health.ok) throw new Error(`Coolify health check failed with HTTP ${health.status}.`);
-    const database = await request(`/databases/${centralPostgres.uuid}`);
-    const healthy = String(database.status || '').toLowerCase().includes('healthy');
-    if (database.is_public !== false || database.enable_ssl !== true || !healthy || typeof database.internal_db_url !== 'string') {
-      throw new Error('Coolify central PostgreSQL did not pass private, TLS, and healthy preflight checks.');
-    }
-    const match = resolveMatchingDatabaseUrl(configuredDatabaseUrl, database.internal_db_url);
-    process.stdout.write(`::add-mask::${match}\n`);
-    return match;
-  })();
+  const health = await fetch(`${baseUrl}/api/v1/health`, { signal: AbortSignal.timeout(15_000) });
+  if (!health.ok) throw new Error(`Coolify health check failed with HTTP ${health.status}.`);
+  // This is the production source URL. Do not replace its host with Coolify's
+  // central PostgreSQL URL, which could identify a different empty database.
+  const safeUrl = validateReadOnlyAuditSourceUrl(configuredDatabaseUrl);
+  process.stdout.write(`::add-mask::${safeUrl}\n`);
 
   try {
     const created = await request('/applications/public', {
@@ -183,18 +177,6 @@ if (isMain) {
     appUuid = created.uuid;
     process.stdout.write('::add-mask::' + appUuid + '\n');
 
-    // Match the trusted CA mount used by the existing Mkety PostgreSQL service.
-    // The mount is scoped to this ephemeral app and is removed with it in finally.
-    await request(`/applications/${appUuid}/storages`, {
-      method: 'POST',
-      body: {
-        type: 'file',
-        is_host_file: true,
-        fs_path: '/data/coolify/ssl/coolify-ca.crt',
-        mount_path: '/etc/ssl/certs/coolify-ca.crt',
-      },
-    });
-
     const env = await request(`/applications/${appUuid}/envs`, {
       method: 'POST',
       body: {
@@ -203,14 +185,6 @@ if (isMain) {
       },
     });
     void env;
-
-    await request(`/applications/${appUuid}/envs`, {
-      method: 'POST',
-      body: {
-        key: 'MKLMS_SCHEMA_AUDIT_PG_CA_FILE', value: '/etc/ssl/certs/coolify-ca.crt',
-        is_preview: false, is_literal: true, is_multiline: false, is_shown_once: true,
-      },
-    });
 
     const deployed = await request(`/deploy?uuid=${encodeURIComponent(appUuid)}&force=true`, { method: 'POST' });
     const deploymentUuid = Array.isArray(deployed.deployments) ? deployed.deployments[0]?.deployment_uuid : undefined;

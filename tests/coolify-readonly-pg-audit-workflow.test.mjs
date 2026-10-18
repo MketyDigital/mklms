@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
-import { classifyCoolifyFailure, decodeCatalogChunks, isTerminalCoolifyAppStatus, resolveMatchingDatabaseUrl, safeCoolifyDiagnostic } from '../scripts/coolify-readonly-pg-audit.mjs';
+import { classifyCoolifyFailure, decodeCatalogChunks, isTerminalCoolifyAppStatus, safeCoolifyDiagnostic, validateReadOnlyAuditSourceUrl } from '../scripts/coolify-readonly-pg-audit.mjs';
 
 const workflow = readFileSync('.github/workflows/phase1-ci.yml', 'utf8');
 const auditJob = (workflow.split('  live-readonly-schema-audit:\n')[1] ?? '').split('\n  provision-empty-d1-targets:\n')[0];
@@ -36,14 +36,12 @@ test('Coolify executor is pinned, private, ephemeral, and always cleaned up', ()
   assert.match(auditJob, /if:\s*always\(\)/);
 });
 
-test('executor obtains only the matching managed database catalog and suppresses the connection URL', () => {
-  assert.match(coolify, /internal_db_url/);
+test('executor reads the exact configured production source without logging the connection URL', () => {
   assert.match(auditJob, /MKLMS_PG_STAGING_DATABASE_URL/);
-  assert.match(coolify, /resolveMatchingDatabaseUrl/);
-  assert.match(coolify, /is_host_file:\s*true/);
-  assert.match(coolify, /\/data\/coolify\/ssl\/coolify-ca\.crt/);
-  assert.match(coolify, /MKLMS_SCHEMA_AUDIT_PG_CA_FILE/);
-  assert.match(coolify, /configured MkLMS database and user/);
+  assert.match(coolify, /validateReadOnlyAuditSourceUrl\(configuredDatabaseUrl\)/);
+  assert.match(coolify, /Do not replace its host with Coolify's/);
+  assert.doesNotMatch(coolify, /internal_db_url/);
+  assert.doesNotMatch(coolify, /MKLMS_SCHEMA_AUDIT_PG_CA_FILE/);
   assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_DATABASE_URL/);
   assert.match(dockerfile, /export-postgres-schema-catalog\.mjs/);
   assert.match(dockerfile, /postgres-schema-catalog-selection\.mjs/);
@@ -58,17 +56,16 @@ test('executor obtains only the matching managed database catalog and suppresses
   assert.match(pgExporter, /process\.stdout\.write\(`PostgreSQL catalog export failed/);
   assert.match(pgExporter, /default_transaction_read_only=on/);
   assert.match(pgExporter, /BEGIN READ ONLY/);
-  assert.match(pgExporter, /rejectUnauthorized:\s*true/);
-  assert.match(pgExporter, /MKLMS_SCHEMA_AUDIT_PG_CA_FILE/);
+  assert.match(pgExporter, /options: '-c default_transaction_read_only=on'/);
   assert.match(pgExporter, /information_schema/);
   assert.doesNotMatch(container, /(?:INSERT|UPDATE|DELETE|DROP|ALTER)\s+(?:INTO|FROM|TABLE|DATABASE)/i);
 });
 
-test('Coolify URL selection requires the same database and user without exposing the configured URL', () => {
-  const internal = 'postgresql://mklms_user:internal-secret@postgres:5432/mklms?sslmode=require';
-  assert.equal(resolveMatchingDatabaseUrl('postgresql://mklms_user:external-secret@db.example/mklms', internal), internal);
-  assert.throws(() => resolveMatchingDatabaseUrl('postgresql://other:mklms-secret@db.example/mklms', internal), /database and user/);
-  assert.throws(() => resolveMatchingDatabaseUrl('not-a-url-with-mklms-secret', internal), /URL is invalid/);
+test('production source URL is preserved and requires verified TLS', () => {
+  const source = 'postgresql://mklms_user:source-secret@source.example/mklms?sslmode=require';
+  assert.equal(validateReadOnlyAuditSourceUrl(source), source);
+  assert.throws(() => validateReadOnlyAuditSourceUrl('postgresql://user:secret@source.example/mklms'), /verified TLS/);
+  assert.throws(() => validateReadOnlyAuditSourceUrl('postgresql://user:secret@source.example/mklms?sslmode=disable'), /verified TLS/);
 });
 
 test('Coolify log transport reconstructs only a complete compressed schema catalog', () => {
