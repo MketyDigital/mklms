@@ -40,6 +40,9 @@ test('executor obtains only the matching managed database catalog and suppresses
   assert.match(coolify, /internal_db_url/);
   assert.match(auditJob, /MKLMS_PG_STAGING_DATABASE_URL/);
   assert.match(coolify, /resolveMatchingDatabaseUrl/);
+  assert.match(coolify, /is_host_file:\s*true/);
+  assert.match(coolify, /\/data\/coolify\/ssl\/coolify-ca\.crt/);
+  assert.match(coolify, /MKLMS_SCHEMA_AUDIT_PG_CA_FILE/);
   assert.match(coolify, /configured MkLMS database and user/);
   assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_DATABASE_URL/);
   assert.match(dockerfile, /export-postgres-schema-catalog\.mjs/);
@@ -48,6 +51,8 @@ test('executor obtains only the matching managed database catalog and suppresses
   assert.match(container, /MKLMS_SCHEMA_AUDIT_DATABASE_URL/);
   assert.match(pgExporter, /default_transaction_read_only=on/);
   assert.match(pgExporter, /BEGIN READ ONLY/);
+  assert.match(pgExporter, /rejectUnauthorized:\s*true/);
+  assert.match(pgExporter, /MKLMS_SCHEMA_AUDIT_PG_CA_FILE/);
   assert.match(pgExporter, /information_schema/);
   assert.doesNotMatch(container, /(?:INSERT|UPDATE|DELETE|DROP|ALTER)\s+(?:INTO|FROM|TABLE|DATABASE)/i);
 });

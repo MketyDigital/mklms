@@ -1,13 +1,24 @@
 #!/usr/bin/env node
 /** Export DDL metadata only; never selects application row data or prints credentials. */
 import { writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import pg from 'pg';
 
 const output = process.argv[2];
 const connectionString = process.env.MKLMS_SCHEMA_AUDIT_DATABASE_URL;
 if (!output || !connectionString) throw new Error('Set MKLMS_SCHEMA_AUDIT_DATABASE_URL to a read-only PostgreSQL schema and provide <output.json>.');
 const { Pool } = pg;
-const pool = new Pool({ connectionString, max: 1, application_name: 'mklms-schema-audit', options: '-c default_transaction_read_only=on' });
+const caFile = process.env.MKLMS_SCHEMA_AUDIT_PG_CA_FILE;
+const poolOptions = { connectionString, max: 1, application_name: 'mklms-schema-audit', options: '-c default_transaction_read_only=on' };
+if (caFile) {
+  // pg's connection-string sslmode parsing can override an explicit ssl object.
+  // Remove URL SSL parameters and force certificate validation against the mounted Coolify CA.
+  const secureUrl = new URL(connectionString);
+  for (const name of ['sslmode', 'sslrootcert', 'sslcert', 'sslkey']) secureUrl.searchParams.delete(name);
+  poolOptions.connectionString = secureUrl.toString();
+  poolOptions.ssl = { ca: await readFile(caFile, 'utf8'), rejectUnauthorized: true };
+}
+const pool = new Pool(poolOptions);
 let client;
 try {
   client = await pool.connect();

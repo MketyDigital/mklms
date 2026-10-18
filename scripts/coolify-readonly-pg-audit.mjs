@@ -183,6 +183,18 @@ if (isMain) {
     appUuid = created.uuid;
     process.stdout.write('::add-mask::' + appUuid + '\n');
 
+    // Match the trusted CA mount used by the existing Mkety PostgreSQL service.
+    // The mount is scoped to this ephemeral app and is removed with it in finally.
+    await request(`/applications/${appUuid}/storages`, {
+      method: 'POST',
+      body: {
+        type: 'file',
+        is_host_file: true,
+        fs_path: '/data/coolify/ssl/coolify-ca.crt',
+        mount_path: '/etc/ssl/certs/coolify-ca.crt',
+      },
+    });
+
     const env = await request(`/applications/${appUuid}/envs`, {
       method: 'POST',
       body: {
@@ -191,6 +203,14 @@ if (isMain) {
       },
     });
     void env;
+
+    await request(`/applications/${appUuid}/envs`, {
+      method: 'POST',
+      body: {
+        key: 'MKLMS_SCHEMA_AUDIT_PG_CA_FILE', value: '/etc/ssl/certs/coolify-ca.crt',
+        is_preview: false, is_literal: true, is_multiline: false, is_shown_once: true,
+      },
+    });
 
     const deployed = await request(`/deploy?uuid=${encodeURIComponent(appUuid)}&force=true`, { method: 'POST' });
     const deploymentUuid = Array.isArray(deployed.deployments) ? deployed.deployments[0]?.deployment_uuid : undefined;
