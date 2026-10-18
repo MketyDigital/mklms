@@ -95,6 +95,11 @@ export function safeCoolifyDiagnostic(...diagnostics) {
   return safeLines.length ? safeLines.join(' | ') : '(no safe error lines returned)';
 }
 
+export function isTerminalCoolifyAppStatus(status) {
+  const normalized = String(status || '').toLowerCase();
+  return normalized.startsWith('exited:') || ['exited', 'stopped', 'failed', 'failure', 'error', 'crashed'].includes(normalized);
+}
+
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
 if (isMain) {
   const token = process.env.OCI_COOLIFY_TOKEN;
@@ -120,20 +125,26 @@ if (isMain) {
       signal: AbortSignal.timeout(timeoutMs),
     });
     const text = await response.text();
-    if (!response.ok) throw new Error(`Coolify API ${method} ${path} failed with HTTP ${response.status}.`);
+    if (!response.ok) {
+      const error = new Error(`Coolify API ${method} ${path} failed with HTTP ${response.status}.`);
+      error.httpStatus = response.status;
+      throw error;
+    }
     if (!text) return {};
     try { return JSON.parse(text); } catch { throw new Error(`Coolify API ${method} ${path} returned invalid JSON.`); }
   };
 
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   const readAppLogs = async () => {
+    let lastStatus;
     for (const query of ['?lines=1000&show_timestamps=false', '?lines=100', '']) {
       try {
-        const response = await request(`/applications/${appUuid}/logs${query}`);
-        if (typeof response.logs === 'string') return response.logs;
-      } catch {}
+        const response = await request(`/applications/${appUuid}/logs${query}`, { timeoutMs: 5_000 });
+        if (typeof response.logs === 'string') return { logs: response.logs, issue: null };
+        lastStatus = 'invalid_response';
+      } catch (error) { lastStatus = error?.httpStatus || 'unavailable'; }
     }
-    return '';
+    return { logs: '', issue: lastStatus };
   };
   const safeUrl = await (async () => {
     const health = await fetch(`${baseUrl}/api/v1/health`, { signal: AbortSignal.timeout(15_000) });
@@ -191,11 +202,7 @@ if (isMain) {
       const status = String(deployment.status || '').toLowerCase();
       if (['finished', 'success', 'successful', 'succeeded', 'completed'].includes(status)) { finished = true; break; }
       if (['failed', 'failure', 'error', 'cancelled', 'canceled'].includes(status)) {
-        let appLogs = '';
-        try {
-          const response = await request(`/applications/${appUuid}/logs?lines=1000&show_timestamps=false`);
-          if (typeof response.logs === 'string') appLogs = response.logs;
-        } catch {}
+        const { logs: appLogs } = await readAppLogs();
         const failureClass = classifyCoolifyFailure(deployment.logs, deployment.message, appLogs);
         process.stderr.write(`Coolify executor build diagnostics: ${safeCoolifyDiagnostic(deployment.logs, deployment.message, appLogs)}\n`);
         throw new Error(`Coolify executor build failed (${status}; ${failureClass}).`);
@@ -205,23 +212,27 @@ if (isMain) {
     if (!finished) throw new Error('Timed out waiting for the Coolify executor build.');
 
     let catalog;
-    for (let attempt = 0; attempt < 60; attempt += 1) {
-      const app = await request(`/applications/${appUuid}`);
+    let lastStatus = 'unknown';
+    let lastLogsIssue;
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const app = await request(`/applications/${appUuid}`, { timeoutMs: 10_000 });
       const status = String(app.status || '').toLowerCase();
-      if (status.startsWith('exited:') || ['failed', 'error'].includes(status)) {
-        const appLogs = await readAppLogs();
+      lastStatus = status || 'unknown';
+      if (isTerminalCoolifyAppStatus(status)) {
+        const { logs: appLogs } = await readAppLogs();
         const failureClass = classifyCoolifyFailure(appLogs);
         process.stderr.write(`Coolify executor runtime diagnostics: ${safeCoolifyDiagnostic(appLogs)}\n`);
         throw new Error(`Coolify executor exited before the catalog completed (${status}; ${failureClass}).`);
       }
-      const logs = await readAppLogs();
+      const { logs, issue } = await readAppLogs();
+      if (issue) lastLogsIssue = issue;
       if (logs.includes('MKLMS_CATALOG_END')) {
         catalog = decodeCatalogChunks(logs);
         break;
       }
-      await delay(3_000);
+      await delay(2_000);
     }
-    if (!catalog) throw new Error('Timed out waiting for the read-only PostgreSQL catalog.');
+    if (!catalog) throw new Error(`Timed out waiting for the read-only PostgreSQL catalog (app_status=${lastStatus}; logs_api=${lastLogsIssue || 'no_output'}).`);
     await writeFile(outputPath, `${JSON.stringify(catalog, null, 2)}\n`, { flag: 'wx' });
     process.stdout.write(JSON.stringify({
       source: 'coolify-private-postgres-read-only',
