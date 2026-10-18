@@ -42,6 +42,22 @@ test('catalog parity identifies additions, drops, partial indexes, defaults and 
   assert.equal(strict.status, 1);
 });
 
+test('CLI summary mode emits counts only and enforces complete parity', () => {
+  const args = ['scripts/d1-schema-parity.mjs', 'tests/fixtures/schema-parity-pg.json', 'tests/fixtures/schema-parity-d1-drift.json', '--summary-only'];
+  const summary = spawnSync(process.execPath, args, { encoding: 'utf8' });
+  assert.equal(summary.status, 0);
+  const report = JSON.parse(summary.stdout);
+  assert.equal(report.complete, false);
+  assert.ok(report.differenceCount > 0);
+  assert.equal('differences' in report, false);
+  assert.equal('unsupported' in report, false);
+  assert.equal(/students|email|"key"|"postgres"|"d1"/i.test(summary.stdout), false);
+
+  const strict = spawnSync(process.execPath, [...args, '--require-complete'], { encoding: 'utf8' });
+  assert.equal(strict.status, 1);
+  assert.equal(JSON.parse(strict.stdout).complete, false);
+});
+
 test('unsupported database constructs block a complete schema parity report', () => {
   const report = buildSchemaParityReport({ ...base, unsupported: ['postgres enum students_status'] }, base);
   assert.equal(report.complete, false);

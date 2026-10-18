@@ -282,11 +282,29 @@ export function buildSchemaParityReport(pgSchema, d1Schema) {
   };
 }
 
+export function summarizeSchemaParityReport(report) {
+  const differenceCounts = {};
+  for (const difference of report.differences) {
+    differenceCounts[difference.kind] ??= { missing_in_d1: 0, missing_in_postgres: 0, definition_mismatch: 0 };
+    differenceCounts[difference.kind][difference.difference] = (differenceCounts[difference.kind][difference.difference] ?? 0) + 1;
+  }
+  return {
+    mode: 'normalized-catalog-comparison-summary',
+    postgresObjectCounts: report.postgresObjectCounts,
+    d1ObjectCounts: report.d1ObjectCounts,
+    differenceCount: report.differences.length,
+    differenceCounts,
+    unsupportedCount: report.unsupported.length,
+    complete: report.complete,
+  };
+}
+
 if (process.argv[1]?.endsWith('/d1-schema-parity.mjs')) {
-  const files = process.argv.slice(2).filter(arg => arg !== '--require-complete');
+  const args = process.argv.slice(2);
+  const files = args.filter(arg => !arg.startsWith('--'));
   if (files.length !== 2) throw new Error('Provide PostgreSQL and D1 catalog JSON snapshot paths.');
   const [pgSchema, d1Schema] = await Promise.all(files.map(async file => JSON.parse(await readFile(file, 'utf8'))));
   const report = buildSchemaParityReport(pgSchema, d1Schema);
-  console.log(JSON.stringify(report, null, 2));
-  if (process.argv.includes('--require-complete') && !report.complete) process.exitCode = 1;
+  console.log(JSON.stringify(args.includes('--summary-only') ? summarizeSchemaParityReport(report) : report, null, 2));
+  if (args.includes('--require-complete') && !report.complete) process.exitCode = 1;
 }

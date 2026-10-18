@@ -16,7 +16,11 @@ test('live schema audit is scoped to the current same-repository migration PR', 
 
 test('live schema audit exports only catalog metadata and never applies migrations or deploys', () => {
   assert.match(auditJob, /export-postgres-schema-catalog\.mjs/);
-  assert.match(auditJob, /cloudflare-d1-live-inventory\.mjs/);
+  assert.match(auditJob, /cloudflare-d1-schema-catalog\.mjs starpips/);
+  assert.match(auditJob, /cloudflare-d1-schema-catalog\.mjs mkety-academy/);
+  assert.match(auditJob, /--summary-only --require-complete/);
+  assert.match(auditJob, /Require PostgreSQL parity with each live D1 schema/);
+  assert.match(auditJob, /GITHUB_STEP_SUMMARY/);
   assert.match(auditJob, /continue-on-error: true/);
   assert.match(auditJob, /if: always\(\)/);
   assert.match(auditJob, /Verify all read-only schema snapshots were captured/);
