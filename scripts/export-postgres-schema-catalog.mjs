@@ -63,16 +63,32 @@ try {
   await client.query('COMMIT');
 } catch (error) {
   if (client) await client.query('ROLLBACK').catch(() => {});
-  const code = typeof error?.code === 'string' && /^[A-Z0-9_]+$/.test(error.code) ? error.code : 'UNKNOWN';
+  const causes = [error, error?.cause, ...(Array.isArray(error?.errors) ? error.errors : [])].filter(Boolean);
+  const code = causes.map(item => item?.code).find(value => typeof value === 'string' && /^[A-Z0-9_]+$/.test(value)) ?? 'UNKNOWN';
   const schemaSelectionMessage = String(error?.message).match(/^(?:Multiple MkLMS migration-ledger schemas (?:contain application tables|were found)|Could not select one PostgreSQL application schema safely) \(\d+[^\n]*\)\.$/)?.[0];
-  const errorText = String(error?.message ?? '');
+  const errorText = causes.map(item => String(item?.message ?? '')).join(' | ');
   const safeTlsMessage = /self[- ]signed certificate/i.test(errorText)
     ? 'TLS certificate is self-signed'
     : /certificate.*(?:verify|validation|expired|hostname)|(?:verify|validation).*certificate/i.test(errorText)
       ? 'TLS certificate validation failed'
       : undefined;
-  const safeFailureClass = safeTlsMessage ? `; ${safeTlsMessage}` : '';
-  process.stdout.write(`PostgreSQL catalog export failed (${code}${safeFailureClass}${schemaSelectionMessage ? `; ${schemaSelectionMessage}` : ''}); connection details suppressed.\n`);
+  const safeTransportMessage = /ECONNREFUSED|connection refused/i.test(errorText)
+    ? 'connection refused'
+    : /ETIMEDOUT|timeout expired|connect timeout/i.test(errorText)
+      ? 'connection timed out'
+      : /ENOTFOUND|EAI_AGAIN|getaddrinfo/i.test(errorText)
+        ? 'database host lookup failed'
+        : /password authentication failed/i.test(errorText)
+          ? 'database authentication failed'
+          : /no pg_hba\.conf entry/i.test(errorText)
+            ? 'database rejected the client network or TLS mode'
+            : /does not support SSL|SSL is not enabled/i.test(errorText)
+              ? 'database endpoint rejected TLS'
+              : undefined;
+  const safeFailureMessage = safeTlsMessage ?? safeTransportMessage;
+  const safeFailureClass = safeFailureMessage ? `; ${safeFailureMessage}` : '';
+  const safeName = typeof error?.name === 'string' && /^[A-Za-z]+(?:Error)?$/.test(error.name) ? ` ${error.name}` : '';
+  process.stdout.write(`PostgreSQL catalog export failed (${code}${safeName}${safeFailureClass}${schemaSelectionMessage ? `; ${schemaSelectionMessage}` : ''}); connection details suppressed.\n`);
   process.exitCode = 1;
 } finally {
   client?.release();
