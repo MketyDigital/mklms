@@ -56,8 +56,8 @@ try {
 } catch (error) {
   if (client) await client.query('ROLLBACK').catch(() => {});
   const code = typeof error?.code === 'string' && /^[A-Z0-9_]+$/.test(error.code) ? error.code : 'UNKNOWN';
-  const schemaSelectionFailure = /^(?:Multiple MkLMS migration-ledger schemas|Could not select one PostgreSQL application schema safely)/.test(String(error?.message));
-  process.stderr.write(`PostgreSQL catalog export failed (${code}${schemaSelectionFailure ? '; schema selection is missing or ambiguous' : ''}); connection details suppressed.\n`);
+  const schemaSelectionMessage = String(error?.message).match(/^(?:Multiple MkLMS migration-ledger schemas (?:contain application tables|were found)|Could not select one PostgreSQL application schema safely) \(\d+[^\n]*\)\.$/)?.[0];
+  process.stderr.write(`PostgreSQL catalog export failed (${code}${schemaSelectionMessage ? `; ${schemaSelectionMessage}` : ''}); connection details suppressed.\n`);
   process.exitCode = 1;
 } finally {
   client?.release();

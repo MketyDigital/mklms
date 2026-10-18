@@ -246,7 +246,11 @@ if (isMain) {
       }
       const { logs, issue } = await readAppLogs();
       if (issue) lastLogsIssue = issue;
-      if (logs.includes('MKLMS_CATALOG_ERROR:')) throw new Error('Coolify executor reported a PostgreSQL schema metadata export failure.');
+      if (logs.includes('MKLMS_CATALOG_ERROR:')) {
+        const diagnostic = logs.match(/PostgreSQL catalog export failed \([A-Za-z0-9_; ()-]+\); connection details suppressed\./)?.[0];
+        if (diagnostic) process.stderr.write(`Safe PostgreSQL catalog diagnostic: ${diagnostic}\n`);
+        throw new Error('Coolify executor reported a PostgreSQL schema metadata export failure.');
+      }
       if (logs.includes('MKLMS_CATALOG_END')) {
         catalog = decodeCatalogChunks(logs);
         break;
