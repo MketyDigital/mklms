@@ -66,6 +66,20 @@ export function classifyCoolifyFailure(...diagnostics) {
   return 'unclassified';
 }
 
+export function safeCoolifyDiagnostic(...diagnostics) {
+  const text = diagnostics.filter(value => typeof value === 'string').join('\n');
+  const safeLines = text.split(/\r?\n/)
+    .map(line => line
+      .replace(/postgres(?:ql)?:\/\/[^\s"'<>]+/gi, 'postgresql://***')
+      .replace(/Bearer\s+[^\s"'<>]+/gi, 'Bearer ***')
+      .replace(/(https?:\/\/)[^/@\s:]+:[^/@\s]+@/gi, '$1***@')
+      .replace(/\b([A-Z0-9_]*(?:TOKEN|PASSWORD|SECRET|DATABASE_URL)[A-Z0-9_]*=)[^\s]+/gi, '$1***'))
+    .filter(line => /dockerfile|error|failed|not found|npm ERR|npm error|no such file/i.test(line))
+    .slice(-8)
+    .map(line => line.slice(0, 240));
+  return safeLines.length ? safeLines.join(' | ') : '(no safe error lines returned)';
+}
+
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
 if (isMain) {
   const token = process.env.OCI_COOLIFY_TOKEN;
@@ -159,6 +173,7 @@ if (isMain) {
           if (typeof response.logs === 'string') appLogs = response.logs;
         } catch {}
         const failureClass = classifyCoolifyFailure(deployment.logs, deployment.message, appLogs);
+        process.stderr.write(`Coolify executor build diagnostics: ${safeCoolifyDiagnostic(deployment.logs, deployment.message, appLogs)}\n`);
         throw new Error(`Coolify executor build failed (${status}; ${failureClass}).`);
       }
       await delay(5_000);

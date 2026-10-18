@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
-import { classifyCoolifyFailure, decodeCatalogChunks, resolveMatchingDatabaseUrl } from '../scripts/coolify-readonly-pg-audit.mjs';
+import { classifyCoolifyFailure, decodeCatalogChunks, resolveMatchingDatabaseUrl, safeCoolifyDiagnostic } from '../scripts/coolify-readonly-pg-audit.mjs';
 
 const workflow = readFileSync('.github/workflows/phase1-ci.yml', 'utf8');
 const auditJob = (workflow.split('  live-readonly-schema-audit:\n')[1] ?? '').split('\n  provision-empty-d1-targets:\n')[0];
@@ -68,4 +68,12 @@ test('Coolify deployment failures are reduced to a safe diagnostic class', () =>
   assert.equal(classifyCoolifyFailure('failed to read dockerfile'), 'dockerfile');
   assert.equal(classifyCoolifyFailure('getaddrinfo EAI_AGAIN'), 'network');
   assert.equal(classifyCoolifyFailure('private value should never be printed'), 'unclassified');
+});
+
+test('Coolify build diagnostics retain error context while masking credentials', () => {
+  const diagnostic = safeCoolifyDiagnostic('failed to read dockerfile: postgresql://dbuser:dbpass@pg.internal/mklms Bearer abc123 SECRET_KEY=hidden');
+  assert.match(diagnostic, /failed to read dockerfile/);
+  assert.doesNotMatch(diagnostic, /dbuser|dbpass|abc123|hidden/);
+  assert.match(diagnostic, /postgresql:\/\/\*\*\*/);
+  assert.match(diagnostic, /Bearer \*\*\*/);
 });
