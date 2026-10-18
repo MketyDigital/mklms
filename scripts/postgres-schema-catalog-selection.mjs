@@ -22,5 +22,7 @@ export function selectPostgresCatalogSchema(rows) {
   if (strongestSchemas.length > 1) throw new Error(`Multiple PostgreSQL schemas share the strongest MkLMS core-table signature (${strongestSchemas.length}).`);
   const schemasWithTables = candidates.filter(row => row.applicationTableCount > 0);
   if (schemasWithTables.length === 1) return schemasWithTables[0].name;
-  throw new Error(`Could not select one PostgreSQL application schema safely (${schemasWithTables.length} schemas contain tables and no unique MkLMS migration ledger was found).`);
+  const tableCounts = schemasWithTables.map(row => row.applicationTableCount).join(',');
+  const signatureCounts = schemasWithTables.map(row => row.mklmsSignatureTableCount).join(',');
+  throw new Error(`Could not select one PostgreSQL application schema safely (${schemasWithTables.length} schemas contain tables and no unique MkLMS migration ledger was found; metadata table counts ${tableCounts}; core matches ${signatureCounts}).`);
 }
