@@ -17,7 +17,7 @@
 - Starpips and Mkety Academy remain isolated and are cut over separately.
 - Preserve existing behavior and all approved changes, including PR #148 hosting/certificate schema parity.
 - Do not change historical PostgreSQL migrations, production pointers, live Workers, secrets, R2 media, or live-class playback during engineering.
-- Remove all active Supabase dependencies from code, packages, configuration and operations; preserve only narrowly documented historical/audit references where deletion would erase provenance.
+- Remove Supabase-specific SDK/Auth/Storage/REST dependencies from code, packages and runtime/release configuration. Preserve generic PostgreSQL support for a separately scoped Supabase-hosted standby; never reconnect Mkety Academy to its existing `mkety_academy` schema as runtime. A second schema in the same Supabase project is not an independent backup or outage domain.
 - Every claimed gate requires executable integration or end-to-end evidence, not only SQL parsing or offline fragments.
 
 ## Review Focus
@@ -26,7 +26,7 @@
 - A crash or timeout during replication must resume idempotently without losing acknowledged changes or duplicating financial effects.
 - A stale writer or stale authority epoch must be rejected across HTTP, webhooks, scheduled jobs and admin flows.
 - Type conversion at money, timestamp, JSON, boolean, ID and null boundaries must round-trip exactly.
-- Supabase strings may remain only in explicitly allowlisted historical/audit material; runtime, build, release, secrets, and deployment must not require them.
+- Supabase-specific client/service dependencies must not remain in runtime, build, or release. Explicitly scoped PostgreSQL source/standby references are permitted; the generic PostgreSQL adapter must be able to target them without Supabase SDKs.
 
 ---
 
