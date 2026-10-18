@@ -139,7 +139,30 @@ test('known D1 trigger emulations normalize to PostgreSQL constraints and enroll
   const report = buildSchemaParityReport(pg, d1);
   assert.equal(report.complete, true);
   assert.deepEqual(report.differences, []);
-  assert.equal(report.semanticMappings.length, 4);
+  assert.equal(report.semanticMappings.length, 5);
+});
+
+test('the known PostgreSQL enrollment routine is supported only when its trigger is present', () => {
+  const pg = {
+    ...base,
+    triggers: [{ table: 'students', name: 'mklms_students_all_active_course_enrollment', definition: 'EXECUTE FUNCTION mklms_enroll_active_student_in_all_courses()' }],
+    unsupported: ['postgres function mklms_enroll_active_student_in_all_courses'],
+  };
+  const d1 = {
+    ...structuredClone(pg),
+    unsupported: [],
+    triggers: [
+      { table: 'students', name: 'mklms_students_all_active_enrollment_after_insert', definition: 'after insert' },
+      { table: 'students', name: 'mklms_students_all_active_enrollment_after_status_change', definition: 'after status change' },
+    ],
+  };
+  const report = buildSchemaParityReport(pg, d1);
+  assert.equal(report.complete, true);
+  assert.deepEqual(report.unsupported, []);
+
+  const noTrigger = buildSchemaParityReport({ ...pg, triggers: [] }, d1);
+  assert.equal(noTrigger.complete, false);
+  assert.deepEqual(noTrigger.unsupported, ['postgres function mklms_enroll_active_student_in_all_courses']);
 });
 
 test('incomplete D1 emulation trigger sets block parity instead of being silently ignored', () => {

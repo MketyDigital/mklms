@@ -10,6 +10,7 @@ const allowlisted = new Set([
   '.github/workflows/phase1-ci.yml',
   'README.md',
   'docs/d1-audit-baseline-2026-10-17.md',
+  'docs/D1_FIRST_IMPLEMENTATION_MASTER_TRACKER.md',
   'docs/superpowers/plans/2026-08-30-mklms-production-audit-repair.md',
   'docs/superpowers/plans/2026-08-31-cloudflare-hyperdrive-r2-hardening.md',
   'docs/superpowers/plans/2026-08-31-protected-media-delivery-implementation-plan.md',

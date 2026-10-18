@@ -22,6 +22,9 @@ const enrollmentTriggerMapping = {
   name: 'mklms_students_all_active_course_enrollment',
   definition: 'logical:all_active_student_enrollment:v1',
 };
+const supportedPostgresTriggerFunctions = new Set([
+  'mklms_enroll_active_student_in_all_courses',
+]);
 const replicationCaptureEvents = ['insert', 'update', 'delete'];
 const keyFields = {
   tables: ['name'],
@@ -246,7 +249,14 @@ function normalizeCatalog(catalog, side) {
       return { key, value: stable(normalizedItem) };
     }).sort((a, b) => a.key.localeCompare(b.key));
   }
-  normalized.unsupported = [...(normalized.unsupported ?? []), ...(Array.isArray(catalog.unsupported) ? catalog.unsupported.map(String) : [])].sort();
+  const unsupported = [...(normalized.unsupported ?? []), ...(Array.isArray(catalog.unsupported) ? catalog.unsupported.map(String) : [])];
+  if (side === 'postgres' && catalog.triggers?.some(item => item?.name === enrollmentTriggerMapping.name)) {
+    for (const routine of supportedPostgresTriggerFunctions) {
+      const index = unsupported.indexOf(`postgres function ${routine}`);
+      if (index >= 0) unsupported.splice(index, 1);
+    }
+  }
+  normalized.unsupported = [...new Set(unsupported)].sort();
   return normalized;
 }
 
@@ -276,6 +286,7 @@ export function buildSchemaParityReport(pgSchema, d1Schema) {
       'D1 primary-key NULL guard triggers implement PostgreSQL primary-key NOT NULL behavior; exporter fails closed when a guard is missing.',
       'D1 media-reference guard triggers plus synthetic foreign-key catalog entries implement PostgreSQL media-asset SET NULL constraints; exporter fails closed when any guard is missing.',
       'Two D1 all-active enrollment triggers are normalized to the single PostgreSQL student activation trigger; both D1 triggers must be present.',
+      'The PostgreSQL all-active enrollment trigger function is treated as supported only when its known trigger is present; the D1 trigger pair must also be complete.',
       'Per-table D1/PostgreSQL row-capture triggers normalize to equivalent logical event triggers; all application tables must have insert/update/delete capture when the replication config table exists.',
     ],
     complete: differences.length === 0 && unsupported.length === 0,

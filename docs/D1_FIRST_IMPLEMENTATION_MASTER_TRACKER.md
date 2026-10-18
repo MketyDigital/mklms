@@ -1,4 +1,4 @@
-# D1-first implementation master tracker (updated 2026-10-17)
+# D1-first implementation master tracker (updated 2026-10-18)
 
 **Goal:** production-ready D1 as sole active write authority, with PostgreSQL kept as a verifiably current standby and **reversible** switch. This file tracks implementation; it **does not authorize production cutover**.
 
@@ -94,3 +94,13 @@ In CI run [#39074526278](https://github.com/MketyDigital/mklms/actions/runs/3907
 9. [ ] Implement strongly consistent authority epochs and enforce the write gate across every mutating entry point.
 10. [ ] Add health, restore, runbook, staging, failure-injection and per-installation rehearsal evidence.
 11. [ ] Only after all prior evidence, evaluate separately gated Starpips and Academy cutovers; this tracker does not approve either switch.
+
+## Read-only source audit — 2026-10-18
+
+- The connected Supabase project `vdblajgxrfndjesoyayy` contains the Academy source in schema `mkety_academy`; its `public` schema is unrelated Mkety Core data and is not an Academy migration source.
+- Read-only table metadata confirms 32 Academy application tables and 343 application columns. The configured Academy D1 catalog has the same 32 tables and 343 columns after the seven explicitly mapped USD-to-cents column renames. This is table/column-name coverage only; it does not establish parity for types, defaults, indexes, checks, triggers, or data values.
+- Application row counts are zero in 31 Academy tables; `managed_hosting_operator_policy` has one row. `_mklms_migrations` contains 19 entries through `019_managed_hosting_daily_ledger.sql`. Preserve and migrate that policy row, and reconcile the source migration version with the newer repository schema before enabling runtime traffic.
+- The Academy trigger function `mklms_enroll_active_student_in_all_courses` is present in the source catalog. The parity reporter now treats this known function as supported only when its PostgreSQL trigger is present; D1 must also have its complete pair of equivalent enrollment triggers. This code change does not establish full catalog parity.
+- The CI read-only audit remains blocked for Academy because the Actions source URL secret is unavailable there. The latest Starpips audit had TLS encryption without verified certificate identity and reported 847 catalog differences plus 15 unsupported PostgreSQL constructs. Treat those results as blockers, not a basis for copying or switching.
+- Live application Workers still report zero D1 bindings. D1 targets are provisioned, but no production Worker was deployed, no production traffic was routed to D1, and no production PostgreSQL data was changed.
+- Remaining cutover blockers are complete catalog/default/constraint parity, per-installation data snapshot and reconciliation, durable forward and reverse replication, writer fencing, all-route D1 runtime composition, restore/failure rehearsals, and verified per-installation backups. PostgreSQL remains the active runtime backend for both installations.
