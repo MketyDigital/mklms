@@ -4,6 +4,7 @@ export function selectPostgresCatalogSchema(rows) {
     name: typeof row?.name === 'string' ? row.name : '',
     hasMigrationLedger: row?.hasMigrationLedger === true,
     applicationTableCount: Number(row?.applicationTableCount),
+    mklmsSignatureTableCount: Number(row?.mklmsSignatureTableCount ?? 0),
   })).filter(row => row.name && Number.isSafeInteger(row.applicationTableCount) && row.applicationTableCount >= 0);
   const ledgerSchemas = candidates.filter(row => row.hasMigrationLedger);
   const ledgerWithTables = ledgerSchemas.filter(row => row.applicationTableCount > 0);
@@ -11,6 +12,9 @@ export function selectPostgresCatalogSchema(rows) {
   if (ledgerWithTables.length > 1) throw new Error(`Multiple MkLMS migration-ledger schemas contain application tables (${ledgerWithTables.length}).`);
   if (ledgerSchemas.length === 1) return ledgerSchemas[0].name;
   if (ledgerSchemas.length > 1) throw new Error(`Multiple MkLMS migration-ledger schemas were found (${ledgerSchemas.length}).`);
+  const signatureSchemas = candidates.filter(row => row.mklmsSignatureTableCount === 5);
+  if (signatureSchemas.length === 1) return signatureSchemas[0].name;
+  if (signatureSchemas.length > 1) throw new Error(`Multiple PostgreSQL schemas match the MkLMS core-table signature (${signatureSchemas.length}).`);
   const schemasWithTables = candidates.filter(row => row.applicationTableCount > 0);
   if (schemasWithTables.length === 1) return schemasWithTables[0].name;
   throw new Error(`Could not select one PostgreSQL application schema safely (${schemasWithTables.length} schemas contain tables and no unique MkLMS migration ledger was found).`);

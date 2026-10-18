@@ -16,6 +16,14 @@ test('selects the only non-system schema with tables when no ledger exists', () 
   ]), 'public');
 });
 
+test('selects one schema matching the full MkLMS core-table signature', () => {
+  assert.equal(selectPostgresCatalogSchema([
+    { name: 'public', hasMigrationLedger: false, applicationTableCount: 22, mklmsSignatureTableCount: 0 },
+    { name: 'application', hasMigrationLedger: false, applicationTableCount: 37, mklmsSignatureTableCount: 5 },
+    { name: 'billing', hasMigrationLedger: false, applicationTableCount: 5, mklmsSignatureTableCount: 0 },
+  ]), 'application');
+});
+
 test('fails closed for missing or ambiguous application schemas', () => {
   assert.throws(() => selectPostgresCatalogSchema([]), /Could not select one PostgreSQL application schema safely/);
   assert.throws(() => selectPostgresCatalogSchema([
