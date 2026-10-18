@@ -1,9 +1,15 @@
 #!/usr/bin/env node
 /** Export a selected live D1 catalog using SQLite metadata only. */
-import { writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { DatabaseSync } from 'node:sqlite';
 import { fetchCloudflareD1Inventory } from './cloudflare-d1-live-inventory.mjs';
+
+const execFileAsync = promisify(execFile);
 
 const excludedTables = new Set(['_mklms_migrations', 'mklms_d1_atomic_assertions', 'd1_migrations']);
 
@@ -150,61 +156,58 @@ export function buildD1SchemaCatalog(objects, metadataByTable) {
   return catalog;
 }
 
-async function queryD1({ accountId, databaseId, apiToken, sql, fetchImpl }) {
-  const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/d1/database/${encodeURIComponent(databaseId)}/query`;
-  const response = await fetchImpl(url, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sql }),
-  });
-  if (!response.ok) throw new Error(`Cloudflare D1 metadata query failed (${response.status}).`);
-  const body = await response.json();
-  if (body?.success !== true || body.result?.some(result => result?.success === false)) throw new Error('Cloudflare D1 metadata query returned an unsuccessful response.');
-  const results = body.result?.[0]?.results;
-  if (!Array.isArray(results)) throw new Error('Cloudflare D1 metadata query returned an invalid result.');
-  return results;
-}
-
 function sqlIdentifier(value) { return `"${String(value).replaceAll('"', '""')}"`; }
 
-async function mapLimit(items, limit, callback) {
-  const results = new Array(items.length);
-  let cursor = 0;
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (cursor < items.length) {
-      const index = cursor++;
-      results[index] = await callback(items[index], index);
-    }
-  }));
-  return results;
+export function buildD1SchemaCatalogFromSql(schemaSql) {
+  if (typeof schemaSql !== 'string' || !schemaSql.trim()) throw new Error('D1 schema-only export was empty.');
+  const db = new DatabaseSync(':memory:');
+  try {
+    db.exec(schemaSql);
+    const objects = db.prepare('SELECT type, name, tbl_name AS "table", sql FROM sqlite_master WHERE type IN (\'table\',\'index\',\'trigger\') AND name NOT LIKE \'sqlite_%\' ORDER BY type, name').all();
+    const tables = objects.filter(item => item.type === 'table' && !excludedTables.has(item.name));
+    const metadataByTable = Object.fromEntries(tables.map(table => {
+      const identifier = sqlIdentifier(table.name);
+      const columns = db.prepare(`PRAGMA table_info(${identifier})`).all();
+      const foreignKeys = db.prepare(`PRAGMA foreign_key_list(${identifier})`).all();
+      const indexes = db.prepare(`PRAGMA index_list(${identifier})`).all().map(index => ({
+        ...index,
+        columns: db.prepare(`PRAGMA index_info(${sqlIdentifier(index.name)})`).all(),
+      }));
+      return [table.name, { columns, foreignKeys, indexes }];
+    }));
+    return buildD1SchemaCatalog(objects, metadataByTable);
+  } finally {
+    db.close();
+  }
 }
 
-export async function fetchCloudflareD1SchemaCatalog({ accountId, apiToken, installationId, fetchImpl = globalThis.fetch }) {
+export async function exportD1SchemaOnly(databaseName, { run = execFileAsync } = {}) {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'mklms-d1-schema-'));
+  const outputPath = path.join(directory, 'schema.sql');
+  try {
+    try {
+      await run('npx', ['wrangler', 'd1', 'export', databaseName, '--remote', '--skip-confirmation', '--no-data', '--output', outputPath], { maxBuffer: 2 * 1024 * 1024 });
+    } catch {
+      throw new Error('Cloudflare D1 schema-only export failed.');
+    }
+    return await readFile(outputPath, 'utf8');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+export async function fetchCloudflareD1SchemaCatalog({ accountId, apiToken, installationId, fetchImpl = globalThis.fetch, exportSchema = exportD1SchemaOnly }) {
   const inventory = await fetchCloudflareD1Inventory({ accountId, apiToken, installationId, fetchImpl });
   if (inventory.databases.length !== 1 || inventory.catalogs.length !== 1) throw new Error(`Expected exactly one D1 database for ${installationId}; found ${inventory.catalogs.length}.`);
   const database = inventory.databases[0];
-  const objects = inventory.catalogs[0].objects;
-  const tables = objects.filter(item => item.type === 'table' && !item.name.startsWith('sqlite_') && !excludedTables.has(item.name));
-  const tableMetadata = await mapLimit(tables, 5, async table => {
-    const identifier = sqlIdentifier(table.name);
-    const [columns, foreignKeys, indexRows] = await Promise.all([
-      queryD1({ accountId, databaseId: database.id, apiToken, sql: `PRAGMA table_info(${identifier})`, fetchImpl }),
-      queryD1({ accountId, databaseId: database.id, apiToken, sql: `PRAGMA foreign_key_list(${identifier})`, fetchImpl }),
-      queryD1({ accountId, databaseId: database.id, apiToken, sql: `PRAGMA index_list(${identifier})`, fetchImpl }),
-    ]);
-    const indexes = await mapLimit(indexRows, 5, async index => ({
-      ...index,
-      columns: await queryD1({ accountId, databaseId: database.id, apiToken, sql: `PRAGMA index_info(${sqlIdentifier(index.name)})`, fetchImpl }),
-    }));
-    return [table.name, { columns, foreignKeys, indexes }];
-  });
+  const catalog = buildD1SchemaCatalogFromSql(await exportSchema(database.name));
   return {
     mode: 'read-only-cloudflare-d1-schema-catalog',
     installationId,
     databaseName: database.name,
     databaseId: database.id,
     capturedAt: new Date().toISOString(),
-    ...buildD1SchemaCatalog(objects, Object.fromEntries(tableMetadata)),
+    ...catalog,
   };
 }
 

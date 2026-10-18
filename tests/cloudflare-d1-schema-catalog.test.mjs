@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildD1SchemaCatalog, fetchCloudflareD1SchemaCatalog } from '../scripts/cloudflare-d1-schema-catalog.mjs';
+import { writeFile } from 'node:fs/promises';
+import { buildD1SchemaCatalog, exportD1SchemaOnly, fetchCloudflareD1SchemaCatalog } from '../scripts/cloudflare-d1-schema-catalog.mjs';
 
 const response = (body, status = 200) => ({ ok: status >= 200 && status < 300, status, async json() { return body; } });
 
@@ -54,30 +55,52 @@ test('fails closed when an expression index cannot be reconstructed', () => {
   assert.deepEqual(catalog.unsupported, ['sqlite expression index items.items_expression']);
 });
 
-test('fetches only metadata for the exact installation D1 database', async () => {
+test('uses Wrangler schema-only remote export and removes its temporary file', async () => {
+  let exportedPath;
+  let argsSeen;
+  const sql = await exportD1SchemaOnly('mklms-starpips', {
+    run: async (program, args) => {
+      assert.equal(program, 'npx');
+      argsSeen = args;
+      exportedPath = args[args.indexOf('--output') + 1];
+      await writeFile(exportedPath, 'CREATE TABLE students (id TEXT PRIMARY KEY);');
+    },
+  });
+  assert.ok(argsSeen.includes('--remote'));
+  assert.ok(argsSeen.includes('--no-data'));
+  assert.ok(argsSeen.includes('--skip-confirmation'));
+  assert.match(sql, /^CREATE TABLE/);
+  await assert.rejects(import('node:fs/promises').then(fs => fs.access(exportedPath)));
+});
+
+test('fetches a schema-only export for the exact installation D1 database', async () => {
   const calls = [];
   const fetchImpl = async (url, options = {}) => {
     const parsed = new URL(String(url));
     calls.push({ url: parsed, options });
     if (options.method !== 'POST') return response({ success: true, result: [{ uuid: 'starpips-db', name: 'mklms-starpips' }], result_info: { total_count: 1 } });
     const sql = JSON.parse(options.body).sql;
-    const results = sql.includes('sqlite_master')
-      ? [
-        { type: 'table', name: 'students', tbl_name: 'students', sql: 'CREATE TABLE students (id TEXT PRIMARY KEY NOT NULL)' },
-        { type: 'trigger', name: 'students_insert_audit', tbl_name: 'students', sql: 'CREATE TRIGGER students_insert_audit AFTER INSERT ON students BEGIN SELECT 1; END' },
-      ]
-      : /^PRAGMA TABLE_INFO/i.test(sql)
-        ? [{ cid: 0, name: 'id', type: 'TEXT', notnull: 1, dflt_value: null, pk: 1 }]
-        : [];
-    return response({ success: true, result: [{ success: true, results }] });
+    assert.match(sql, /sqlite_master/);
+    return response({ success: true, result: [{ success: true, results: [
+      { type: 'table', name: 'students', tbl_name: 'students', sql: 'CREATE TABLE students (id TEXT PRIMARY KEY NOT NULL)' },
+      { type: 'trigger', name: 'students_insert_audit', tbl_name: 'students', sql: 'CREATE TRIGGER students_insert_audit AFTER INSERT ON students BEGIN SELECT 1; END' },
+    ] }] });
   };
+  const exportedDatabases = [];
 
-  const catalog = await fetchCloudflareD1SchemaCatalog({ accountId: 'account', apiToken: 'token', installationId: 'starpips', fetchImpl });
+  const catalog = await fetchCloudflareD1SchemaCatalog({
+    accountId: 'account', apiToken: 'token', installationId: 'starpips', fetchImpl,
+    exportSchema: async databaseName => {
+      exportedDatabases.push(databaseName);
+      return 'CREATE TABLE students (id TEXT PRIMARY KEY NOT NULL); CREATE TRIGGER students_insert_audit AFTER INSERT ON students BEGIN SELECT 1; END;';
+    },
+  });
   assert.equal(catalog.databaseId, 'starpips-db');
+  assert.deepEqual(exportedDatabases, ['mklms-starpips']);
   assert.deepEqual(catalog.tables, [{ name: 'students' }]);
   assert.equal(catalog.columns.length, 1);
   assert.deepEqual(catalog.triggers.map(({ name, table }) => ({ name, table })), [{ name: 'students_insert_audit', table: 'students' }]);
-  assert.ok(calls.every(({ options }) => options.method === 'GET' || JSON.parse(options.body).sql.includes('sqlite_master') || /^PRAGMA /i.test(JSON.parse(options.body).sql)));
+  assert.ok(calls.every(({ options }) => options.method === 'GET' || JSON.parse(options.body).sql.includes('sqlite_master')));
   assert.ok(calls.every(({ url }) => !url.pathname.endsWith('/unrelated-db/query')));
   assert.doesNotMatch(JSON.stringify(catalog), /token|secret|password/i);
 });
