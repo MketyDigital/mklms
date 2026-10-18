@@ -10,6 +10,7 @@ test('D1 coverage scanner exposes missing PostgreSQL tables without DB access',(
  assert.equal(report.sourceMigrations,24);
  assert.ok(report.sourceTables>=report.convertedTables);
  assert.ok(report.missingTables.every(x=>typeof x==='string'));
+ assert.deepEqual(report.missingTables,[]);
  assert.equal(report.complete,report.missingTables.length===0);
  if(!report.complete){
   const strict=spawnSync(process.execPath,['scripts/d1-schema-coverage.mjs','--require-complete'],{encoding:'utf8'});

@@ -14,8 +14,15 @@ const d1=await readSql('db/d1-migrations');
 function finalTables(migrations){
  const tables=new Set();
  for(const {sql} of migrations){
-  for(const match of sql.matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?"?([a-z_][a-z0-9_]*)"?/gi))tables.add(match[1].toLowerCase());
-  for(const match of sql.matchAll(/DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:public\.)?"?([a-z_][a-z0-9_]*)"?/gi))tables.delete(match[1].toLowerCase());
+  const tableDdl=/\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?["`]?([a-z_][a-z0-9_]*)["`]?|\bDROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:public\.)?["`]?([a-z_][a-z0-9_]*)["`]?|\bALTER\s+TABLE\s+(?:public\.)?["`]?([a-z_][a-z0-9_]*)["`]?(?:\s+RENAME\s+TO\s+["`]?([a-z_][a-z0-9_]*)["`]?)/gi;
+  for(const match of sql.matchAll(tableDdl)){
+   if(match[1])tables.add(match[1].toLowerCase());
+   else if(match[2])tables.delete(match[2].toLowerCase());
+   else if(match[3]&&match[4]){
+    const oldName=match[3].toLowerCase();
+    if(tables.delete(oldName))tables.add(match[4].toLowerCase());
+   }
+  }
  }
  return tables;
 }
