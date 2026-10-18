@@ -126,6 +126,15 @@ if (isMain) {
   };
 
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const readAppLogs = async () => {
+    for (const query of ['?lines=1000&show_timestamps=false', '?lines=100', '']) {
+      try {
+        const response = await request(`/applications/${appUuid}/logs${query}`);
+        if (typeof response.logs === 'string') return response.logs;
+      } catch {}
+    }
+    return '';
+  };
   const safeUrl = await (async () => {
     const health = await fetch(`${baseUrl}/api/v1/health`, { signal: AbortSignal.timeout(15_000) });
     if (!health.ok) throw new Error(`Coolify health check failed with HTTP ${health.status}.`);
@@ -197,14 +206,19 @@ if (isMain) {
 
     let catalog;
     for (let attempt = 0; attempt < 60; attempt += 1) {
-      const logs = await request(`/applications/${appUuid}/logs?lines=1000&show_timestamps=false`);
-      if (typeof logs.logs === 'string' && logs.logs.includes('MKLMS_CATALOG_END')) {
-        catalog = decodeCatalogChunks(logs.logs);
-        break;
-      }
       const app = await request(`/applications/${appUuid}`);
       const status = String(app.status || '').toLowerCase();
-      if (status.startsWith('exited:') || ['failed', 'error'].includes(status)) throw new Error(`Coolify executor exited before the catalog completed (${status}).`);
+      if (status.startsWith('exited:') || ['failed', 'error'].includes(status)) {
+        const appLogs = await readAppLogs();
+        const failureClass = classifyCoolifyFailure(appLogs);
+        process.stderr.write(`Coolify executor runtime diagnostics: ${safeCoolifyDiagnostic(appLogs)}\n`);
+        throw new Error(`Coolify executor exited before the catalog completed (${status}; ${failureClass}).`);
+      }
+      const logs = await readAppLogs();
+      if (logs.includes('MKLMS_CATALOG_END')) {
+        catalog = decodeCatalogChunks(logs);
+        break;
+      }
       await delay(3_000);
     }
     if (!catalog) throw new Error('Timed out waiting for the read-only PostgreSQL catalog.');

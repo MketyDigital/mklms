@@ -29,6 +29,8 @@ test('Coolify executor is pinned, private, ephemeral, and always cleaned up', ()
   assert.match(coolify, /instant_deploy:\s*false/);
   assert.match(coolify, /method:\s*'DELETE'/);
   assert.match(coolify, /finally\s*\{/);
+  assert.match(coolify, /readAppLogs/);
+  assert.match(coolify, /\?lines=100/);
   assert.doesNotMatch(dockerfile, /package-lock\.json/);
   assert.equal(auditPackage.dependencies.pg, '8.16.3');
   assert.match(auditJob, /if:\s*always\(\)/);
