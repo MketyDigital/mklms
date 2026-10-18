@@ -19,8 +19,8 @@ jobs:
     timeout-minutes: 15
     env:
       PRODUCTION_BRANCH: production/starpips
-      DATABASE_URL: ${{ secrets.STARPIPS_DATABASE_URL }}
-      DATABASE_SSL: ${{ secrets.STARPIPS_DATABASE_SSL }}
+      DATABASE_URL: ${{ secrets.MKLMS_DATABASE_URL }}
+      DATABASE_SSL: ${{ secrets.MKLMS_DATABASE_SSL }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout exact Starpips production pointer
@@ -78,7 +78,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${DATABASE_URL:-}" || { echo "Missing repository secret STARPIPS_DATABASE_URL"; exit 1; }
+          test -n "${DATABASE_URL:-}" || { echo "Missing repository secret MKLMS_DATABASE_URL"; exit 1; }
           git fetch origin "$PRODUCTION_BRANCH:refs/remotes/origin/$PRODUCTION_BRANCH" --force
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(git rev-parse "origin/$PRODUCTION_BRANCH")" = "$GITHUB_SHA" || {

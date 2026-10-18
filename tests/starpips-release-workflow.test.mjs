@@ -16,8 +16,9 @@ test('Starpips production release runs only from the deliberate production point
 test('Starpips release verifies historical migration history and applies only guarded 018 through 021 before code deploy', () => {
   const workflow = readFileSync(workflowPath, 'utf8');
   assert.doesNotMatch(workflow, /environment: database-migrations/);
-  assert.match(workflow, /STARPIPS_DATABASE_URL/);
-  assert.match(workflow, /STARPIPS_DATABASE_SSL/);
+  assert.match(workflow, /MKLMS_DATABASE_URL/);
+  assert.match(workflow, /MKLMS_DATABASE_SSL/);
+  assert.doesNotMatch(workflow, /STARPIPS_DATABASE_URL|STARPIPS_DATABASE_SSL/);
   assert.match(workflow, /starpips-migration-guard\.mjs verify/);
   assert.match(workflow, /starpips-migration-guard\.mjs apply/);
   assert.match(workflow, /018_certificate_visual_layout_and_starpips_calibration\.sql/);

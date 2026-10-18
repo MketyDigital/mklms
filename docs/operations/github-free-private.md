@@ -40,14 +40,12 @@ The following must exist under **Settings -> Secrets and variables -> Actions ->
 
 These are shared control-plane credentials for the Mkety Cloudflare account. Installation manifests and protected-resource checks still prevent cross-installation mutation.
 
-### Starpips database migration
+### Starpips PostgreSQL
 
-- `STARPIPS_DATABASE_URL`
-- `STARPIPS_DATABASE_SSL`
+- `MKLMS_DATABASE_URL`
+- `MKLMS_DATABASE_SSL`
 
-`STARPIPS_DATABASE_URL` must contain the same Starpips database connection currently used by the old `database-migrations` environment secret `MKLMS_DATABASE_URL`. GitHub does not reveal an existing secret value, so re-enter the original Starpips database URL from the authoritative credential source. Never point it at another installation's database.
-
-`STARPIPS_DATABASE_SSL` must likewise preserve the exact existing `MKLMS_DATABASE_SSL` value rather than guessing it.
+These repository-level secrets are used by the Starpips migration gate, production release, and read-only schema audit. Keep them scoped to Starpips and never point them at another installation's database. The URL and SSL mode must be the authoritative Starpips connection settings; workflow logs report only whether the values are present and never print them.
 
 ### Mkety Academy application
 
@@ -71,12 +69,12 @@ The following remain optional unless those features are enabled:
 
 Run **Actions -> Verify GitHub Free private readiness -> Run workflow** while the repository is still public.
 
-The workflow performs two kinds of checks without printing secret values:
+The workflow verifies repository-level secrets and release-workflow mappings without printing secret values:
 
-1. the normal readiness job verifies that all required repository-level secrets are non-empty and that production workflows use the Free/private-compatible repository-secret contract;
-2. while the repository is still public, a dedicated `database-migrations` environment job compares the old Starpips `MKLMS_DATABASE_URL` / `MKLMS_DATABASE_SSL` secrets with the new repository-level `STARPIPS_DATABASE_URL` / `STARPIPS_DATABASE_SSL` secrets and requires exact equality.
+1. the readiness job checks that all required secrets are non-empty;
+2. it verifies the Starpips production and manual migration workflows use the same repository-level `MKLMS_DATABASE_URL` / `MKLMS_DATABASE_SSL` contract.
 
-This is the proof that the Starpips database credential was copied correctly. After the repository becomes private, the public-only parity job skips because GitHub Free ignores private-repository environments; future production workflows no longer depend on that environment.
+The read-only PR schema audit separately connects with this same Starpips credential and exports schema metadata only.
 
 Do not make the repository private until the entire readiness workflow is green while the repository is still public.
 
@@ -85,10 +83,10 @@ Do not make the repository private until the entire readiness workflow is green 
 1. Confirm both production sites are healthy before touching GitHub visibility.
 2. Confirm `production/starpips` and `production/mkety-academy` point to the intended proven production SHAs.
 3. Add/verify all required repository secrets above.
-4. Run `Verify GitHub Free private readiness` while the repository is public and require both the repository-secret check and Starpips exact-parity check to succeed.
+4. Run `Verify GitHub Free private readiness` and require the repository-secret check to succeed.
 5. Change repository visibility to **Private**.
 6. Do not move either production pointer as part of the visibility change.
-7. Run `Verify GitHub Free private readiness` again. Its repository-secret checks must still pass; the old-environment parity job will intentionally skip.
+7. Run `Verify GitHub Free private readiness` again. Its repository-secret checks must still pass.
 8. Run the normal CI workflow from a harmless development/docs change, or manually run the security hardening verification, to prove private-repository Actions execute successfully.
 9. Run `Cloudflare read-only verify` for Starpips and Mkety Academy when desired; this is GET-only and must not mutate production.
 10. Keep the existing Cloudflare deployments untouched unless there is an actual application release to promote.
@@ -99,8 +97,8 @@ Do not make the repository private until the entire readiness workflow is green 
 
 The release workflow uses:
 
-- repository secret `STARPIPS_DATABASE_URL` for the Starpips migration gate;
-- repository secret `STARPIPS_DATABASE_SSL` for database TLS behavior;
+- repository secret `MKLMS_DATABASE_URL` for the Starpips migration gate;
+- repository secret `MKLMS_DATABASE_SSL` for database TLS behavior;
 - shared repository Cloudflare credentials for Worker publication;
 - existing live Starpips Worker secrets preserved in Cloudflare.
 

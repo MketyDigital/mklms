@@ -143,12 +143,12 @@ jobs:
         id: starpips-postgres-catalog
         continue-on-error: true
         env:
-          MKLMS_SCHEMA_AUDIT_DATABASE_URL: ${{ secrets.STARPIPS_DATABASE_URL }}
-          MKLMS_SCHEMA_AUDIT_DATABASE_SSL: ${{ secrets.STARPIPS_DATABASE_SSL }}
+          MKLMS_SCHEMA_AUDIT_DATABASE_URL: ${{ secrets.MKLMS_DATABASE_URL }}
+          MKLMS_SCHEMA_AUDIT_DATABASE_SSL: ${{ secrets.MKLMS_DATABASE_SSL }}
         run: |
           set -euo pipefail
-          test -n "$MKLMS_SCHEMA_AUDIT_DATABASE_URL" || { echo "Missing repository secret STARPIPS_DATABASE_URL"; exit 1; }
-          test -n "$MKLMS_SCHEMA_AUDIT_DATABASE_SSL" || { echo "Missing repository secret STARPIPS_DATABASE_SSL"; exit 1; }
+          test -n "$MKLMS_SCHEMA_AUDIT_DATABASE_URL" || { echo "Missing database-migrations MKLMS_DATABASE_URL"; exit 1; }
+          test -n "$MKLMS_SCHEMA_AUDIT_DATABASE_SSL" || { echo "Missing database-migrations MKLMS_DATABASE_SSL"; exit 1; }
           node scripts/export-postgres-schema-catalog.mjs schema-audit-output/postgres-starpips.json
 
       - name: Confirm PostgreSQL catalog source succeeded

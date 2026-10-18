@@ -13,8 +13,8 @@ test('live schema audit is scoped to the current same-repository migration PR', 
   assert.match(workflow, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
   assert.match(workflow, /MKLMS_SUPABASE_SOURCE_DATABASE_URL/);
   assert.match(workflow, /MKLMS_SUPABASE_SOURCE_DATABASE_SSL/);
-  assert.match(workflow, /STARPIPS_DATABASE_URL/);
-  assert.match(workflow, /STARPIPS_DATABASE_SSL/);
+  assert.match(workflow, /MKLMS_DATABASE_URL/);
+  assert.match(workflow, /MKLMS_DATABASE_SSL/);
   assert.match(workflow, /CLOUDFLARE_API_TOKEN/);
 });
 
@@ -24,8 +24,8 @@ test('live schema audit exports only catalog metadata and never applies migratio
   assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_DATABASE_URL: \$\{\{ secrets\.MKLMS_SUPABASE_SOURCE_DATABASE_URL \}\}/);
   assert.match(auditJob, /postgres-mkety-academy\.json/);
   assert.match(auditJob, /Read Starpips source PostgreSQL catalog \(read-only\)/);
-  assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_DATABASE_URL: \$\{\{ secrets\.STARPIPS_DATABASE_URL \}\}/);
-  assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_DATABASE_SSL: \$\{\{ secrets\.STARPIPS_DATABASE_SSL \}\}/);
+  assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_DATABASE_URL: \$\{\{ secrets\.MKLMS_DATABASE_URL \}\}/);
+  assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_DATABASE_SSL: \$\{\{ secrets\.MKLMS_DATABASE_SSL \}\}/);
   assert.match(auditJob, /postgres-starpips\.json/);
   assert.match(auditJob, /cloudflare-d1-schema-catalog\.mjs starpips/);
   assert.match(auditJob, /cloudflare-d1-schema-catalog\.mjs mkety-academy/);
