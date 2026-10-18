@@ -76,4 +76,7 @@ test('Coolify build diagnostics retain error context while masking credentials',
   assert.doesNotMatch(diagnostic, /dbuser|dbpass|abc123|hidden/);
   assert.match(diagnostic, /postgresql:\/\/\*\*\*/);
   assert.match(diagnostic, /Bearer \*\*\*/);
+  const encoded = safeCoolifyDiagnostic(JSON.stringify([{ output: `BuildKit ${'ordinary output '.repeat(60)}` }, { output: 'failed to read dockerfile: path not found' }, { output: 'postgresql://user:secret@db/mklms' }]));
+  assert.match(encoded, /path not found/);
+  assert.doesNotMatch(encoded, /user:secret/);
 });

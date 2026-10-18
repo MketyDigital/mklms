@@ -67,8 +67,23 @@ export function classifyCoolifyFailure(...diagnostics) {
 }
 
 export function safeCoolifyDiagnostic(...diagnostics) {
-  const text = diagnostics.filter(value => typeof value === 'string').join('\n');
-  const safeLines = text.split(/\r?\n/)
+  const lines = [];
+  const visit = (value, depth = 0) => {
+    if (depth > 5 || value == null) return;
+    if (Array.isArray(value)) { for (const entry of value) visit(entry, depth + 1); return; }
+    if (typeof value === 'object') {
+      for (const key of ['output', 'logs', 'log', 'message', 'stderr', 'error']) visit(value[key], depth + 1);
+      return;
+    }
+    if (typeof value !== 'string') return;
+    const trimmed = value.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try { visit(JSON.parse(trimmed), depth + 1); return; } catch {}
+    }
+    lines.push(...value.split(/\r?\n/));
+  };
+  for (const diagnostic of diagnostics) visit(diagnostic);
+  const safeLines = lines
     .map(line => line
       .replace(/postgres(?:ql)?:\/\/[^\s"'<>]+/gi, 'postgresql://***')
       .replace(/Bearer\s+[^\s"'<>]+/gi, 'Bearer ***')
