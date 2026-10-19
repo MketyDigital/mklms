@@ -172,7 +172,7 @@ jobs:
             exit 1
           fi
           if [ "$STARPIPS_POSTGRES_CATALOG_OUTCOME" != success ]; then
-            echo 'Starpips PostgreSQL source catalog could not be read using the repository source secret.'
+            echo 'Starpips PostgreSQL source catalog could not be read using MKLMS_DATABASE_URL.'
             exit 1
           fi
           test -s schema-audit-output/postgres-starpips.json
@@ -230,13 +230,12 @@ jobs:
         if: always()
         env:
           ACADEMY_POSTGRES_CATALOG_OUTCOME: ${{ steps.academy-postgres-catalog.outcome }}
-          COOLIFY_CATALOG_OUTCOME: ${{ steps.coolify-catalog.outcome }}
           STARPIPS_POSTGRES_CATALOG_OUTCOME: ${{ steps.starpips-postgres-catalog.outcome }}
           STARPIPS_CATALOG_OUTCOME: ${{ steps.starpips-catalog.outcome }}
           ACADEMY_CATALOG_OUTCOME: ${{ steps.academy-catalog.outcome }}
         run: |
           set -euo pipefail
-          test "$ACADEMY_POSTGRES_CATALOG_OUTCOME" = success || test "$COOLIFY_CATALOG_OUTCOME" = success || { echo "Mkety Academy Supabase source catalog export failed"; exit 1; }
+          test "$ACADEMY_POSTGRES_CATALOG_OUTCOME" = success || { echo "Mkety Academy PostgreSQL target catalog export failed"; exit 1; }
           test "$STARPIPS_POSTGRES_CATALOG_OUTCOME" = success || { echo "Starpips PostgreSQL source catalog export failed"; exit 1; }
           test "$STARPIPS_CATALOG_OUTCOME" = success || { echo "Starpips D1 catalog export failed"; exit 1; }
           test "$ACADEMY_CATALOG_OUTCOME" = success || { echo "Mkety Academy D1 catalog export failed"; exit 1; }
@@ -256,7 +255,7 @@ jobs:
             local summary_file="schema-audit-output/parity-${installation}.json"
             local report status
             set +e
-            report=$(node scripts/d1-schema-parity.mjs "$postgres_catalog" "$d1_catalog" --diagnostic-summary --require-complete)
+            report=$(node scripts/d1-schema-parity.mjs "$postgres_catalog" "$d1_catalog" --diagnostic-summary --sample-limit=100 --require-complete)
             status=$?
             set -e
             printf '%s\n' "$report" > "$summary_file"
@@ -285,6 +284,15 @@ jobs:
             failed=1
           fi
           exit "$failed"
+
+      - name: Upload read-only schema audit metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: read-only-schema-audit-metadata
+          path: schema-audit-output/
+          if-no-files-found: ignore
+          retention-days: 1
 
   postgres-schema-isolation-rehearsal:
     runs-on: ubuntu-latest

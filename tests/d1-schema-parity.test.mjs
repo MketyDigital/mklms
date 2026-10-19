@@ -294,3 +294,16 @@ test('normalizes PostgreSQL replication trigger name truncation without hiding m
   const incomplete = buildSchemaParityReport(missing, make('d1'));
   assert.ok(incomplete.unsupported.some(item => item.includes('incomplete postgres transactional replication capture')));
 });
+
+test('diagnostic CLI accepts a bounded sample limit', () => {
+  const result = spawnSync(process.execPath, [
+    'scripts/d1-schema-parity.mjs',
+    'tests/fixtures/schema-parity-pg.json',
+    'tests/fixtures/schema-parity-d1-drift.json',
+    '--diagnostic-summary',
+    '--sample-limit=1',
+  ], { encoding: 'utf8' });
+  assert.equal(result.status, 0);
+  const summary = JSON.parse(result.stdout);
+  for (const samples of Object.values(summary.samples)) assert.ok(samples.length <= 1);
+});

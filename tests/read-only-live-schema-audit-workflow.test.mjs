@@ -32,7 +32,7 @@ test('live schema audit exports only catalog metadata and never applies migratio
   assert.match(auditJob, /postgres-starpips\.json/);
   assert.match(auditJob, /cloudflare-d1-schema-catalog\.mjs starpips/);
   assert.match(auditJob, /cloudflare-d1-schema-catalog\.mjs mkety-academy/);
-  assert.match(auditJob, /--diagnostic-summary --require-complete/);
+  assert.match(auditJob, /--diagnostic-summary --sample-limit=100 --require-complete/);
   assert.match(auditJob, /Require PostgreSQL parity with each live D1 schema/);
   assert.match(auditJob, /Require PostgreSQL parity with each live D1 schema\n\s+if: always\(\)/);
   assert.match(auditJob, /GITHUB_STEP_SUMMARY/);
@@ -47,7 +47,7 @@ test('live schema audit exports only catalog metadata and never applies migratio
   assert.match(auditJob, /Read full Starpips D1 schema catalog \(metadata only\)[\s\S]*?if: always\(\)/);
   assert.match(auditJob, /Read full Mkety Academy D1 schema catalog \(metadata only\)[\s\S]*?if: always\(\)/);
   assert.match(auditJob, /Inspect existing application Worker D1 bindings \(read-only\)[\s\S]*?if: always\(\)/);
-  assert.doesNotMatch(auditJob, /upload-artifact@/);
+  assert.match(auditJob, /Upload read-only schema audit metadata[\s\S]*?if: always\(\)[\s\S]*?read-only-schema-audit-metadata[\s\S]*?retention-days: 1/);
   assert.doesNotMatch(auditJob, /(?:wrangler\s+deploy|wrangler\s+d1\s+migrations\s+apply|npm\s+run\s+(?:db:migrate|deploy)|\b(?:INSERT|UPDATE|DELETE|DROP|ALTER)\s+(?:INTO|FROM|TABLE|DATABASE))/i);
   assert.doesNotMatch(auditJob, /echo\s+.*\$\{?(?:MKLMS_SCHEMA_AUDIT_DATABASE_URL|CLOUDFLARE_API_TOKEN)/i);
   assert.match(pgExporter, /default_transaction_read_only=on/);

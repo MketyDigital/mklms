@@ -363,8 +363,10 @@ if (process.argv[1]?.endsWith('/d1-schema-parity.mjs')) {
   if (files.length !== 2) throw new Error('Provide PostgreSQL and D1 catalog JSON snapshot paths.');
   const [pgSchema, d1Schema] = await Promise.all(files.map(async file => JSON.parse(await readFile(file, 'utf8'))));
   const report = buildSchemaParityReport(pgSchema, d1Schema);
+  const sampleLimitArg = args.find(arg => arg.startsWith('--sample-limit='));
+  const sampleLimit = sampleLimitArg ? Number(sampleLimitArg.slice('--sample-limit='.length)) : 12;
   console.log(JSON.stringify(args.includes('--diagnostic-summary')
-    ? summarizeSchemaParityDiagnostics(report)
+    ? summarizeSchemaParityDiagnostics(report, sampleLimit)
     : args.includes('--summary-only')
       ? summarizeSchemaParityReport(report)
       : report, null, 2));
