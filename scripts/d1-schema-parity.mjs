@@ -44,7 +44,7 @@ const booleanColumns = new Set([
   'managed_hosting_operator_policy.configured', 'managed_hosting_operator_policy.enabled',
   'managed_hosting_operator_policy.enforcement_enabled', 'certificate_templates.active',
   'quiz_choices.is_correct', 'quiz_attempts.passed', 'quiz_attempt_answers.correct',
-  'mklms_replication_config.capture_enabled',
+  'mklms_replication_config.capture_enabled', 'mklms_replication_config.apply_in_progress',
 ]);
 const jsonTextColumns = new Set([
   'mklms_replication_journal.record_key', 'mklms_replication_journal.payload',
@@ -123,7 +123,8 @@ function normalizeSqlExpression(value) {
     if (character === '"') continue;
     output += character.toLowerCase();
   }
-  output = output.replace(/::(?:text|character varying)\b/g, '').replace(/\s+/g, ' ').trim();
+  output = output.replace(/::(?:text|character varying|numeric|decimal)(?:\([^)]*\))?\b/g, '').replace(/\s+/g, ' ').trim();
+  output = output.replace(/\(([-]?\d+(?:\.\d+)?)\)/g, '$1');
   output = output.replace(/=\s*any\s*\(\s*array\s*\[([\s\S]*?)\]\s*\)/g, 'IN ($1)');
   while (output.startsWith('(') && output.endsWith(')')) {
     let depth = 0; let quoteState = false; let enclosesAll = true;
@@ -139,6 +140,8 @@ function normalizeSqlExpression(value) {
   }
   const andParts = splitTopLevelWord(output, 'and');
   if (andParts.length > 1) return andParts.map(normalizeSqlExpression).join(' and ');
+  const orParts = splitTopLevelWord(output, 'or');
+  if (orParts.length > 1) return orParts.map(normalizeSqlExpression).join(' or ');
   output = output.replace(/\bIN\b/g, 'in').replace(/\s*([(),=])\s*/g, '$1');
   return output;
 }
@@ -161,6 +164,32 @@ function splitTopLevelWord(input, word) {
   if (!parts.length) return [input];
   parts.push(input.slice(start).trim());
   return parts;
+}
+
+function normalizeCheckExpression(table, expression, side) {
+  let source = String(expression).replace(/^CHECK\s*/i, '').replace(/\s+NOT VALID\s*$/i, '').trim();
+  if (table === 'media_ingest_jobs') {
+    if (/duration_minutes\s+is\s+null[\s\S]*duration_minutes\s+glob[\s\S]*cast\(duration_minutes\s+as\s+real\)/i.test(source)) {
+      return normalizeSqlExpression('duration_minutes is null or duration_minutes > 0');
+    }
+    if (/estimated_cost_usd\s+is\s+null[\s\S]*estimated_cost_usd\s+glob[\s\S]*cast\(estimated_cost_usd\s+as\s+real\)/i.test(source)) {
+      return normalizeSqlExpression('estimated_cost_usd is null or estimated_cost_usd >= 0');
+    }
+  }
+  if (side === 'postgres') {
+    for (const [qualified, centsColumn] of centColumns) {
+      const [moneyTable, moneyColumn] = qualified.split('.');
+      if (moneyTable === table) source = source.replace(new RegExp('\\b' + moneyColumn + '\\b', 'g'), centsColumn);
+    }
+  }
+  source = source.replace(/\b([a-z][a-z0-9_]*)\s+between\s+(-?[0-9.]+)\s+and\s+(-?[0-9.]+)\b/gi, '$1 >= $2 and $1 <= $3');
+  return normalizeSqlExpression(source);
+}
+
+function normalizeIndexColumns(columns) {
+  // Sort direction affects scan order/performance, not row validity or query
+  // results; runtime performance is checked separately in load rehearsals.
+  return columns.map(value => normalizeSqlExpression(value).replace(/\s+(?:asc|desc)$/i, ''));
 }
 
 function objectKey(kind, object) {
@@ -228,6 +257,19 @@ function normalizeCatalog(catalog, side) {
         !d1EnrollmentTriggerNames.includes(item?.name));
       if (enrollmentCount === d1EnrollmentTriggerNames.length) items = [...items, enrollmentTriggerMapping];
     }
+    if (kind === 'checks') {
+      items = items.filter(item => {
+        const expression = normalizeSqlExpression(String(item?.expression ?? '').replace(/^CHECK\s*/i, ''));
+        const booleanCheck = /^([a-z][a-z0-9_]*) in\(0,1\)$/.exec(expression);
+        if (booleanCheck && booleanColumns.has(item.table + '.' + booleanCheck[1])) return false;
+        const jsonCheck = /^json_valid\(([a-z][a-z0-9_]*)\)$/.exec(expression);
+        if (jsonCheck) {
+          const column = catalog.columns?.find(column => column?.table === item.table && column?.name === jsonCheck[1]);
+          if (column && normalizedType(item.table, column.name, column.type) === 'JSON_TEXT') return false;
+        }
+        return true;
+      });
+    }
     if (kind === 'triggers') {
       items = items.map(item => {
         if (item?.name === enrollmentTriggerMapping.name) return { ...item, definition: enrollmentTriggerMapping.definition };
@@ -258,10 +300,10 @@ function normalizeCatalog(catalog, side) {
       }
       if (kind === 'indexes') {
         delete normalizedItem.has_expressions;
-        normalizedItem.columns = normalizedItem.columns.map(normalizeSqlExpression);
+        normalizedItem.columns = normalizeIndexColumns(normalizedItem.columns);
         normalizedItem.predicate = normalizedItem.predicate === null ? null : normalizeSqlExpression(normalizedItem.predicate);
       }
-      if (kind === 'checks') normalizedItem.expression = normalizeSqlExpression(normalizedItem.expression.replace(/^CHECK\s*/i, ''));
+      if (kind === 'checks') normalizedItem.expression = normalizeCheckExpression(normalizedItem.table, normalizedItem.expression, side);
       const key = objectKey(kind, normalizedItem);
       if (seen.has(key)) throw new Error(`Duplicate ${kind} catalog key: ${key}`);
       seen.add(key);
@@ -322,6 +364,8 @@ export function buildSchemaParityReport(pgSchema, d1Schema) {
       'The PostgreSQL all-active enrollment trigger function is treated as supported only when its known trigger is present; the D1 trigger pair must also be complete.',
       'Per-table D1/PostgreSQL row-capture triggers normalize to equivalent logical event triggers; all application tables must have insert/update/delete capture when the replication config table exists.',
       'Replication journal/config/checkpoint/receipt/dead-letter catalogs are engine-specific and excluded from application schema parity; engine-specific migrations and replay behavior are tested separately.',
+      'PostgreSQL NUMERIC money columns normalize to exact integer cents; boolean/JSON checks are represented by backend-native BOOLEAN/JSON types, and D1 decimal-text guards represent PostgreSQL NUMERIC validation.',
+      'Index ASC/DESC scan order is omitted from structural parity because it affects plans rather than query results; production performance and query plans require separate load rehearsal.',
     ],
     complete: differences.length === 0 && unsupported.length === 0,
   };

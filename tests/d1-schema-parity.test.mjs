@@ -307,3 +307,49 @@ test('diagnostic CLI accepts a bounded sample limit', () => {
   const summary = JSON.parse(result.stdout);
   for (const samples of Object.values(summary.samples)) assert.ok(samples.length <= 1);
 });
+
+test('normalizes equivalent index scan directions and backend-native check constraints', () => {
+  const names = ['lesson_progress','managed_hosting_months','media_ingest_jobs','certificate_templates','media_assets'];
+  const columns = {
+    postgres: [
+      { table:'lesson_progress', name:'progress_percent', type:'int4' },
+      { table:'managed_hosting_months', name:'amount_due_usd', type:'numeric(12,2)' },
+      { table:'media_ingest_jobs', name:'estimated_cost_usd', type:'numeric(12,2)' },
+      { table:'certificate_templates', name:'active', type:'bool' },
+      { table:'media_assets', name:'metadata_json', type:'jsonb' },
+    ],
+    d1: [
+      { table:'lesson_progress', name:'progress_percent', type:'INTEGER' },
+      { table:'managed_hosting_months', name:'amount_due_cents', type:'INTEGER' },
+      { table:'media_ingest_jobs', name:'estimated_cost_usd', type:'TEXT' },
+      { table:'certificate_templates', name:'active', type:'INTEGER' },
+      { table:'media_assets', name:'metadata_json', type:'TEXT' },
+    ],
+  };
+  const completeColumn = item => ({ ...item, nullable:true, default:null, position:1, primaryKeyPosition:0 });
+  const postgres = {
+    tables:names.map(name=>({name})), columns:columns.postgres.map(completeColumn),
+    indexes:[{table:'lesson_progress',name:'lesson_progress_recent_idx',unique:false,partial:false,columns:['student_id','created_at']}],
+    foreignKeys:[], triggers:[], unsupported:[],
+    checks:[
+      {table:'lesson_progress',name:'progress_range',expression:'CHECK (progress_percent >= 0 AND progress_percent <= 100)'},
+      {table:'managed_hosting_months',name:'amount_due_nonnegative',expression:'CHECK ((amount_due_usd IS NULL) OR (amount_due_usd >= (0)::numeric))'},
+      {table:'media_ingest_jobs',name:'estimated_cost_nonnegative',expression:'CHECK ((estimated_cost_usd IS NULL) OR (estimated_cost_usd >= (0)::numeric))'},
+    ],
+  };
+  const d1 = {
+    tables:names.map(name=>({name})), columns:columns.d1.map(completeColumn),
+    indexes:[{table:'lesson_progress',name:'lesson_progress_recent_idx',unique:false,partial:false,columns:['student_id','created_at DESC']}],
+    foreignKeys:[], triggers:[], unsupported:[],
+    checks:[
+      {table:'lesson_progress',name:'progress_range',expression:'CHECK (progress_percent BETWEEN 0 AND 100)'},
+      {table:'managed_hosting_months',name:'amount_due_nonnegative',expression:'CHECK (amount_due_cents IS NULL OR amount_due_cents >= 0)'},
+      {table:'media_ingest_jobs',name:'estimated_cost_nonnegative',expression:"estimated_cost_usd IS NULL OR (estimated_cost_usd GLOB '[0-9]*' AND CAST(estimated_cost_usd AS REAL) >= 0)"},
+      {table:'certificate_templates',name:'active_boolean',expression:'CHECK (active IN (0,1))'},
+      {table:'media_assets',name:'metadata_json_valid',expression:'CHECK (json_valid(metadata_json))'},
+    ],
+  };
+  const report=buildSchemaParityReport(postgres,d1);
+  assert.equal(report.complete,true,JSON.stringify(report.differences));
+  assert.deepEqual(report.differences,[]);
+});
