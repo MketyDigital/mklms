@@ -9,7 +9,7 @@ export const MKLMS_D1_TABLE_SIGNATURE = Object.freeze([
   'quiz_choices', 'quiz_questions', 'quizzes', 'student_access_credentials', 'student_sessions', 'students',
 ]);
 
-export function selectPostgresCatalogSchema(rows) {
+export function selectPostgresCatalogSchema(rows, requestedSchema) {
   if (!Array.isArray(rows)) throw new Error('PostgreSQL schema inventory must be an array.');
   const candidates = rows.map(row => ({
     name: typeof row?.name === 'string' ? row.name : '',
@@ -17,6 +17,16 @@ export function selectPostgresCatalogSchema(rows) {
     applicationTableCount: Number(row?.applicationTableCount),
     mklmsTableMatchCount: Number(row?.mklmsTableMatchCount ?? row?.mklmsSignatureTableCount ?? 0),
   })).filter(row => row.name && Number.isSafeInteger(row.applicationTableCount) && row.applicationTableCount >= 0);
+  if (requestedSchema !== undefined) {
+    if (typeof requestedSchema !== 'string' || !/^[a-z][a-z0-9_]{0,62}$/.test(requestedSchema)) {
+      throw new Error('Requested PostgreSQL schema name is invalid.');
+    }
+    const requested = candidates.find(row => row.name === requestedSchema);
+    if (!requested || requested.applicationTableCount === 0) {
+      throw new Error(`Requested PostgreSQL schema does not contain application tables: ${requestedSchema}`);
+    }
+    return requestedSchema;
+  }
   const ledgerSchemas = candidates.filter(row => row.hasMigrationLedger);
   const ledgerWithTables = ledgerSchemas.filter(row => row.applicationTableCount > 0);
   if (ledgerWithTables.length === 1) return ledgerWithTables[0].name;

@@ -54,3 +54,14 @@ test('fails closed for missing or ambiguous application schemas', () => {
     { name: 'two', hasMigrationLedger: true, applicationTableCount: 13 },
   ]), /Multiple MkLMS migration-ledger schemas contain application tables/);
 });
+
+test('explicit schema selection disambiguates multiple live MkLMS schemas', () => {
+  const schemas = [
+    { name: 'public', hasMigrationLedger: true, applicationTableCount: 37 },
+    { name: 'mkety_academy', hasMigrationLedger: true, applicationTableCount: 37 },
+  ];
+  assert.equal(selectPostgresCatalogSchema(schemas, 'public'), 'public');
+  assert.equal(selectPostgresCatalogSchema(schemas, 'mkety_academy'), 'mkety_academy');
+  assert.throws(() => selectPostgresCatalogSchema(schemas, 'missing'), /does not contain application tables/);
+  assert.throws(() => selectPostgresCatalogSchema(schemas, 'Bad-Schema'), /schema name is invalid/);
+});

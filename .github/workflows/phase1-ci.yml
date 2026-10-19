@@ -114,31 +114,27 @@ jobs:
       - name: Prepare schema audit output directory
         run: mkdir -p schema-audit-output
 
-      - name: Read Mkety Academy Supabase source PostgreSQL catalog (read-only)
+      - name: Read Mkety Academy target PostgreSQL catalog (read-only)
         id: academy-postgres-catalog
         continue-on-error: true
         env:
-          MKLMS_SCHEMA_AUDIT_DATABASE_URL: ${{ secrets.MKLMS_SUPABASE_SOURCE_DATABASE_URL }}
-          MKLMS_SCHEMA_AUDIT_DATABASE_SSL: ${{ secrets.MKLMS_SUPABASE_SOURCE_DATABASE_SSL }}
+          MKLMS_SCHEMA_AUDIT_DATABASE_URL: ${{ secrets.MKLMS_DATABASE_URL }}
+          MKLMS_SCHEMA_AUDIT_DATABASE_SSL: ${{ secrets.MKLMS_DATABASE_SSL }}
+          MKLMS_SCHEMA_AUDIT_SCHEMA: mkety_academy
+          MKLMS_DATABASE_SSL_CA: ${{ secrets.MKLMS_DATABASE_SSL_CA }}
+          MKLMS_SCHEMA_AUDIT_ALLOW_UNVERIFIED_TLS: 'true'
         run: |
           set -euo pipefail
-          test -n "$MKLMS_SCHEMA_AUDIT_DATABASE_URL" || { echo "Missing database-migrations MKLMS_SUPABASE_SOURCE_DATABASE_URL"; exit 1; }
-          test -n "$MKLMS_SCHEMA_AUDIT_DATABASE_SSL" || { echo "Missing database-migrations MKLMS_SUPABASE_SOURCE_DATABASE_SSL"; exit 1; }
+          test -n "$MKLMS_SCHEMA_AUDIT_DATABASE_URL" || { echo "Missing database-migrations MKLMS_DATABASE_URL"; exit 1; }
+          test -n "$MKLMS_SCHEMA_AUDIT_DATABASE_SSL" || { echo "Missing database-migrations MKLMS_DATABASE_SSL"; exit 1; }
+          if [ -n "${MKLMS_DATABASE_SSL_CA:-}" ]; then
+            umask 077
+            ca_file=$(mktemp "$RUNNER_TEMP/mklms-postgres-ca.XXXXXX")
+            printf '%s\n' "$MKLMS_DATABASE_SSL_CA" > "$ca_file"
+            export MKLMS_SCHEMA_AUDIT_PG_CA_FILE="$ca_file"
+            trap 'rm -f "$ca_file"' EXIT
+          fi
           node scripts/export-postgres-schema-catalog.mjs schema-audit-output/postgres-mkety-academy.json
-
-      - name: Read PostgreSQL catalog through the private Coolify network when runner DNS fails
-        id: coolify-catalog
-        if: steps.academy-postgres-catalog.outcome == 'failure'
-        continue-on-error: true
-        env:
-          OCI_COOLIFY_TOKEN: ${{ secrets.OCI_COOLIFY_TOKEN }}
-          COOLIFY_URL: https://deploy.mkety.com
-          MKLMS_DATABASE_URL: ${{ secrets.MKLMS_SUPABASE_SOURCE_DATABASE_URL }}
-          MKLMS_DATABASE_SSL: ${{ secrets.MKLMS_SUPABASE_SOURCE_DATABASE_SSL }}
-          MKLMS_COOLIFY_GIT_BRANCH: ${{ github.event.pull_request.head.ref }}
-          MKLMS_COOLIFY_GIT_SHA: ${{ github.event.pull_request.head.sha }}
-          MKLMS_SCHEMA_AUDIT_OUTPUT: schema-audit-output/postgres-mkety-academy.json
-        run: node scripts/coolify-readonly-pg-audit.mjs
 
       - name: Read Starpips source PostgreSQL catalog (read-only)
         id: starpips-postgres-catalog
@@ -146,6 +142,7 @@ jobs:
         env:
           MKLMS_SCHEMA_AUDIT_DATABASE_URL: ${{ secrets.MKLMS_DATABASE_URL }}
           MKLMS_SCHEMA_AUDIT_DATABASE_SSL: ${{ secrets.MKLMS_DATABASE_SSL }}
+          MKLMS_SCHEMA_AUDIT_SCHEMA: public
           MKLMS_DATABASE_SSL_CA: ${{ secrets.MKLMS_DATABASE_SSL_CA }}
           MKLMS_SCHEMA_AUDIT_ALLOW_UNVERIFIED_TLS: 'true'
         run: |
@@ -165,14 +162,13 @@ jobs:
         if: always()
         env:
           ACADEMY_POSTGRES_CATALOG_OUTCOME: ${{ steps.academy-postgres-catalog.outcome }}
-          COOLIFY_CATALOG_OUTCOME: ${{ steps.coolify-catalog.outcome }}
           STARPIPS_POSTGRES_CATALOG_OUTCOME: ${{ steps.starpips-postgres-catalog.outcome }}
         run: |
           set -euo pipefail
-          if [ "$ACADEMY_POSTGRES_CATALOG_OUTCOME" = success ] || [ "$COOLIFY_CATALOG_OUTCOME" = success ]; then
+          if [ "$ACADEMY_POSTGRES_CATALOG_OUTCOME" = success ]; then
             test -s schema-audit-output/postgres-mkety-academy.json
           else
-            echo 'Mkety Academy Supabase source catalog could not be read through the GitHub runner or private Coolify network.'
+            echo 'Mkety Academy target PostgreSQL catalog could not be read using the Starpips database secret.'
             exit 1
           fi
           if [ "$STARPIPS_POSTGRES_CATALOG_OUTCOME" != success ]; then
@@ -180,7 +176,7 @@ jobs:
             exit 1
           fi
           test -s schema-audit-output/postgres-starpips.json
-          echo 'Both installation-specific PostgreSQL source catalogs were captured read-only.'
+          echo 'Both installation-specific PostgreSQL schema catalogs were captured read-only.'
 
       - name: Read full Starpips D1 schema catalog (metadata only)
         id: starpips-catalog
