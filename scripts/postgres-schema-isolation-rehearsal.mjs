@@ -43,6 +43,43 @@ try {
   const droppedTable = await client.query("SELECT to_regclass('mkety_academy.managed_hosting_settings') AS name");
   assert.equal(droppedTable.rows[0].name, null, "the legacy-table DROP must be scoped to the academy schema");
 
+  // Exercise PostgreSQL row-level capture only in this disposable rehearsal DB.
+  // The live Starpips migration keeps capture disabled until an operator starts
+  // an explicitly coordinated snapshot.
+  await client.query("SET search_path TO mkety_academy, pg_catalog");
+  await client.query(`INSERT INTO students (id,display_name,certificate_name)
+    VALUES ('rehearsal-disabled','Capture Disabled','Capture Disabled')`);
+  const disabledEvents = await client.query(`SELECT count(*)::int AS count FROM mklms_replication_journal
+    WHERE installation_id='mklms-rehearsal' AND table_name='students'`);
+  assert.equal(disabledEvents.rows[0].count, 0, "capture must remain inert without an enabled stream");
+
+  await client.query(`INSERT INTO mklms_replication_config
+    (installation_id,source_backend,authority_epoch,schema_version,capture_enabled)
+    VALUES ('mklms-rehearsal','postgresql',1,24,TRUE)`);
+  await client.query(`INSERT INTO students (id,display_name,certificate_name)
+    VALUES ('rehearsal-captured','Before','Before')`);
+  await client.query("UPDATE students SET display_name='After' WHERE id='rehearsal-captured'");
+  await client.query("DELETE FROM students WHERE id='rehearsal-captured'");
+  const capturedEvents = await client.query(`SELECT operation,record_key->>'id' AS record_id,
+      payload->>'display_name' AS display_name
+    FROM mklms_replication_journal
+    WHERE installation_id='mklms-rehearsal' AND table_name='students'
+    ORDER BY sequence`);
+  assert.deepEqual(capturedEvents.rows, [
+    { operation:'INSERT', record_id:'rehearsal-captured', display_name:'Before' },
+    { operation:'UPDATE', record_id:'rehearsal-captured', display_name:'After' },
+    { operation:'DELETE', record_id:'rehearsal-captured', display_name:null },
+  ], "PostgreSQL trigger capture must preserve insert, update, delete and tombstone semantics");
+
+  await client.query("BEGIN");
+  await client.query(`INSERT INTO students (id,display_name,certificate_name)
+    VALUES ('rehearsal-rolled-back','Rollback','Rollback')`);
+  await client.query("ROLLBACK");
+  const rolledBack = await client.query(`SELECT count(*)::int AS count FROM mklms_replication_journal
+    WHERE installation_id='mklms-rehearsal' AND table_name='students'
+      AND record_key->>'id'='rehearsal-rolled-back'`);
+  assert.equal(rolledBack.rows[0].count, 0, "rolled-back application transactions must leave no journal events");
+
   const status = spawnSync(process.execPath, ["scripts/migration-status.mjs"], {
     cwd: process.cwd(),
     encoding: "utf8",
