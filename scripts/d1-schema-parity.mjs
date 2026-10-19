@@ -142,8 +142,40 @@ function normalizeSqlExpression(value) {
   if (andParts.length > 1) return andParts.map(normalizeSqlExpression).join(' and ');
   const orParts = splitTopLevelWord(output, 'or');
   if (orParts.length > 1) return orParts.map(normalizeSqlExpression).join(' or ');
-  output = output.replace(/\bIN\b/g, 'in').replace(/\s*([(),=])\s*/g, '$1');
-  return output;
+  output = output.replace(/\bIN\b/g, 'in');
+  return normalizeSqlOperatorSpacing(output);
+}
+
+function normalizeSqlOperatorSpacing(input) {
+  let output = '';
+  let inString = false;
+  for (let index = 0; index < input.length; index += 1) {
+    const character = input[index];
+    if (inString) {
+      output += character;
+      if (character === "'" && input[index + 1] === "'") output += input[++index];
+      else if (character === "'") inString = false;
+      continue;
+    }
+    if (character === "'") { inString = true; output += character; continue; }
+    if (/[><=]/.test(character) || character === '!') {
+      output = output.replace(/\s+$/, '');
+      const pair = input.slice(index, index + 2);
+      const operator = ['>=', '<=', '<>', '!='].includes(pair) ? pair : character;
+      output += operator;
+      index += operator.length - 1;
+      while (/\s/.test(input[index + 1] ?? '')) index += 1;
+      continue;
+    }
+    if ('(),'.includes(character)) {
+      output = output.replace(/\s+$/, '');
+      output += character;
+      while (/\s/.test(input[index + 1] ?? '')) index += 1;
+      continue;
+    }
+    output += character;
+  }
+  return output.trim();
 }
 
 function splitTopLevelWord(input, word) {
