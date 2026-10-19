@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { selectPostgresCatalogSchema } from '../scripts/postgres-schema-catalog-selection.mjs';
+import { filterPostgresCatalogToMklms, selectPostgresCatalogSchema } from '../scripts/postgres-schema-catalog-selection.mjs';
 
 test('prefers the unique MkLMS migration ledger schema', () => {
   assert.equal(selectPostgresCatalogSchema([
@@ -64,4 +64,23 @@ test('explicit schema selection disambiguates multiple live MkLMS schemas', () =
   assert.equal(selectPostgresCatalogSchema(schemas, 'mkety_academy'), 'mkety_academy');
   assert.throws(() => selectPostgresCatalogSchema(schemas, 'missing'), /does not contain application tables/);
   assert.throws(() => selectPostgresCatalogSchema(schemas, 'Bad-Schema'), /schema name is invalid/);
+});
+
+test('filters shared-schema catalogs to the MkLMS table signature', () => {
+  const filtered = filterPostgresCatalogToMklms({
+    tables: [{ name: 'students' }, { name: 'chat_messages_bot2' }],
+    columns: [{ table: 'students', name: 'id' }, { table: 'chat_messages_bot2', name: 'id' }],
+    indexes: [{ table: 'students', columns: ['id'] }, { table: 'assistant_settings', columns: ['id'] }],
+    foreignKeys: [{ table: 'students', refTable: 'courses' }, { table: 'other_product', refTable: 'users' }],
+    checks: [{ table: 'students', expression: 'id > 0' }, { table: 'other_product', expression: 'id > 0' }],
+    triggers: [{ table: 'students', name: 'enroll' }, { table: 'other_product', name: 'other' }],
+    unsupported: ['postgres function app_trigger'],
+  });
+  assert.deepEqual(filtered.tables, [{ name: 'students' }]);
+  assert.deepEqual(filtered.columns.map(item => item.table), ['students']);
+  assert.deepEqual(filtered.indexes.map(item => item.table), ['students']);
+  assert.deepEqual(filtered.foreignKeys.map(item => item.table), ['students']);
+  assert.deepEqual(filtered.checks.map(item => item.table), ['students']);
+  assert.deepEqual(filtered.triggers.map(item => item.table), ['students']);
+  assert.deepEqual(filtered.unsupported, ['postgres function app_trigger']);
 });

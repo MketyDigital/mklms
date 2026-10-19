@@ -22,9 +22,6 @@ const enrollmentTriggerMapping = {
   name: 'mklms_students_all_active_course_enrollment',
   definition: 'logical:all_active_student_enrollment:v1',
 };
-const supportedPostgresTriggerFunctions = new Set([
-  'mklms_enroll_active_student_in_all_courses',
-]);
 const replicationCaptureEvents = ['insert', 'update', 'delete'];
 const keyFields = {
   tables: ['name'],
@@ -186,6 +183,15 @@ function objectKey(kind, object) {
   return fields.map(field => object[field]).join('.');
 }
 
+function replicationCaptureEvent(item, side) {
+  if (typeof item?.table !== 'string' || typeof item?.name !== 'string') return null;
+  for (const event of replicationCaptureEvents) {
+    const expected = `mklms_replication_capture_${item.table}_${event}`;
+    if (item.name === expected || side === 'postgres' && item.name === expected.slice(0, 63)) return event;
+  }
+  return null;
+}
+
 function normalizeCatalog(catalog, side) {
   if (!catalog || typeof catalog !== 'object') throw new Error('Catalog snapshot must be an object.');
   const normalized = {};
@@ -193,12 +199,11 @@ function normalizeCatalog(catalog, side) {
     let items = catalog[kind] ?? [];
     if (!Array.isArray(items)) throw new Error(`Catalog field ${kind} must be an array.`);
     if (kind === 'triggers' && catalog.tables?.some(table => table?.name === 'mklms_replication_config')) {
-      const names = new Set(items.map(item => item?.name));
       const applicationTables = catalog.tables
         .map(table => table?.name)
         .filter(name => typeof name === 'string' && !name.startsWith('mklms_replication_') && name !== 'mklms_d1_atomic_assertions' && !name.startsWith('_mklms_'));
       const missing = applicationTables.flatMap(table => replicationCaptureEvents
-        .filter(event => !names.has(`mklms_replication_capture_${table}_${event}`))
+        .filter(event => !items.some(item => item?.table === table && replicationCaptureEvent(item, side) === event))
         .map(event => `${table}:${event}`));
       if (missing.length) {
         normalized.unsupported ??= [];
@@ -226,10 +231,22 @@ function normalizeCatalog(catalog, side) {
     if (kind === 'triggers') {
       items = items.map(item => {
         if (item?.name === enrollmentTriggerMapping.name) return { ...item, definition: enrollmentTriggerMapping.definition };
-        const capture = /^mklms_replication_capture_(.+)_(insert|update|delete)$/.exec(item?.name ?? '');
-        if (capture) return { ...item, definition: `logical:transactional_replication_capture:${capture[1]}:${capture[2]}:v1` };
+        const captureEvent = replicationCaptureEvent(item, side);
+        if (captureEvent) return { ...item, name: `mklms_replication_capture_${item.table}_${captureEvent}`, definition: `logical:transactional_replication_capture:${item.table}:${captureEvent}:v1` };
         return item;
       });
+    }
+    // Replication journal/config/checkpoint/receipt/dead-letter tables use
+    // engine-specific transaction and sequence primitives. Their behavior
+    // is checked by engine-specific migration and replay tests; compare only
+    // application data tables here. Application-table capture triggers remain
+    // checked above and normalized below.
+    if (kind === 'tables') {
+      items = items.filter(item => !String(item?.name ?? '').startsWith('mklms_replication_') &&
+        item?.name !== 'mklms_d1_atomic_assertions' && !String(item?.name ?? '').startsWith('_mklms_'));
+    } else {
+      items = items.filter(item => !String(item?.table ?? '').startsWith('mklms_replication_') &&
+        item?.table !== 'mklms_d1_atomic_assertions' && !String(item?.table ?? '').startsWith('_mklms_'));
     }
     const seen = new Set();
     normalized[kind] = items.map(item => {
@@ -252,10 +269,24 @@ function normalizeCatalog(catalog, side) {
     }).sort((a, b) => a.key.localeCompare(b.key));
   }
   const unsupported = [...(normalized.unsupported ?? []), ...(Array.isArray(catalog.unsupported) ? catalog.unsupported.map(String) : [])];
-  if (side === 'postgres' && catalog.triggers?.some(item => item?.name === enrollmentTriggerMapping.name)) {
-    for (const routine of supportedPostgresTriggerFunctions) {
-      const index = unsupported.indexOf(`postgres function ${routine}`);
+  if (side === 'postgres') {
+    if (catalog.triggers?.some(item => item?.name === enrollmentTriggerMapping.name)) {
+      const index = unsupported.indexOf('postgres function mklms_enroll_active_student_in_all_courses');
       if (index >= 0) unsupported.splice(index, 1);
+    }
+    if (catalog.tables?.some(table => table?.name === 'mklms_replication_config')) {
+      const applicationTables = catalog.tables.map(table => table?.name)
+        .filter(name => typeof name === 'string' && !name.startsWith('mklms_replication_') && name !== 'mklms_d1_atomic_assertions' && !name.startsWith('_mklms_'));
+      const captureComplete = applicationTables.every(table => replicationCaptureEvents.every(event =>
+        catalog.triggers?.some(item => item?.table === table && replicationCaptureEvent(item, side) === event)));
+      if (captureComplete) {
+        for (const routine of ['mklms_capture_replication_change']) {
+          const index = unsupported.indexOf(`postgres function ${routine}`);
+          if (index >= 0) unsupported.splice(index, 1);
+        }
+      }
+      const journalSequence = unsupported.indexOf('postgres sequence mklms_replication_journal_sequence_seq');
+      if (journalSequence >= 0) unsupported.splice(journalSequence, 1); // PostgreSQL sequence vs SQLite rowid allocation.
     }
   }
   normalized.unsupported = [...new Set(unsupported)].sort();
@@ -290,6 +321,7 @@ export function buildSchemaParityReport(pgSchema, d1Schema) {
       'Two D1 all-active enrollment triggers are normalized to the single PostgreSQL student activation trigger; both D1 triggers must be present.',
       'The PostgreSQL all-active enrollment trigger function is treated as supported only when its known trigger is present; the D1 trigger pair must also be complete.',
       'Per-table D1/PostgreSQL row-capture triggers normalize to equivalent logical event triggers; all application tables must have insert/update/delete capture when the replication config table exists.',
+      'Replication journal/config/checkpoint/receipt/dead-letter catalogs are engine-specific and excluded from application schema parity; engine-specific migrations and replay behavior are tested separately.',
     ],
     complete: differences.length === 0 && unsupported.length === 0,
   };

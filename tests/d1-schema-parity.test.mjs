@@ -271,3 +271,26 @@ test('PostgreSQL catalog export fails closed without an explicitly named isolate
   assert.match(result.stderr, /MKLMS_SCHEMA_AUDIT_DATABASE_URL/);
   assert.doesNotMatch(result.stderr, /postgres(?:ql)?:\/\/[^\s]+/i);
 });
+
+test('normalizes PostgreSQL replication trigger name truncation without hiding missing capture events', () => {
+  const table = 'managed_hosting_operator_policy';
+  const events = ['insert', 'update', 'delete'];
+  const make = (side) => ({
+    tables: [{ name: table }, { name: 'mklms_replication_config' }],
+    columns: [], indexes: [], foreignKeys: [], checks: [],
+    triggers: events.map(event => {
+      const name = `mklms_replication_capture_${table}_${event}`;
+      return { table, name: side === 'postgres' ? name.slice(0, 63) : name, definition: 'trigger body' };
+    }),
+    unsupported: side === 'postgres'
+      ? ['postgres function mklms_capture_replication_change', 'postgres sequence mklms_replication_journal_sequence_seq']
+      : [],
+  });
+  const report = buildSchemaParityReport(make('postgres'), make('d1'));
+  assert.equal(report.complete, true);
+  assert.deepEqual(report.differences, []);
+  const missing = make('postgres');
+  missing.triggers.pop();
+  const incomplete = buildSchemaParityReport(missing, make('d1'));
+  assert.ok(incomplete.unsupported.some(item => item.includes('incomplete postgres transactional replication capture')));
+});

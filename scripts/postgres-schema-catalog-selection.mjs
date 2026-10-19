@@ -46,3 +46,28 @@ export function selectPostgresCatalogSchema(rows, requestedSchema) {
   const signatureCounts = schemasWithTables.map(row => row.mklmsTableMatchCount).join(',');
   throw new Error(`Could not select one PostgreSQL application schema safely (${schemasWithTables.length} schemas contain tables and no unique MkLMS migration ledger was found; metadata table counts ${tableCounts}; D1 table matches ${signatureCounts}).`);
 }
+
+/**
+ * Keep schema parity scoped to the MkLMS application inventory. A shared
+ * PostgreSQL schema may also hold unrelated product tables; they must not be
+ * mistaken for MkLMS tables, while missing signature tables stay visible as
+ * differences against the D1 catalog.
+ */
+export function filterPostgresCatalogToMklms(catalog) {
+  if (!catalog || typeof catalog !== 'object') throw new Error('PostgreSQL catalog must be an object.');
+  const allowed = new Set(MKLMS_D1_TABLE_SIGNATURE.filter(name => name !== 'mklms_d1_atomic_assertions'));
+  const tableField = {
+    tables: item => item?.name,
+    columns: item => item?.table,
+    indexes: item => item?.table,
+    foreignKeys: item => item?.table,
+    checks: item => item?.table,
+    triggers: item => item?.table,
+  };
+  const result = { ...catalog };
+  for (const [kind, getTable] of Object.entries(tableField)) {
+    if (!Array.isArray(catalog[kind])) throw new Error(`PostgreSQL catalog ${kind} must be an array.`);
+    result[kind] = catalog[kind].filter(item => allowed.has(getTable(item)));
+  }
+  return result;
+}
