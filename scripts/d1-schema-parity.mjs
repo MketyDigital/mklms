@@ -312,12 +312,29 @@ export function summarizeSchemaParityReport(report) {
   };
 }
 
+export function summarizeSchemaParityDiagnostics(report, sampleLimit = 12) {
+  if (!Number.isSafeInteger(sampleLimit) || sampleLimit < 0 || sampleLimit > 100) {
+    throw new Error('Diagnostic sample limit must be an integer between 0 and 100.');
+  }
+  const summary = summarizeSchemaParityReport(report);
+  const samples = Object.fromEntries(objectKinds.map(kind => [
+    kind,
+    report.differences.filter(item => item.kind === kind).slice(0, sampleLimit)
+      .map(({ difference, key }) => ({ difference, key })),
+  ]));
+  return { ...summary, samples, unsupported: report.unsupported.slice(0, 20) };
+}
+
 if (process.argv[1]?.endsWith('/d1-schema-parity.mjs')) {
   const args = process.argv.slice(2);
   const files = args.filter(arg => !arg.startsWith('--'));
   if (files.length !== 2) throw new Error('Provide PostgreSQL and D1 catalog JSON snapshot paths.');
   const [pgSchema, d1Schema] = await Promise.all(files.map(async file => JSON.parse(await readFile(file, 'utf8'))));
   const report = buildSchemaParityReport(pgSchema, d1Schema);
-  console.log(JSON.stringify(args.includes('--summary-only') ? summarizeSchemaParityReport(report) : report, null, 2));
+  console.log(JSON.stringify(args.includes('--diagnostic-summary')
+    ? summarizeSchemaParityDiagnostics(report)
+    : args.includes('--summary-only')
+      ? summarizeSchemaParityReport(report)
+      : report, null, 2));
   if (args.includes('--require-complete') && !report.complete) process.exitCode = 1;
 }

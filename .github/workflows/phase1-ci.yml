@@ -176,7 +176,7 @@ jobs:
             exit 1
           fi
           test -s schema-audit-output/postgres-starpips.json
-          echo 'Both installation-specific PostgreSQL schema catalogs were captured read-only.'
+          echo 'Both installation-specific PostgreSQL source catalogs were captured read-only.'
 
       - name: Read full Starpips D1 schema catalog (metadata only)
         id: starpips-catalog
@@ -256,7 +256,7 @@ jobs:
             local summary_file="schema-audit-output/parity-${installation}.json"
             local report status
             set +e
-            report=$(node scripts/d1-schema-parity.mjs "$postgres_catalog" "$d1_catalog" --summary-only --require-complete)
+            report=$(node scripts/d1-schema-parity.mjs "$postgres_catalog" "$d1_catalog" --diagnostic-summary --require-complete)
             status=$?
             set -e
             printf '%s\n' "$report" > "$summary_file"
@@ -267,7 +267,7 @@ jobs:
           const rows = Object.keys(report.postgresObjectCounts).map(kind => `| ${kind} | ${report.postgresObjectCounts[kind]} | ${report.d1ObjectCounts[kind]} |`).join('\n');
           const markdown = `\n### ${installation} PostgreSQL to D1 schema parity\n\n| Object | PostgreSQL | D1 |\n| --- | ---: | ---: |\n${rows}\n\nDifferences: ${report.differenceCount}; unsupported constructs: ${report.unsupportedCount}; complete: ${report.complete}.\n`;
           await appendFile(summaryPath, markdown);
-          console.log(JSON.stringify({ installation, postgresObjectCounts: report.postgresObjectCounts, d1ObjectCounts: report.d1ObjectCounts, differenceCount: report.differenceCount, unsupportedCount: report.unsupportedCount, complete: report.complete }));
+          console.log(JSON.stringify({ installation, postgresObjectCounts: report.postgresObjectCounts, d1ObjectCounts: report.d1ObjectCounts, differenceCount: report.differenceCount, differenceCounts: report.differenceCounts, samples: report.samples, unsupported: report.unsupported, complete: report.complete }));
           NODE
             return "$status"
           }

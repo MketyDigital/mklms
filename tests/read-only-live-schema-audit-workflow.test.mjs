@@ -6,23 +6,23 @@ const workflow = readFileSync('.github/workflows/phase1-ci.yml', 'utf8');
 const auditJob = (workflow.split('  live-readonly-schema-audit:\n')[1] ?? '').split('\n  provision-empty-d1-targets:\n')[0];
 const pgExporter = readFileSync('scripts/export-postgres-schema-catalog.mjs', 'utf8');
 
-test('live schema audit is scoped to the current same-repository migration PR', () => {
+test('live schema audit is scoped and reads the explicit Academy and Starpips schemas', () => {
   assert.match(workflow, /live-readonly-schema-audit:\n\s+needs: provision-empty-d1-targets/);
   assert.match(workflow, /github\.event_name == 'pull_request'/);
   assert.match(workflow, /github\.event\.pull_request\.number == 149/);
   assert.match(workflow, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
-  assert.match(workflow, /MKLMS_SUPABASE_SOURCE_DATABASE_URL/);
-  assert.match(workflow, /MKLMS_SUPABASE_SOURCE_DATABASE_SSL/);
-  assert.match(workflow, /MKLMS_DATABASE_URL/);
-  assert.match(workflow, /MKLMS_DATABASE_SSL/);
-  assert.match(workflow, /CLOUDFLARE_API_TOKEN/);
+  assert.doesNotMatch(workflow, /MKLMS_SUPABASE_SOURCE_DATABASE_URL|MKLMS_SUPABASE_SOURCE_DATABASE_SSL|OCI_COOLIFY_TOKEN/);
+  assert.match(auditJob, /MKLMS_DATABASE_URL/);
+  assert.match(auditJob, /MKLMS_DATABASE_SSL/);
+  assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_SCHEMA: mkety_academy/);
+  assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_SCHEMA: public/);
+  assert.match(auditJob, /CLOUDFLARE_API_TOKEN/);
 });
 
 test('live schema audit exports only catalog metadata and never applies migrations or deploys', () => {
   assert.match(auditJob, /export-postgres-schema-catalog\.mjs/);
-  assert.match(auditJob, /Read Mkety Academy Supabase source PostgreSQL catalog \(read-only\)/);
-  assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_DATABASE_URL: \$\{\{ secrets\.MKLMS_SUPABASE_SOURCE_DATABASE_URL \}\}/);
-  assert.match(auditJob, /postgres-mkety-academy\.json/);
+  assert.match(auditJob, /Read Mkety Academy target PostgreSQL catalog \(read-only\)/);
+    assert.match(auditJob, /postgres-mkety-academy\.json/);
   assert.match(auditJob, /Read Starpips source PostgreSQL catalog \(read-only\)/);
   assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_DATABASE_URL: \$\{\{ secrets\.MKLMS_DATABASE_URL \}\}/);
   assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_DATABASE_SSL: \$\{\{ secrets\.MKLMS_DATABASE_SSL \}\}/);
@@ -32,7 +32,7 @@ test('live schema audit exports only catalog metadata and never applies migratio
   assert.match(auditJob, /postgres-starpips\.json/);
   assert.match(auditJob, /cloudflare-d1-schema-catalog\.mjs starpips/);
   assert.match(auditJob, /cloudflare-d1-schema-catalog\.mjs mkety-academy/);
-  assert.match(auditJob, /--summary-only --require-complete/);
+  assert.match(auditJob, /--diagnostic-summary --require-complete/);
   assert.match(auditJob, /Require PostgreSQL parity with each live D1 schema/);
   assert.match(auditJob, /Require PostgreSQL parity with each live D1 schema\n\s+if: always\(\)/);
   assert.match(auditJob, /GITHUB_STEP_SUMMARY/);
@@ -54,7 +54,7 @@ test('live schema audit exports only catalog metadata and never applies migratio
   assert.match(pgExporter, /BEGIN READ ONLY/);
   assert.match(pgExporter, /transaction_read_only/);
   assert.match(pgExporter, /table_name='_mklms_migrations'/);
-  assert.match(pgExporter, /selectPostgresCatalogSchema\(schemaRows\.rows\)/);
+  assert.ok(pgExporter.includes('selectPostgresCatalogSchema(schemaRows.rows, process.env.MKLMS_SCHEMA_AUDIT_SCHEMA)'));
   assert.match(pgExporter, /table_name = ANY\(\$1::text\[\]\)/);
   assert.match(pgExporter, /MKLMS_D1_TABLE_SIGNATURE/);
   assert.doesNotMatch(pgExporter, /current_schema\(\)/);

@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { buildSchemaParityReport } from '../scripts/d1-schema-parity.mjs';
+import { buildSchemaParityReport, summarizeSchemaParityDiagnostics } from '../scripts/d1-schema-parity.mjs';
 
 const base = {
   tables: [{ name: 'students' }],
@@ -56,6 +56,17 @@ test('CLI summary mode emits counts only and enforces complete parity', () => {
   const strict = spawnSync(process.execPath, [...args, '--require-complete'], { encoding: 'utf8' });
   assert.equal(strict.status, 1);
   assert.equal(JSON.parse(strict.stdout).complete, false);
+});
+
+test('diagnostic parity summary reports categorized schema mismatches without row data', () => {
+  const report = buildSchemaParityReport(base, { ...structuredClone(base), checks: [] });
+  const summary = summarizeSchemaParityDiagnostics(report, 3);
+  assert.equal(summary.differenceCount, 1);
+  assert.equal(summary.differenceCounts.checks.missing_in_d1, 1);
+  assert.equal(summary.samples.checks[0].difference, 'missing_in_d1');
+  assert.match(summary.samples.checks[0].key, /^students\./);
+  assert.deepEqual(summary.unsupported, []);
+  assert.throws(() => summarizeSchemaParityDiagnostics(report, 101), /between 0 and 100/);
 });
 
 test('unsupported database constructs block a complete schema parity report', () => {

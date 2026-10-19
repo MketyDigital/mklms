@@ -15,13 +15,13 @@ const dockerfile = readFileSync('ops/coolify-readonly-audit/Dockerfile', 'utf8')
 const auditPackage = JSON.parse(readFileSync('ops/coolify-readonly-audit/package.json', 'utf8'));
 const pgExporter = readFileSync('scripts/export-postgres-schema-catalog.mjs', 'utf8');
 
-test('Coolify fallback is limited to the same-repository migration PR and uses the supplied token', () => {
+test('live audit uses the two explicit schemas on the Starpips PostgreSQL database', () => {
   assert.match(auditJob, /github\.event\.pull_request\.number == 149/);
-  assert.match(auditJob, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
-  assert.match(auditJob, /OCI_COOLIFY_TOKEN/);
-  assert.match(auditJob, /https:\/\/deploy\.mkety\.com/);
-  assert.match(auditJob, /steps\.academy-postgres-catalog\.outcome == 'failure'/);
-  assert.match(auditJob, /MKLMS_COOLIFY_GIT_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.match(auditJob, /MKLMS_DATABASE_URL/);
+  assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_SCHEMA: mkety_academy/);
+  assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_SCHEMA: public/);
+  assert.doesNotMatch(auditJob, /OCI_COOLIFY_TOKEN|MKLMS_SUPABASE_SOURCE_DATABASE_URL|MKLMS_SUPABASE_SOURCE_DATABASE_SSL/);
+  assert.match(auditJob, /environment: database-migrations/);
 });
 
 test('Coolify executor is pinned, private, ephemeral, and always cleaned up', () => {
@@ -38,41 +38,24 @@ test('Coolify executor is pinned, private, ephemeral, and always cleaned up', ()
   assert.match(auditJob, /if:\s*always\(\)/);
 });
 
-test('executor reads the exact configured production source without logging the connection URL', () => {
-  assert.match(auditJob, /MKLMS_DATABASE_URL/);
-  assert.match(auditJob, /MKLMS_SUPABASE_SOURCE_DATABASE_URL/);
-  assert.match(auditJob, /MKLMS_SUPABASE_SOURCE_DATABASE_SSL/);
-  assert.match(auditJob, /environment: database-migrations/);
-  assert.match(coolify, /validateReadOnlyAuditSourceUrl\(configuredDatabaseUrl, configuredDatabaseSsl\)/);
-  assert.match(coolify, /Supabase source URL\. Do not replace its host with Coolify's/);
-  assert.doesNotMatch(coolify, /internal_db_url/);
-  assert.doesNotMatch(coolify, /coolify-ca\.crt|MKLMS_SCHEMA_AUDIT_PG_CA_FILE/);
-  assert.match(coolify, /MKLMS_SCHEMA_AUDIT_DATABASE_SSL/);
-  assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_DATABASE_URL/);
-  assert.match(dockerfile, /export-postgres-schema-catalog\.mjs/);
-  assert.match(dockerfile, /postgres-schema-catalog-selection\.mjs/);
-  assert.match(dockerfile, /verified-postgres-url\.mjs/);
-  assert.match(runner, /gzipSync/);
-  assert.match(runner, /MKLMS_CATALOG_CHUNK/);
-  assert.match(container, /MKLMS_SCHEMA_AUDIT_DATABASE_URL/);
-  assert.match(container, /MKLMS_SCHEMA_AUDIT_DATABASE_SSL/);
-  assert.match(container, /MKLMS_CATALOG_ERROR/);
-  assert.match(container, /run-coolify-pg-catalog-audit\.mjs 2>&1/);
-  assert.match(coolify, /Coolify executor reported a PostgreSQL schema metadata export failure/);
-  assert.match(coolify, /Safe PostgreSQL catalog diagnostic/);
-  assert.match(coolify, /schemas contain tables and no unique MkLMS migration ledger was found/);
-  assert.match(pgExporter, /process\.stdout\.write\(`PostgreSQL catalog export failed/);
+test('read-only audit schema selection and TLS safeguards remain explicit', () => {
+  assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_DATABASE_URL: \$\{\{ secrets\.MKLMS_DATABASE_URL \}\}/);
+  assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_DATABASE_SSL: \$\{\{ secrets\.MKLMS_DATABASE_SSL \}\}/);
+  assert.match(auditJob, /MKLMS_SCHEMA_AUDIT_ALLOW_UNVERIFIED_TLS: 'true'/);
+  assert.match(auditJob, /MKLMS_DATABASE_SSL_CA/);
+  assert.match(auditJob, /umask 077[\s\S]*mktemp[\s\S]*MKLMS_SCHEMA_AUDIT_PG_CA_FILE/);
+  assert.match(pgExporter, /process\.env\.MKLMS_SCHEMA_AUDIT_SCHEMA/);
+  assert.match(pgExporter, /selectPostgresCatalogSchema\(schemaRows\.rows, process\.env\.MKLMS_SCHEMA_AUDIT_SCHEMA\)/);
   assert.match(pgExporter, /default_transaction_read_only=on/);
   assert.match(pgExporter, /BEGIN READ ONLY/);
-  assert.match(pgExporter, /options: '-c default_transaction_read_only=on'/);
   assert.match(pgExporter, /rejectUnauthorized:\s*true/);
   assert.match(pgExporter, /allowUnverifiedRequire[\s\S]*poolOptions\.ssl = \{ rejectUnauthorized: false \}/);
-  assert.match(pgExporter, /TLS certificate is self-signed/);
   assert.match(pgExporter, /verifiedPostgresUrl\(configuredUrl, process\.env\.MKLMS_SCHEMA_AUDIT_DATABASE_SSL, \{ allowUnverifiedRequire \}\)/);
   assert.match(pgExporter, /information_schema/);
-  assert.match(pgExporter, /to_json\(ARRAY\(SELECT COALESCE\(a\.attname,pg_get_indexdef/);
-  assert.match(pgExporter, /to_json\(array_agg\(a\.attname ORDER BY k\.ord\)\) AS columns/);
-  assert.doesNotMatch(container, /(?:INSERT|UPDATE|DELETE|DROP|ALTER)\s+(?:INTO|FROM|TABLE|DATABASE)/i);
+  assert.match(pgExporter, /n\.nspname=\$1/);
+  assert.match(pgExporter, /connection details suppressed/);
+  assert.doesNotMatch(pgExporter, /console\.(?:error|log)\([^\n]*(?:error\.message|error\.hostname)/);
+  assert.doesNotMatch(pgExporter, /SELECT\s+\*|SELECT\s+.+\bFROM\s+(?!information_schema|pg_catalog|pg_|unnest|LATERAL)/i);
 });
 
 test('production source URL is preserved and requires verified TLS', () => {
