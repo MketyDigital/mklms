@@ -170,7 +170,7 @@ test('known D1 trigger emulations normalize to PostgreSQL constraints and enroll
   const report = buildSchemaParityReport(pg, d1);
   assert.equal(report.complete, true);
   assert.deepEqual(report.differences, []);
-  assert.equal(report.semanticMappings.length, 5);
+  assert.equal(report.semanticMappings.length, 6);
 });
 
 test('the known PostgreSQL enrollment routine is supported only when its trigger is present', () => {
