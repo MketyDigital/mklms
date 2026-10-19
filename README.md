@@ -45,9 +45,11 @@ The preferred non-technical production path is the manual GitHub Action **Run Mk
 5. Type `MIGRATE` and run it.
 6. Require **Verify database is current** to pass.
 
-The repository currently contains migrations `001` through `011`. The runner applies only unapplied migrations, records SHA-256 checksums, skips already-current migrations, and fails if an already-applied migration file was changed. Do not edit historical applied migrations; add a new numbered migration instead.
+The repository currently contains migrations `001` through `024`. The runner applies only unapplied migrations, records SHA-256 checksums, skips already-current migrations, and fails if an already-applied migration file was changed. Do not edit historical applied migrations; add a new numbered migration instead.
 
 Running the workflow again after the database is current is safe: already-applied migrations are skipped.
+
+The migration PR's read-only source parity audit uses separate `database-migrations` environment secrets named `MKLMS_SUPABASE_SOURCE_DATABASE_URL` and `MKLMS_SUPABASE_SOURCE_DATABASE_SSL`. These must point to the Supabase PostgreSQL source and its TLS mode; do not reuse `MKLMS_DATABASE_URL` or `MKLMS_PG_STAGING_DATABASE_URL`, which identify the central PostgreSQL target.
 
 Manual trusted-shell alternative:
 

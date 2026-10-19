@@ -7,8 +7,8 @@ import {
   getBillingMonthKey,
   resolveManagedHostingPaymentWindow,
 } from "@/features/hosting/domain/managed-hosting";
-import { PostgresManagedHostingLedgerRepository } from "@/features/hosting/repositories/postgres-managed-hosting-ledger.repository";
-import { PostgresManagedHostingRepository } from "@/features/hosting/repositories/postgres-managed-hosting.repository";
+import { createPostgresManagedHostingLedgerRepository } from "@/features/hosting/repositories/hosting-repository.factory"
+import { createPostgresManagedHostingRepository } from "@/features/hosting/repositories/hosting-repository.factory";
 import { ensurePreviousManagedHostingInvoice } from "@/features/hosting/server/managed-hosting-access";
 import {
   canonicalBillingCheckoutPayload,
@@ -39,8 +39,8 @@ export async function POST() {
     return NextResponse.json({ ok: false, message: "Automatic billing is not configured." }, { status: 503 });
   }
 
-  const repository = new PostgresManagedHostingRepository();
-  const ledgerRepository = new PostgresManagedHostingLedgerRepository();
+  const repository = createPostgresManagedHostingRepository();
+  const ledgerRepository = createPostgresManagedHostingLedgerRepository();
   const effective = await getEffectiveManagedHostingPolicy(repository);
   const policy = effective.policy;
   if (!policy.enabled) {

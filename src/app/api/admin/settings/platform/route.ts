@@ -4,7 +4,7 @@ import { z } from "zod";
 import { ACTIVE_CLAIM_VERIFICATION_STRATEGIES } from "@/features/access/domain/claim-verification";
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
 import { DEFAULT_PORTAL_FONT_FAMILY, normalizePortalFontFamily } from "@/features/settings/font-branding";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 
 const httpsUrl = z.string().url().refine(
   (value) => value.toLowerCase().startsWith("https://"),
@@ -25,7 +25,7 @@ const schema = z.object({
   publicBaseUrl: z.string().url(), timezone: z.string().min(1).max(80), locale: z.string().min(2).max(20),
   accessProvider: z.literal("access-code"),
   claimVerificationStrategy: z.enum(ACTIVE_CLAIM_VERIFICATION_STRATEGIES),
-  storageProvider: z.enum(["r2", "s3", "supabase", "minio", "custom"]),
+  storageProvider: z.enum(["r2", "s3", "minio", "custom"]),
   mediaProvider: z.enum(["generic-hls", "youtube", "external-embed", "custom"]),
   emailProvider: z.enum(["smtp", "none"]), notificationProvider: z.enum(["telegram", "none"]),
   accessCodePrefix: z.string().min(1).max(24), certificatePrefix: z.string().min(1).max(24),
@@ -34,14 +34,14 @@ const schema = z.object({
 
 export async function GET() {
   if (!(await hasValidAdminSession())) return NextResponse.json({ ok: false }, { status: 401 });
-  return NextResponse.json({ ok: true, settings: await new PostgresSettingsRepository().getPlatformSettings() });
+  return NextResponse.json({ ok: true, settings: await createPostgresSettingsRepository().getPlatformSettings() });
 }
 
 export async function PUT(request: Request) {
   if (!(await hasValidAdminSession())) return NextResponse.json({ ok: false }, { status: 401 });
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ ok: false, message: parsed.error.issues[0]?.message ?? "Invalid settings." }, { status: 400 });
-  const repository = new PostgresSettingsRepository();
+  const repository = createPostgresSettingsRepository();
   await repository.savePlatformSettings(parsed.data);
   return NextResponse.json({ ok: true, settings: await repository.getPlatformSettings() });
 }

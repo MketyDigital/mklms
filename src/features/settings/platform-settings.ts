@@ -1,5 +1,5 @@
 import type { ClaimVerificationStrategy } from "../access/domain/claim-verification";
-import { DEFAULT_PORTAL_FONT_FAMILY } from "./font-branding";
+import { DEFAULT_PORTAL_FONT_FAMILY } from "./font-branding.ts";
 
 export type AccessProviderType =
   | "access-code"
@@ -12,7 +12,6 @@ export type StorageProviderType =
   | "r2"
   | "s3"
   | "oci"
-  | "supabase"
   | "minio"
   | "custom";
 

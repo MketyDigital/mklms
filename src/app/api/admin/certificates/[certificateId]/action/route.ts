@@ -3,10 +3,10 @@ import { z } from "zod";
 
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
 import { PdfLibCertificateRenderer } from "@/features/certificates/providers/pdf-lib-certificate-renderer";
-import { PostgresCertificateRepository } from "@/features/certificates/repositories/postgres-certificate.repository";
+import { createPostgresCertificateRepository } from "@/features/certificates/repositories/certificate-repository.factory";
 import { CertificateDeliveryService } from "@/features/certificates/services/certificate-delivery.service";
-import { PostgresMessageRepository } from "@/features/messages/repositories/postgres-message.repository";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresMessageRepository } from "@/features/messages/repositories/message-repository.factory";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 import { consumeDistributedRateLimit, getRequestClientKey, rateLimitHeaders } from "@/lib/security/rate-limit";
 import { getConfiguredEmailProvider } from "@/providers/smtp-email-provider";
 import { getConfiguredStorageProvider } from "@/providers/s3-compatible-storage-provider";
@@ -40,7 +40,7 @@ export async function POST(
     return NextResponse.json({ ok: false, message: "Invalid certificate action." }, { status: 400 });
   }
 
-  const repository = new PostgresCertificateRepository();
+  const repository = createPostgresCertificateRepository();
   const certificate = await repository.findListItemById(certificateId);
   if (!certificate) {
     return NextResponse.json({ ok: false, message: "Certificate not found." }, { status: 404 });
@@ -64,9 +64,9 @@ export async function POST(
       );
     }
 
-    const settings = await new PostgresSettingsRepository().getPlatformSettings();
+    const settings = await createPostgresSettingsRepository().getPlatformSettings();
     const senderName = settings.supportName ?? settings.organizationName;
-    await new PostgresMessageRepository().sendAdminMessage(
+    await createPostgresMessageRepository().sendAdminMessage(
       certificate.studentId,
       senderName,
       `Your certificate for ${certificate.courseTitle} is available. Certificate ID: ${certificate.certificateId}. You can open the Certificates section in your learning portal to download it and use the public verification page when needed.`,

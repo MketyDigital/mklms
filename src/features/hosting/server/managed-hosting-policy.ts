@@ -3,10 +3,8 @@ import {
   normalizeManagedHostingPolicy,
   type ManagedHostingPolicy,
 } from "../domain/managed-hosting";
-import {
-  PostgresManagedHostingRepository,
-  type ManagedHostingOperatorPolicyRecord,
-} from "../repositories/postgres-managed-hosting.repository";
+import { createPostgresManagedHostingRepository } from "../repositories/hosting-repository.factory";
+import type { ManagedHostingOperatorPolicyRecord } from "../repositories/postgres-managed-hosting.repository";
 
 function parseNumber(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
@@ -59,7 +57,7 @@ const DEFAULT_OVERDUE_WARNING =
   "Your managed video hosting and maintenance payment is overdue. Please pay to avoid interruption of hosted video services.";
 
 export async function getEffectiveManagedHostingPolicy(
-  repository = new PostgresManagedHostingRepository(),
+  repository = createPostgresManagedHostingRepository(),
 ): Promise<EffectiveManagedHostingPolicy> {
   const environment = getManagedHostingPolicy();
   let operator: ManagedHostingOperatorPolicyRecord | null = null;

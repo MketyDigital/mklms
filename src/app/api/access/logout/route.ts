@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { hashSessionToken } from "@/features/access/domain/session";
-import { PostgresAccessRepository } from "@/features/access/repositories/postgres-access.repository";
+import { createPostgresAccessRepository } from "@/features/access/repositories/access-repository.factory";
 import {
   getStudentSessionCookieOptions,
   STUDENT_SESSION_COOKIE,
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     ?.slice(STUDENT_SESSION_COOKIE.length + 1);
 
   if (sessionToken) {
-    const repository = new PostgresAccessRepository();
+    const repository = createPostgresAccessRepository();
     await repository.revokeSession(hashSessionToken(sessionToken).hash);
   }
 

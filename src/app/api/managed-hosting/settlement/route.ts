@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { PostgresManagedHostingRepository } from "@/features/hosting/repositories/postgres-managed-hosting.repository";
+import { createPostgresManagedHostingRepository } from "@/features/hosting/repositories/hosting-repository.factory";
 import {
   canonicalBillingSettlementPayload,
   isFreshBillingTimestamp,
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "Unauthorized settlement." }, { status: 401 });
   }
 
-  const repository = new PostgresManagedHostingRepository();
+  const repository = createPostgresManagedHostingRepository();
   if (parsed.data.priceCurrency.trim().toLowerCase() !== "usd") {
     return NextResponse.json({ ok: false, message: "Unexpected settlement currency." }, { status: 409 });
   }

@@ -1,0 +1,21 @@
+import { randomUUID } from "node:crypto";
+import type { D1DatabaseLike } from "../../../lib/d1-query-adapter.ts";
+import { executeD1, queryD1Rows } from "../../../lib/d1-query-adapter.ts";
+import type { MediaIngestState } from "../domain/media-ingest.ts";
+
+export interface D1MediaIngestJob{id:string;mediaAssetId:string|null;title:string;state:MediaIngestState;sourceObjectKey:string|null;ociJobId:string|null;ociOutputPrefix:string|null;r2Prefix:string|null;r2MasterManifest:string|null;durationMinutes:number|null;estimatedCostUsd:number|null;costAcceptedAt:Date|null;errorMessage:string|null;createdAt:Date;updatedAt:Date;}
+type JobRow={id:string;media_asset_id:string|null;title:string;state:MediaIngestState;source_object_key:string|null;oci_job_id:string|null;oci_output_prefix:string|null;r2_prefix:string|null;r2_master_manifest:string|null;duration_minutes:string|null;estimated_cost_usd:string|null;cost_accepted_at:string|null;error_message:string|null;created_at:string;updated_at:string};
+function toDate(value:string):Date{return new Date(value.includes("T")?value:`${value.replace(" ","T")}Z`);}
+function mapRow(row:JobRow):D1MediaIngestJob{return{id:row.id,mediaAssetId:row.media_asset_id,title:row.title,state:row.state,sourceObjectKey:row.source_object_key,ociJobId:row.oci_job_id,ociOutputPrefix:row.oci_output_prefix,r2Prefix:row.r2_prefix,r2MasterManifest:row.r2_master_manifest,durationMinutes:row.duration_minutes===null?null:Number(row.duration_minutes),estimatedCostUsd:row.estimated_cost_usd===null?null:Number(row.estimated_cost_usd),costAcceptedAt:row.cost_accepted_at?toDate(row.cost_accepted_at):null,errorMessage:row.error_message,createdAt:toDate(row.created_at),updatedAt:toDate(row.updated_at)};}
+function moneyText(value:number):string{if(!Number.isFinite(value)||value<0)throw new Error("Estimated media cost must be a finite non-negative amount.");return value.toFixed(2);}
+
+/** D1 media ingest state and estimate persistence; automation remains external and gated. */
+export class D1MediaIngestRepository{
+  private readonly db:D1DatabaseLike;
+  constructor(db:D1DatabaseLike){this.db=db;}
+  async listJobs():Promise<D1MediaIngestJob[]>{const rows=await queryD1Rows<JobRow>(this.db,{sql:"SELECT * FROM media_ingest_jobs ORDER BY created_at DESC LIMIT 100"});return rows.map(mapRow);}
+  async getJob(id:string):Promise<D1MediaIngestJob|null>{const rows=await queryD1Rows<JobRow>(this.db,{sql:"SELECT * FROM media_ingest_jobs WHERE id=? LIMIT 1",params:[id]});return rows[0]?mapRow(rows[0]):null;}
+  async createEstimate(input:{title:string;durationMinutes:number;estimatedCostUsd:number}):Promise<D1MediaIngestJob>{if(!Number.isFinite(input.durationMinutes)||input.durationMinutes<=0)throw new Error("Media duration must be positive.");const id=randomUUID();await executeD1(this.db,{sql:"INSERT INTO media_ingest_jobs(id,title,state,duration_minutes,estimated_cost_usd) VALUES(?,?,'DRAFT',?,?)",params:[id,input.title.trim(),String(input.durationMinutes),moneyText(input.estimatedCostUsd)]});const row=await this.getJob(id);if(!row)throw new Error("Media ingest estimate did not persist.");return row;}
+  async acceptCost(id:string):Promise<D1MediaIngestJob|null>{await executeD1(this.db,{sql:"UPDATE media_ingest_jobs SET cost_accepted_at=COALESCE(cost_accepted_at,strftime('%Y-%m-%dT%H:%M:%fZ','now')),updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",params:[id]});return this.getJob(id);}
+  async updateManualStatus(input:{id:string;state:MediaIngestState;sourceObjectKey?:string|null;ociJobId?:string|null;ociOutputPrefix?:string|null;r2Prefix?:string|null;r2MasterManifest?:string|null;errorMessage?:string|null}):Promise<D1MediaIngestJob|null>{await executeD1(this.db,{sql:`UPDATE media_ingest_jobs SET state=?,source_object_key=COALESCE(?,source_object_key),oci_job_id=COALESCE(?,oci_job_id),oci_output_prefix=COALESCE(?,oci_output_prefix),r2_prefix=COALESCE(?,r2_prefix),r2_master_manifest=COALESCE(?,r2_master_manifest),error_message=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?`,params:[input.state,input.sourceObjectKey??null,input.ociJobId??null,input.ociOutputPrefix??null,input.r2Prefix??null,input.r2MasterManifest??null,input.errorMessage??null,input.id]});return this.getJob(input.id);}
+}

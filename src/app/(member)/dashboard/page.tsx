@@ -8,9 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { getCurrentStudentSession } from "@/features/access/server/current-student";
-import { PostgresLearningRepository } from "@/features/courses/repositories/postgres-learning.repository";
+import { createPostgresLearningRepository } from "@/features/courses/repositories/learning-repository.factory";
 import { StudentLearningService } from "@/features/courses/services/student-learning.service";
-import { PostgresPaidLiveRepository } from "@/features/paid-live/repositories/postgres-paid-live.repository";
+import { createPostgresPaidLiveRepository } from "@/features/paid-live/repositories/paid-live-repository.factory"
 import { resolvePaidLiveState } from "@/features/paid-live/services/paid-live-state.service";
 
 export const dynamic = "force-dynamic";
@@ -20,8 +20,8 @@ export default async function DashboardPage() {
   if (!session) redirect("/login");
 
   const [courses, paidLiveSessions] = await Promise.all([
-    new StudentLearningService(new PostgresLearningRepository()).listMyCourses(session.studentId),
-    new PostgresPaidLiveRepository().listForStudent(session.studentId),
+    new StudentLearningService(createPostgresLearningRepository()).listMyCourses(session.studentId),
+    createPostgresPaidLiveRepository().listForStudent(session.studentId),
   ]);
   const completedCourses = courses.filter(
     (course) => course.enrollmentStatus === "COMPLETED",

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 
-import { getPostgresPool } from "@/lib/postgres";
+import { getPostgresPool } from "../../../lib/postgres.ts";
 import type {
   AccessRepository,
   ActiveCredentialRecord,
@@ -10,12 +10,12 @@ import type {
   CreateSessionInput,
   CreateStudentInput,
   StudentRecord,
-} from "./access.repository";
+} from "./access.repository.ts";
 import type {
   AccessCodeHash,
   ClaimIdentityInput,
   PreauthorizationRecord,
-} from "../types";
+} from "../types.ts";
 
 export class PostgresAccessRepository implements AccessRepository {
   private readonly pool: Pool;

@@ -1,15 +1,15 @@
 import { AppLayout } from "@/components/layout/app-layout";
 import { AdminCourseManager } from "@/features/courses/components/admin/admin-course-manager";
-import { PostgresAdminLearningRepository } from "@/features/courses/repositories/postgres-admin-learning.repository";
+import { createPostgresAdminLearningRepository } from "@/features/courses/repositories/learning-repository.factory";
 import { AdminLearningService } from "@/features/courses/services/admin-learning.service";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminCoursesPage() {
   const [courses, settings] = await Promise.all([
-    new AdminLearningService(new PostgresAdminLearningRepository()).listCourses(),
-    new PostgresSettingsRepository().getPlatformSettings(),
+    new AdminLearningService(createPostgresAdminLearningRepository()).listCourses(),
+    createPostgresSettingsRepository().getPlatformSettings(),
   ]);
 
   return (

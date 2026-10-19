@@ -1,10 +1,10 @@
 import type { Pool } from "pg";
 
-import { normalizeActiveClaimVerificationStrategy } from "@/features/access/domain/claim-verification";
-import { getPostgresPool } from "@/lib/postgres";
-import { DEFAULT_PORTAL_FONT_FAMILY, normalizePortalFontFamily } from "../font-branding";
-import { DEFAULT_PLATFORM_SETTINGS, type PlatformSettings } from "../platform-settings";
-import type { SettingsRepository } from "./settings.repository";
+import { normalizeActiveClaimVerificationStrategy } from "../../access/domain/claim-verification.ts";
+import { getPostgresPool } from "../../../lib/postgres.ts";
+import { DEFAULT_PORTAL_FONT_FAMILY, normalizePortalFontFamily } from "../font-branding.ts";
+import { DEFAULT_PLATFORM_SETTINGS, type PlatformSettings } from "../platform-settings.ts";
+import type { SettingsRepository } from "./settings.repository.ts";
 
 const SETTINGS_ID = "default";
 

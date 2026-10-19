@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
-import { PostgresCertificateRepository } from "@/features/certificates/repositories/postgres-certificate.repository";
+import { createPostgresCertificateRepository } from "@/features/certificates/repositories/certificate-repository.factory";
 import { getConfiguredStorageProvider } from "@/providers/s3-compatible-storage-provider";
 
 function safeCertificateFilename(certificateId: string): string {
@@ -24,7 +24,7 @@ export async function GET(
   }
 
   const { certificateId } = await context.params;
-  const certificate = await new PostgresCertificateRepository().findListItemById(certificateId);
+  const certificate = await createPostgresCertificateRepository().findListItemById(certificateId);
   if (!certificate?.pdfAssetId) {
     return NextResponse.json(
       { ok: false, message: "Certificate PDF is not available." },

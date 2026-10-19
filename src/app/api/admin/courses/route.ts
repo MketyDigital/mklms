@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { PostgresAdminLearningRepository } from "@/features/courses/repositories/postgres-admin-learning.repository";
+import { createPostgresAdminLearningRepository } from "@/features/courses/repositories/learning-repository.factory";
 import { AdminLearningService } from "@/features/courses/services/admin-learning.service";
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
 
@@ -16,7 +16,7 @@ export async function GET() {
     return NextResponse.json({ ok: false }, { status: 401 });
   }
 
-  const service = new AdminLearningService(new PostgresAdminLearningRepository());
+  const service = new AdminLearningService(createPostgresAdminLearningRepository());
   return NextResponse.json({ ok: true, courses: await service.listCourses() });
 }
 
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const service = new AdminLearningService(new PostgresAdminLearningRepository());
+    const service = new AdminLearningService(createPostgresAdminLearningRepository());
     const course = await service.createCourse(parsed.data);
     return NextResponse.json({ ok: true, course }, { status: 201 });
   } catch (error) {

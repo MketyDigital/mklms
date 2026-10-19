@@ -5,7 +5,7 @@ import { getCurrentStudentSession } from "@/features/access/server/current-stude
 import { ensureCourseCertificate } from "@/features/certificates/server/ensure-course-certificate";
 import { getNextDestinationAfterLesson } from "@/features/courses/domain/paid-course-progression";
 import { getPublishedCourseStructure } from "@/features/courses/domain/publication";
-import { PostgresVideoProgressRepository } from "@/features/media/repositories/postgres-video-progress.repository";
+import { createPostgresVideoProgressRepository } from "@/features/media/repositories/media-repository.factory";
 import { VideoProgressService } from "@/features/media/services/video-progress.service";
 import { consumeDistributedRateLimit, rateLimitHeaders } from "@/lib/security/rate-limit";
 
@@ -49,7 +49,7 @@ export async function POST(
     );
   }
 
-  const repository = new PostgresVideoProgressRepository();
+  const repository = createPostgresVideoProgressRepository();
   const service = new VideoProgressService(repository);
   const result = await service.reportProgress({
     grantId: parsed.data.grantId,

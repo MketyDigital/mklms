@@ -134,6 +134,19 @@ export function validateManifest(manifest, { filename, manifestType }) {
 
   if (typeof manifest.r2Bucket !== 'string' || !manifest.r2Bucket) push('r2Bucket', 'is required');
 
+  if (manifest.d1Database !== undefined) {
+    if (!isObject(manifest.d1Database)) {
+      push('d1Database', 'must be an object');
+    } else {
+      if (typeof manifest.d1Database.name !== 'string' || !/^mklms-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(manifest.d1Database.name)) {
+        push('d1Database.name', 'must be an installation-scoped MkLMS D1 database name');
+      }
+      if (typeof manifest.d1Database.id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(manifest.d1Database.id)) {
+        push('d1Database.id', 'must be a D1 database UUID');
+      }
+    }
+  }
+
   if (!isObject(manifest.hyperdrive)) {
     push('hyperdrive', 'is required');
   } else {
@@ -188,6 +201,7 @@ function collectConcreteResources(entry) {
     mediaWorker: [manifest.mediaWorker],
     publicDomain: [manifest.publicDomain],
     r2Bucket: [manifest.r2Bucket],
+    d1DatabaseId: [manifest.d1Database?.id].filter(Boolean),
     billingInstallationId: [manifest.billingInstallationId],
     hyperdriveId: [manifest.hyperdrive?.freshId, manifest.hyperdrive?.cachedId].filter(Boolean),
     rateLimitNamespaceId: REQUIRED_RATE_LIMIT_KEYS.map((key) => manifest.rateLimits?.[key]).filter(Boolean),

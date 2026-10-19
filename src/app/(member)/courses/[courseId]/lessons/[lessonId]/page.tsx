@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/card";
 import { getCurrentStudentSession } from "@/features/access/server/current-student";
 import { CompleteLessonButton } from "@/features/courses/components/complete-lesson-button";
-import { PostgresLearningRepository } from "@/features/courses/repositories/postgres-learning.repository";
+import { createPostgresLearningRepository } from "@/features/courses/repositories/learning-repository.factory";
 import { StudentLearningService } from "@/features/courses/services/student-learning.service";
 import { ProtectedLessonPlayer } from "@/features/media/components/protected-lesson-player";
 
@@ -28,7 +28,7 @@ export default async function LessonPage({
   if (!session) redirect("/login");
 
   const { courseId, lessonId } = await params;
-  const learning = new StudentLearningService(new PostgresLearningRepository());
+  const learning = new StudentLearningService(createPostgresLearningRepository());
   const course = await learning.getCourseView(session.studentId, courseId);
   if (!course) notFound();
 

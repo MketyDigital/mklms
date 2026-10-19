@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
-import { PostgresAdminMediaRepository } from "@/features/media/repositories/postgres-admin-media.repository";
+import { createPostgresAdminMediaRepository } from "@/features/media/repositories/media-repository.factory";
 import { getConfiguredStorageProvider } from "@/providers/s3-compatible-storage-provider";
 
 const registerSchema = z.object({
@@ -53,7 +53,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const cursor = url.searchParams.get("cursor") || undefined;
   const listed = await storage.listObjects({ cursor, limit: 500 });
-  const registeredAssets = await new PostgresAdminMediaRepository().listAssets();
+  const registeredAssets = await createPostgresAdminMediaRepository().listAssets();
   const registered = new Set(
     registeredAssets
       .map((asset) => asset.providerAssetId?.trim())
@@ -95,7 +95,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "Only private MP4 or HLS playlist files can be registered here." }, { status: 400 });
   }
 
-  const repository = new PostgresAdminMediaRepository();
+  const repository = createPostgresAdminMediaRepository();
   const existing = (await repository.listAssets()).find(
     (asset) => asset.providerAssetId === parsed.data.assetId,
   );

@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
 import { isAllowedZoomUrl } from "@/features/paid-live/domain/model";
-import { PostgresPaidLiveRepository } from "@/features/paid-live/repositories/postgres-paid-live.repository";
+import { createPostgresPaidLiveRepository } from "@/features/paid-live/repositories/paid-live-repository.factory"
 
 const schema = z.object({
   title: z.string().trim().min(1).max(200),
@@ -32,7 +32,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ se
   if (!parsed.success) return NextResponse.json({ ok: false, message: "Invalid paid live session details." }, { status: 400 });
   const { sessionId } = await params;
   try {
-    await new PostgresPaidLiveRepository().updateSession(sessionId, {
+    await createPostgresPaidLiveRepository().updateSession(sessionId, {
       title: parsed.data.title,
       description: parsed.data.description,
       deliveryMode: parsed.data.deliveryMode,
@@ -52,7 +52,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (!(await hasValidAdminSession())) return NextResponse.json({ ok: false, message: "Unauthorized." }, { status: 401 });
   const { sessionId } = await params;
   try {
-    await new PostgresPaidLiveRepository().deleteSession(sessionId);
+    await createPostgresPaidLiveRepository().deleteSession(sessionId);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "Could not delete paid live session." }, { status: 409 });

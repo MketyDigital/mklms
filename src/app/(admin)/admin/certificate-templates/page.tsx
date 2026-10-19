@@ -1,16 +1,16 @@
 import { AppLayout } from "@/components/layout/app-layout";
 import { AdminCertificateTemplateManager } from "@/features/certificates/components/admin-certificate-template-manager";
-import { PostgresCertificateTemplateRepository } from "@/features/certificates/repositories/postgres-certificate-template.repository";
-import { PostgresAdminLearningRepository } from "@/features/courses/repositories/postgres-admin-learning.repository";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresCertificateTemplateRepository } from "@/features/certificates/repositories/certificate-repository.factory";
+import { createPostgresAdminLearningRepository } from "@/features/courses/repositories/learning-repository.factory";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminCertificateTemplatesPage() {
   const [templates, courses, settings] = await Promise.all([
-    new PostgresCertificateTemplateRepository().listTemplates(),
-    new PostgresAdminLearningRepository().listCourses(),
-    new PostgresSettingsRepository().getPlatformSettings(),
+    createPostgresCertificateTemplateRepository().listTemplates(),
+    createPostgresAdminLearningRepository().listCourses(),
+    createPostgresSettingsRepository().getPlatformSettings(),
   ]);
 
   return (

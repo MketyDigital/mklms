@@ -10,7 +10,7 @@ import {
   portalFontStack,
 } from "@/features/settings/font-branding";
 import { DEFAULT_PLATFORM_SETTINGS } from "@/features/settings/platform-settings";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 import { getCachedPostgresPool } from "@/lib/postgres";
 
 import "./globals.css";
@@ -22,7 +22,7 @@ const geistSans = Geist({
 
 const getPlatformSettingsSafe = cache(async () => {
   try {
-    return await new PostgresSettingsRepository(
+    return await createPostgresSettingsRepository(
       getCachedPostgresPool(),
     ).getPlatformSettings();
   } catch {

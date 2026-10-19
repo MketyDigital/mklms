@@ -5,7 +5,7 @@ import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { getCurrentStudentSession } from "@/features/access/server/current-student";
-import { PostgresLearningRepository } from "@/features/courses/repositories/postgres-learning.repository";
+import { createPostgresLearningRepository } from "@/features/courses/repositories/learning-repository.factory";
 import { StudentLearningService } from "@/features/courses/services/student-learning.service";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export default async function CourseCatalogPage() {
   const session = await getCurrentStudentSession();
   if (!session) redirect("/login");
 
-  const learning = new StudentLearningService(new PostgresLearningRepository());
+  const learning = new StudentLearningService(createPostgresLearningRepository());
   const courses = await learning.listMyCourses(session.studentId);
 
   return (

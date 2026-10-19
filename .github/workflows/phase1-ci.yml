@@ -2,6 +2,7 @@ name: MkLMS CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
     branches:
       - main
       - architecture/mklms-reusable-platform
@@ -13,6 +14,9 @@ on:
     branches:
       - main
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: mklms-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -44,6 +48,18 @@ jobs:
       - name: Domain tests
         run: npm test
 
+      - name: Verify PostgreSQL to D1 column coverage
+        run: node scripts/d1-column-parity.mjs --require-complete
+
+      - name: Verify PostgreSQL to D1 schema coverage
+        run: node scripts/d1-schema-coverage.mjs --require-complete
+
+      - name: Rehearse all D1 migrations and integrity checks
+        run: node scripts/d1-rehearse-migrations.mjs
+
+      - name: Reject active Supabase references
+        run: node scripts/audit-no-supabase.mjs --strict
+
       - name: Lint
         run: npm run lint
 
@@ -73,3 +89,346 @@ jobs:
 
       - name: External billing Worker packaging dry run
         run: npx wrangler deploy --dry-run --config workers/billing/wrangler.jsonc --outdir .billing-worker-dry-run
+
+  live-readonly-schema-audit:
+    needs: provision-empty-d1-targets
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.number == 149 &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: database-migrations
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Prepare schema audit output directory
+        run: mkdir -p schema-audit-output
+
+      - name: Read Mkety Academy target PostgreSQL catalog (read-only)
+        id: academy-postgres-catalog
+        continue-on-error: true
+        env:
+          MKLMS_SCHEMA_AUDIT_DATABASE_URL: ${{ secrets.MKLMS_DATABASE_URL }}
+          MKLMS_SCHEMA_AUDIT_DATABASE_SSL: ${{ secrets.MKLMS_DATABASE_SSL }}
+          MKLMS_SCHEMA_AUDIT_SCHEMA: mkety_academy
+          MKLMS_DATABASE_SSL_CA: ${{ secrets.MKLMS_DATABASE_SSL_CA }}
+          MKLMS_SCHEMA_AUDIT_ALLOW_UNVERIFIED_TLS: 'true'
+        run: |
+          set -euo pipefail
+          test -n "$MKLMS_SCHEMA_AUDIT_DATABASE_URL" || { echo "Missing database-migrations MKLMS_DATABASE_URL"; exit 1; }
+          test -n "$MKLMS_SCHEMA_AUDIT_DATABASE_SSL" || { echo "Missing database-migrations MKLMS_DATABASE_SSL"; exit 1; }
+          if [ -n "${MKLMS_DATABASE_SSL_CA:-}" ]; then
+            umask 077
+            ca_file=$(mktemp "$RUNNER_TEMP/mklms-postgres-ca.XXXXXX")
+            printf '%s\n' "$MKLMS_DATABASE_SSL_CA" > "$ca_file"
+            export MKLMS_SCHEMA_AUDIT_PG_CA_FILE="$ca_file"
+            trap 'rm -f "$ca_file"' EXIT
+          fi
+          node scripts/export-postgres-schema-catalog.mjs schema-audit-output/postgres-mkety-academy.json
+
+      - name: Read Starpips source PostgreSQL catalog (read-only)
+        id: starpips-postgres-catalog
+        continue-on-error: true
+        env:
+          MKLMS_SCHEMA_AUDIT_DATABASE_URL: ${{ secrets.MKLMS_DATABASE_URL }}
+          MKLMS_SCHEMA_AUDIT_DATABASE_SSL: ${{ secrets.MKLMS_DATABASE_SSL }}
+          MKLMS_SCHEMA_AUDIT_SCHEMA: public
+          MKLMS_DATABASE_SSL_CA: ${{ secrets.MKLMS_DATABASE_SSL_CA }}
+          MKLMS_SCHEMA_AUDIT_ALLOW_UNVERIFIED_TLS: 'true'
+        run: |
+          set -euo pipefail
+          test -n "$MKLMS_SCHEMA_AUDIT_DATABASE_URL" || { echo "Missing database-migrations MKLMS_DATABASE_URL"; exit 1; }
+          test -n "$MKLMS_SCHEMA_AUDIT_DATABASE_SSL" || { echo "Missing database-migrations MKLMS_DATABASE_SSL"; exit 1; }
+          if [ -n "${MKLMS_DATABASE_SSL_CA:-}" ]; then
+            umask 077
+            ca_file=$(mktemp "$RUNNER_TEMP/mklms-postgres-ca.XXXXXX")
+            printf '%s\n' "$MKLMS_DATABASE_SSL_CA" > "$ca_file"
+            export MKLMS_SCHEMA_AUDIT_PG_CA_FILE="$ca_file"
+            trap 'rm -f "$ca_file"' EXIT
+          fi
+          node scripts/export-postgres-schema-catalog.mjs schema-audit-output/postgres-starpips.json
+
+      - name: Confirm PostgreSQL catalog source succeeded
+        if: always()
+        env:
+          ACADEMY_POSTGRES_CATALOG_OUTCOME: ${{ steps.academy-postgres-catalog.outcome }}
+          STARPIPS_POSTGRES_CATALOG_OUTCOME: ${{ steps.starpips-postgres-catalog.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "$ACADEMY_POSTGRES_CATALOG_OUTCOME" = success ]; then
+            test -s schema-audit-output/postgres-mkety-academy.json
+          else
+            echo 'Mkety Academy target PostgreSQL catalog could not be read using the Starpips database secret.'
+            exit 1
+          fi
+          if [ "$STARPIPS_POSTGRES_CATALOG_OUTCOME" != success ]; then
+            echo 'Starpips PostgreSQL source catalog could not be read using MKLMS_DATABASE_URL.'
+            exit 1
+          fi
+          test -s schema-audit-output/postgres-starpips.json
+          echo 'Both installation-specific PostgreSQL source catalogs were captured read-only.'
+
+      - name: Read full Starpips D1 schema catalog (metadata only)
+        id: starpips-catalog
+        if: always()
+        continue-on-error: true
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "Missing CLOUDFLARE_ACCOUNT_ID"; exit 1; }
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "Missing CLOUDFLARE_API_TOKEN"; exit 1; }
+          node scripts/cloudflare-d1-schema-catalog.mjs starpips schema-audit-output/d1-starpips.json
+
+      - name: Read full Mkety Academy D1 schema catalog (metadata only)
+        id: academy-catalog
+        if: always()
+        continue-on-error: true
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "Missing CLOUDFLARE_ACCOUNT_ID"; exit 1; }
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "Missing CLOUDFLARE_API_TOKEN"; exit 1; }
+          node scripts/cloudflare-d1-schema-catalog.mjs mkety-academy schema-audit-output/d1-mkety-academy.json
+
+      - name: Inspect existing application Worker D1 bindings (read-only)
+        if: always()
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          for installation in starpips mkety-academy; do
+            manifest="deploy/installations/${installation}.json"
+            worker=$(jq -r '.appWorker' "$manifest")
+            settings_file=$(mktemp)
+            trap 'rm -f "$settings_file"' EXIT
+            curl --fail-with-body --silent --show-error --request GET \
+              "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${worker}/settings" \
+              --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              --header "Content-Type: application/json" \
+              --output "$settings_file"
+            node scripts/summarize-cloudflare-d1-bindings.mjs "$installation" "$settings_file"
+            rm -f "$settings_file"
+            trap - EXIT
+          done
+
+      - name: Verify all read-only schema snapshots were captured
+        if: always()
+        env:
+          ACADEMY_POSTGRES_CATALOG_OUTCOME: ${{ steps.academy-postgres-catalog.outcome }}
+          STARPIPS_POSTGRES_CATALOG_OUTCOME: ${{ steps.starpips-postgres-catalog.outcome }}
+          STARPIPS_CATALOG_OUTCOME: ${{ steps.starpips-catalog.outcome }}
+          ACADEMY_CATALOG_OUTCOME: ${{ steps.academy-catalog.outcome }}
+        run: |
+          set -euo pipefail
+          test "$ACADEMY_POSTGRES_CATALOG_OUTCOME" = success || { echo "Mkety Academy PostgreSQL target catalog export failed"; exit 1; }
+          test "$STARPIPS_POSTGRES_CATALOG_OUTCOME" = success || { echo "Starpips PostgreSQL source catalog export failed"; exit 1; }
+          test "$STARPIPS_CATALOG_OUTCOME" = success || { echo "Starpips D1 catalog export failed"; exit 1; }
+          test "$ACADEMY_CATALOG_OUTCOME" = success || { echo "Mkety Academy D1 catalog export failed"; exit 1; }
+          test -s schema-audit-output/postgres-mkety-academy.json || { echo "Mkety Academy PostgreSQL schema snapshot is missing"; exit 1; }
+          test -s schema-audit-output/postgres-starpips.json || { echo "Starpips PostgreSQL schema snapshot is missing"; exit 1; }
+          test -s schema-audit-output/d1-starpips.json || { echo "Starpips D1 schema snapshot is missing"; exit 1; }
+          test -s schema-audit-output/d1-mkety-academy.json || { echo "Mkety Academy D1 schema snapshot is missing"; exit 1; }
+
+      - name: Require PostgreSQL parity with each live D1 schema
+        if: always()
+        run: |
+          set -euo pipefail
+          compare_schema() {
+            local installation="$1"
+            local postgres_catalog="$2"
+            local d1_catalog="$3"
+            local summary_file="schema-audit-output/parity-${installation}.json"
+            local report status
+            set +e
+            report=$(node scripts/d1-schema-parity.mjs "$postgres_catalog" "$d1_catalog" --diagnostic-summary --sample-limit=100 --require-complete)
+            status=$?
+            set -e
+            printf '%s\n' "$report" > "$summary_file"
+            node --input-type=module - "$summary_file" "$installation" "$GITHUB_STEP_SUMMARY" <<'NODE'
+          import { readFile, appendFile } from 'node:fs/promises';
+          const [file, installation, summaryPath] = process.argv.slice(2);
+          const report = JSON.parse(await readFile(file, 'utf8'));
+          const rows = Object.keys(report.postgresObjectCounts).map(kind => `| ${kind} | ${report.postgresObjectCounts[kind]} | ${report.d1ObjectCounts[kind]} |`).join('\n');
+          const markdown = `\n### ${installation} PostgreSQL to D1 schema parity\n\n| Object | PostgreSQL | D1 |\n| --- | ---: | ---: |\n${rows}\n\nDifferences: ${report.differenceCount}; unsupported constructs: ${report.unsupportedCount}; complete: ${report.complete}.\n`;
+          await appendFile(summaryPath, markdown);
+          console.log(JSON.stringify({ installation, postgresObjectCounts: report.postgresObjectCounts, d1ObjectCounts: report.d1ObjectCounts, differenceCount: report.differenceCount, differenceCounts: report.differenceCounts, samples: report.samples, unsupported: report.unsupported, complete: report.complete }));
+          NODE
+            return "$status"
+          }
+          failed=0
+          if [ -s schema-audit-output/postgres-starpips.json ] && [ -s schema-audit-output/d1-starpips.json ]; then
+            compare_schema starpips schema-audit-output/postgres-starpips.json schema-audit-output/d1-starpips.json || failed=1
+          else
+            echo 'Starpips PostgreSQL-to-D1 parity report unavailable because one or both schema snapshots are missing.'
+            failed=1
+          fi
+          if [ -s schema-audit-output/postgres-mkety-academy.json ] && [ -s schema-audit-output/d1-mkety-academy.json ]; then
+            compare_schema mkety-academy schema-audit-output/postgres-mkety-academy.json schema-audit-output/d1-mkety-academy.json || failed=1
+          else
+            echo 'Mkety Academy PostgreSQL-to-D1 parity report unavailable because one or both schema snapshots are missing.'
+            failed=1
+          fi
+          exit "$failed"
+
+      - name: Upload read-only schema audit metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: read-only-schema-audit-metadata
+          path: schema-audit-output/
+          if-no-files-found: ignore
+          retention-days: 1
+
+  postgres-schema-isolation-rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mklms_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mklms_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/mklms_test
+      DATABASE_SSL: disable
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Rehearse all PostgreSQL migrations in an isolated schema
+        run: node scripts/postgres-schema-isolation-rehearsal.mjs
+
+  provision-empty-d1-targets:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.number == 149 &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Ensure only the two named empty D1 targets exist
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "Missing CLOUDFLARE_ACCOUNT_ID"; exit 1; }
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "Missing CLOUDFLARE_API_TOKEN"; exit 1; }
+          node scripts/ensure-cloudflare-d1-databases.mjs
+
+      - name: Generate installation-scoped Wrangler configs
+        run: |
+          set -euo pipefail
+          node scripts/generate-installation-config.mjs starpips
+          node scripts/generate-installation-config.mjs mkety-academy
+
+      - name: Apply reviewed schema migrations to the two D1 targets
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          for installation in starpips mkety-academy; do
+            database=$(jq -r '.d1Database.name' "deploy/installations/${installation}.json")
+            config=".generated/${installation}/app.wrangler.jsonc"
+            npx wrangler d1 migrations apply "$database" --remote --config "$config"
+            npx wrangler d1 migrations list "$database" --remote --config "$config"
+          done
+
+      - name: Verify migrated D1 catalogs with counts-only summaries
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          D1_SCHEMA_SUMMARY_COUNTS_ONLY: '1'
+        run: |
+          set -euo pipefail
+          mkdir -p .generated/d1-schema-audit
+          for installation in starpips mkety-academy; do
+            INSTALLATION_ID="$installation" \
+              D1_SCHEMA_REPORT_PATH=".generated/d1-schema-audit/${installation}.json" \
+              node scripts/cloudflare-d1-live-inventory.mjs
+          done
+  apply-academy-schema-to-starpips:
+    if: >-
+      github.event_name == 'pull_request' &&
+      (github.event.action == 'edited' || github.event.action == 'synchronize') &&
+      github.event.pull_request.number == 149 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(github.event.pull_request.body, '<!-- APPLY_MKETY_ACADEMY_SCHEMA_TO_STARPIPS -->')
+    needs:
+      - verify
+      - postgres-schema-isolation-rehearsal
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: database-migrations
+    concurrency:
+      group: mklms-starpips-academy-schema
+      cancel-in-progress: false
+    env:
+      DATABASE_URL: ${{ secrets.MKLMS_DATABASE_URL }}
+      DATABASE_SSL: ${{ secrets.MKLMS_DATABASE_SSL }}
+      MKLMS_DATABASE_SCHEMA: mkety_academy
+    steps:
+      - name: Checkout selected PR commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Apply only the isolated Academy schema migrations to Starpips PostgreSQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$DATABASE_URL" || { echo "Missing MKLMS_DATABASE_URL"; exit 1; }
+          test -n "$DATABASE_SSL" || { echo "Missing MKLMS_DATABASE_SSL"; exit 1; }
+          node scripts/migrate.mjs
+          node scripts/migration-status.mjs
+

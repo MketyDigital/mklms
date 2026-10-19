@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 
-import { getPostgresPool } from "@/lib/postgres";
-import { normalizeIdentity } from "../domain/preauthorization";
+import { getPostgresPool } from "../../../lib/postgres.ts";
+import { normalizeIdentity } from "../domain/preauthorization.ts";
 import type {
   AdminAccessRepository,
   AdminStudentSummary,
@@ -10,9 +10,9 @@ import type {
   CreatePreauthorizationResult,
   StudentAccessStatus,
   UpdatePendingPreauthorizationInput,
-} from "./admin-access.repository";
-import type { ClaimVerificationStrategy } from "../domain/claim-verification";
-import type { AccessCodeHash, PreauthorizationRecord } from "../types";
+} from "./admin-access.repository.ts";
+import type { ClaimVerificationStrategy } from "../domain/claim-verification.ts";
+import type { AccessCodeHash, PreauthorizationRecord } from "../types.ts";
 
 type PreauthorizationRow = {
   id: string;

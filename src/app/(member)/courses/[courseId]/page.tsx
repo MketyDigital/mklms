@@ -21,11 +21,11 @@ import {
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { getCurrentStudentSession } from "@/features/access/server/current-student";
-import { PostgresLearningRepository } from "@/features/courses/repositories/postgres-learning.repository";
+import { createPostgresLearningRepository } from "@/features/courses/repositories/learning-repository.factory";
 import { StudentLearningService } from "@/features/courses/services/student-learning.service";
-import { PostgresPaidLiveRepository } from "@/features/paid-live/repositories/postgres-paid-live.repository";
+import { createPostgresPaidLiveRepository } from "@/features/paid-live/repositories/paid-live-repository.factory"
 import { resolvePaidLiveState } from "@/features/paid-live/services/paid-live-state.service";
-import { PostgresQuizRepository } from "@/features/quizzes/repositories/postgres-quiz.repository";
+import { createPostgresQuizRepository } from "@/features/quizzes/repositories/quiz-repository.factory";
 
 export const dynamic = "force-dynamic";
 
@@ -38,9 +38,9 @@ export default async function CourseDetailPage({
   if (!session) redirect("/login");
 
   const { courseId } = await params;
-  const learning = new StudentLearningService(new PostgresLearningRepository());
-  const quizRepository = new PostgresQuizRepository();
-  const paidLiveRepository = new PostgresPaidLiveRepository();
+  const learning = new StudentLearningService(createPostgresLearningRepository());
+  const quizRepository = createPostgresQuizRepository();
+  const paidLiveRepository = createPostgresPaidLiveRepository();
   const [course, quizzes, paidLiveSessions] = await Promise.all([
     learning.getCourseView(session.studentId, courseId),
     quizRepository.listByCourse(courseId, true),

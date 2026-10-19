@@ -17,8 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      DATABASE_URL: ${{ secrets.STARPIPS_DATABASE_URL }}
-      DATABASE_SSL: ${{ secrets.STARPIPS_DATABASE_SSL }}
+      DATABASE_URL: ${{ secrets.MKLMS_DATABASE_URL }}
+      DATABASE_SSL: ${{ secrets.MKLMS_DATABASE_SSL }}
     steps:
       - name: Checkout release branch
         uses: actions/checkout@v4
@@ -33,11 +33,11 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${DATABASE_URL:-}" ]; then
-            echo "Missing repository secret STARPIPS_DATABASE_URL"
+            echo "Missing repository secret MKLMS_DATABASE_URL"
             exit 1
           fi
           if [ -z "${DATABASE_SSL:-}" ]; then
-            echo "STARPIPS_DATABASE_SSL not set; defaulting to require"
+            echo "MKLMS_DATABASE_SSL not set; defaulting to require"
             echo "DATABASE_SSL=require" >> "$GITHUB_ENV"
           fi
 

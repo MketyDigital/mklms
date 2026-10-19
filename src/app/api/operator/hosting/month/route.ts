@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { PostgresManagedHostingRepository } from "@/features/hosting/repositories/postgres-managed-hosting.repository";
+import { createPostgresManagedHostingRepository } from "@/features/hosting/repositories/hosting-repository.factory";
 import { isValidManagedHostingOperatorKey } from "@/features/hosting/server/hosting-operator-auth";
 import { getBillingMonthKey } from "@/features/hosting/domain/managed-hosting";
 
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(monthKey)) {
     return NextResponse.json({ ok: false, message: "Invalid month." }, { status: 400 });
   }
-  const month = await new PostgresManagedHostingRepository().getMonthOverride(monthKey);
+  const month = await createPostgresManagedHostingRepository().getMonthOverride(monthKey);
   return NextResponse.json({ ok: true, monthKey, month });
 }
 
@@ -36,6 +36,6 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ ok: false, message: "Invalid monthly billing details." }, { status: 400 });
   }
-  const month = await new PostgresManagedHostingRepository().upsertMonthOverride(parsed.data);
+  const month = await createPostgresManagedHostingRepository().upsertMonthOverride(parsed.data);
   return NextResponse.json({ ok: true, month });
 }

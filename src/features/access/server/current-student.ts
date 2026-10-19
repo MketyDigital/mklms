@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 
 import { hashSessionToken } from "../domain/session";
-import { PostgresAccessRepository } from "../repositories/postgres-access.repository";
+import { createPostgresAccessRepository } from "../repositories/access-repository.factory";
 import { STUDENT_SESSION_COOKIE } from "./session-cookie";
 
 export async function getCurrentStudentSession() {
@@ -9,7 +9,7 @@ export async function getCurrentStudentSession() {
   const sessionToken = cookieStore.get(STUDENT_SESSION_COOKIE)?.value;
   if (!sessionToken) return null;
 
-  const repository = new PostgresAccessRepository();
+  const repository = createPostgresAccessRepository();
   return repository.findActiveSessionByTokenHash(
     hashSessionToken(sessionToken).hash,
     new Date(),

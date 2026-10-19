@@ -15,7 +15,7 @@
     "installation:materialize-mkety": "node scripts/materialize-mkety-manifest.mjs",
     "db:status": "node scripts/migration-status.mjs",
     "db:migrate": "node scripts/migrate.mjs",
-    "cf:build": "opennextjs-cloudflare build",
+    "cf:build": "node scripts/prepare-opennext-build.mjs && opennextjs-cloudflare build",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"

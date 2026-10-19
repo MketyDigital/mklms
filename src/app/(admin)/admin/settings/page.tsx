@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SettingsForm } from "@/features/settings/components/settings-form";
 import { getIntegrationStatus } from "@/features/settings/integration-status";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 import { getPostgresPool } from "@/lib/postgres";
 import { hasCloudflareStorageBinding } from "@/providers/s3-compatible-storage-provider";
 
@@ -63,7 +63,7 @@ async function databaseHealth() {
 }
 
 export default async function AdminSettingsPage() {
-  const repository = new PostgresSettingsRepository();
+  const repository = createPostgresSettingsRepository();
   const [settings, dbHealth] = await Promise.all([
     repository.getPlatformSettings(),
     databaseHealth(),

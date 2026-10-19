@@ -5,9 +5,16 @@ export function buildAppWrangler(manifest) {
     main: '.open-next/worker.js',
     compatibility_date: '2026-08-30',
     compatibility_flags: ['nodejs_compat'],
-    build: { command: 'npm run cf:build' },
     assets: { directory: '.open-next/assets', binding: 'ASSETS' },
     observability: { enabled: true },
+    d1_databases: [
+      {
+        binding: 'D1_DATABASE',
+        database_name: manifest.d1Database.name,
+        database_id: manifest.d1Database.id,
+        migrations_dir: 'db/d1-migrations',
+      },
+    ],
     hyperdrive: [
       { binding: 'HYPERDRIVE_FRESH', id: manifest.hyperdrive.freshId },
       { binding: 'HYPERDRIVE_CACHED', id: manifest.hyperdrive.cachedId },

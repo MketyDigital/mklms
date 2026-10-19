@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
 import { getManagedHostingServiceAccess } from "@/features/hosting/server/managed-hosting-access";
-import { PostgresAdminMediaRepository } from "@/features/media/repositories/postgres-admin-media.repository";
+import { createPostgresAdminMediaRepository } from "@/features/media/repositories/media-repository.factory";
 import { verifyDirectR2Object } from "@/features/media/server/r2-direct-upload";
 import { consumeDistributedRateLimit, getRequestClientKey, rateLimitHeaders } from "@/lib/security/rate-limit";
 
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     if (parsed.data.sizeBytes && verified.contentLength !== parsed.data.sizeBytes) {
       throw new Error("The uploaded R2 object size does not match the selected video. Please retry the upload.");
     }
-    const asset = await new PostgresAdminMediaRepository().createAsset({
+    const asset = await createPostgresAdminMediaRepository().createAsset({
       title: parsed.data.title,
       provider: "private-storage",
       sourceType: "DIRECT",

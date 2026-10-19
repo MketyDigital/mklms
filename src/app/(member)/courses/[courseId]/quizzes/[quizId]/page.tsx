@@ -6,10 +6,10 @@ import { AppLayout } from "@/components/layout/app-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentStudentSession } from "@/features/access/server/current-student";
-import { PostgresLearningRepository } from "@/features/courses/repositories/postgres-learning.repository";
+import { createPostgresLearningRepository } from "@/features/courses/repositories/learning-repository.factory";
 import { StudentLearningService } from "@/features/courses/services/student-learning.service";
 import { StudentQuiz } from "@/features/quizzes/components/student-quiz";
-import { PostgresQuizRepository } from "@/features/quizzes/repositories/postgres-quiz.repository";
+import { createPostgresQuizRepository } from "@/features/quizzes/repositories/quiz-repository.factory";
 
 export const dynamic = "force-dynamic";
 
@@ -23,8 +23,8 @@ export default async function StudentQuizPage({
   const { courseId, quizId } = await params;
 
   const [course, quiz] = await Promise.all([
-    new StudentLearningService(new PostgresLearningRepository()).getCourseView(session.studentId, courseId),
-    new PostgresQuizRepository().getQuiz(quizId),
+    new StudentLearningService(createPostgresLearningRepository()).getCourseView(session.studentId, courseId),
+    createPostgresQuizRepository().getQuiz(quizId),
   ]);
   if (!course || !quiz || quiz.courseId !== courseId || quiz.status !== "PUBLISHED") notFound();
 

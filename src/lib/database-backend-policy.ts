@@ -1,18 +1,14 @@
 /**
  * Installation-scoped database selection policy.
  *
- * This module is deliberately not wired to production query handling.
- * A D1 rollout requires a complete SQLite adapter, schema migration,
- * consistent source-data copy and a verified restore/rollback procedure.
+ * D1 is deliberately disabled here. Boolean readiness claims are not evidence
+ * of a live, fenced authority lease, durable replication or a tested rollback.
+ * Keep PostgreSQL selected until a runtime verifier can validate those proofs.
  */
 export type DatabaseBackend = "postgresql" | "d1";
 
 export type DatabaseBackendConfig = {
   backend?: string | null;
-  d1BindingPresent: boolean;
-  schemaReady: boolean;
-  reconciliationPassed: boolean;
-  cutoverApproved: boolean;
 };
 
 export function resolveDatabaseBackend(config: DatabaseBackendConfig): DatabaseBackend {
@@ -21,15 +17,7 @@ export function resolveDatabaseBackend(config: DatabaseBackendConfig): DatabaseB
   if (backend !== "d1") {
     throw new Error(`Unsupported MkLMS database backend: ${backend}`);
   }
-  if (
-    !config.d1BindingPresent ||
-    !config.schemaReady ||
-    !config.reconciliationPassed ||
-    !config.cutoverApproved
-  ) {
-    throw new Error(
-      "D1 is blocked: binding, schema, full reconciliation and cutover approval are required.",
-    );
-  }
-  return "d1";
+  throw new Error(
+    "D1 is unavailable: production authority verification is not implemented.",
+  );
 }

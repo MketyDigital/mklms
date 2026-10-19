@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
-import { PostgresQuizRepository } from "@/features/quizzes/repositories/postgres-quiz.repository";
+import { createPostgresQuizRepository } from "@/features/quizzes/repositories/quiz-repository.factory";
 
 const schema = z.object({
   prompt: z.string().trim().min(1).max(2000),
@@ -18,7 +18,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ qui
   }
   const { quizId } = await params;
   try {
-    const questionId = await new PostgresQuizRepository().addQuestion({ quizId, ...parsed.data });
+    const questionId = await createPostgresQuizRepository().addQuestion({ quizId, ...parsed.data });
     return NextResponse.json({ ok: true, questionId }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "Could not add question." }, { status: 400 });

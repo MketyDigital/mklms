@@ -1,8 +1,8 @@
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 import { getConfiguredEmailProvider } from "@/providers/smtp-email-provider";
 import { getConfiguredStorageProvider } from "@/providers/s3-compatible-storage-provider";
 import { PdfLibCertificateRenderer } from "../providers/pdf-lib-certificate-renderer";
-import { PostgresCertificateRepository } from "../repositories/postgres-certificate.repository";
+import { createPostgresCertificateRepository } from "../repositories/certificate-repository.factory";
 import { CertificateDeliveryService } from "../services/certificate-delivery.service";
 import { CertificateIssuanceService } from "../services/certificate-issuance.service";
 
@@ -25,8 +25,8 @@ export async function ensureCourseCertificate(
   studentId: string,
   courseId: string,
 ): Promise<EnsureCourseCertificateResult> {
-  const repository = new PostgresCertificateRepository();
-  const settings = await new PostgresSettingsRepository().getPlatformSettings();
+  const repository = createPostgresCertificateRepository();
+  const settings = await createPostgresSettingsRepository().getPlatformSettings();
   const issuance = new CertificateIssuanceService(repository, {
     certificatePrefix: settings.certificatePrefix,
   });

@@ -19,8 +19,8 @@ jobs:
     timeout-minutes: 15
     env:
       PRODUCTION_BRANCH: production/starpips
-      DATABASE_URL: ${{ secrets.STARPIPS_DATABASE_URL }}
-      DATABASE_SSL: ${{ secrets.STARPIPS_DATABASE_SSL }}
+      DATABASE_URL: ${{ secrets.MKLMS_DATABASE_URL }}
+      DATABASE_SSL: ${{ secrets.MKLMS_DATABASE_SSL }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout exact Starpips production pointer
@@ -78,7 +78,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${DATABASE_URL:-}" || { echo "Missing repository secret STARPIPS_DATABASE_URL"; exit 1; }
+          test -n "${DATABASE_URL:-}" || { echo "Missing repository secret MKLMS_DATABASE_URL"; exit 1; }
           git fetch origin "$PRODUCTION_BRANCH:refs/remotes/origin/$PRODUCTION_BRANCH" --force
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(git rev-parse "origin/$PRODUCTION_BRANCH")" = "$GITHUB_SHA" || {
@@ -92,20 +92,23 @@ jobs:
           018_certificate_visual_layout_and_starpips_calibration.sql
           019_managed_hosting_daily_ledger.sql
           020_managed_hosting_payment_settlement.sql
+          021_shared_enrollment_id_encoding.sql
 
-      - name: Apply only guarded additive Starpips migrations 018 through 020 when pending
+      - name: Apply only guarded additive Starpips migrations 018 through 021 when pending
         run: >-
           node scripts/starpips-migration-guard.mjs apply
           018_certificate_visual_layout_and_starpips_calibration.sql
           019_managed_hosting_daily_ledger.sql
           020_managed_hosting_payment_settlement.sql
+          021_shared_enrollment_id_encoding.sql
 
-      - name: Verify Starpips migrations 018 through 020 are current
+      - name: Verify Starpips migrations 018 through 021 are current
         run: >-
           node scripts/starpips-migration-guard.mjs verify
           018_certificate_visual_layout_and_starpips_calibration.sql
           019_managed_hosting_daily_ledger.sql
           020_managed_hosting_payment_settlement.sql
+          021_shared_enrollment_id_encoding.sql
 
   release:
     needs: migrate

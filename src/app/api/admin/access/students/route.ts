@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { PostgresAdminAccessRepository } from "@/features/access/repositories/postgres-admin-access.repository";
+import { createPostgresAdminAccessRepository } from "@/features/access/repositories/access-repository.factory";
 import { hasValidAdminSession } from "@/features/admin/server/admin-auth";
 
 export async function GET() {
@@ -8,7 +8,7 @@ export async function GET() {
     return NextResponse.json({ ok: false }, { status: 401 });
   }
 
-  const repository = new PostgresAdminAccessRepository();
+  const repository = createPostgresAdminAccessRepository();
   return NextResponse.json({
     ok: true,
     students: await repository.listStudents(250),

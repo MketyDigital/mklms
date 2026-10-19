@@ -35,7 +35,7 @@ Generate separate values for the admin access key, admin session secret, media s
 
 ## 2. Authentication: no external auth service is required
 
-MkLMS includes its own server-side authentication/access system. **No external auth provider is required for production sign-in.** Supabase Auth, Clerk, Auth0, Firebase Auth, Google login, and similar products are optional future replacements/adapters, not launch dependencies.
+MkLMS includes its own server-side authentication/access system. **No external auth provider is required for production sign-in.** External identity providers are optional future adapters, not launch dependencies.
 
 ### Administrator
 
@@ -179,7 +179,7 @@ The main application, video delivery service, and billing service do not have to
 
 ## 8. Self-hosted PostgreSQL
 
-Supabase is not mandatory. Any compatible PostgreSQL deployment can be used through a standard URL such as:
+Any approved PostgreSQL deployment can be used through a standard URL such as:
 
 ```text
 postgresql://USER:PASSWORD@DB_HOST:5432/mklms

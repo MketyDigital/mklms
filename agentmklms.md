@@ -30,7 +30,7 @@
 21. A media ingest job cannot move to TRANSCODING until cost is accepted, and cannot become READY without an R2 master manifest.
 22. Future automation should be: direct OCI upload → Object Create event → Oracle Media Workflow Job Spawner → one Media Flow job → completion event → OCI-side R2 publisher → verification → MkLMS READY callback/status.
 23. Automatic paid OCI→R2 orchestration remains OFF/DEFERRED until a tiny paid end-to-end smoke test succeeds in the target OCI tenancy/region.
-24. PostgreSQL is a database engine, not a vendor. Supabase/self-hosted/managed PostgreSQL remain valid.
+24. PostgreSQL is a database engine, not a vendor. Use the approved installation-scoped PostgreSQL service; do not add provider-specific runtime dependencies.
 25. Database migrations are release operations, not Vercel/Cloudflare/OCI web-build steps.
 26. Preferred migration operation is GitHub Actions → `Run MkLMS DB migrations` → type `MIGRATE`; it reads `MKLMS_DATABASE_URL`, applies only pending migrations and verifies status. Manual `db:status`/`db:migrate` remains a fallback.
 27. `_mklms_migrations` stores filename/checksum/applied time. Never edit an applied SQL migration; add a new numbered migration.

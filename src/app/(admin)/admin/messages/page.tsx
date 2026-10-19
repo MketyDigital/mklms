@@ -1,16 +1,16 @@
 import { AppLayout } from "@/components/layout/app-layout";
 import { AdminMessagePanel } from "@/features/messages/components/admin/admin-message-panel";
-import { PostgresMessageRepository } from "@/features/messages/repositories/postgres-message.repository";
-import { PostgresSettingsRepository } from "@/features/settings/repositories/postgres-settings.repository";
+import { createPostgresMessageRepository } from "@/features/messages/repositories/message-repository.factory";
+import { createPostgresSettingsRepository } from "@/features/settings/repositories/settings-repository.factory";
 import type { Thread } from "@/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminMessagesPage() {
-  const repository = new PostgresMessageRepository();
+  const repository = createPostgresMessageRepository();
   const [records, settings] = await Promise.all([
     repository.listThreads(),
-    new PostgresSettingsRepository().getPlatformSettings(),
+    createPostgresSettingsRepository().getPlatformSettings(),
   ]);
 
   const threads: Thread[] = records.map((thread) => ({

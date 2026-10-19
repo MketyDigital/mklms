@@ -12,10 +12,10 @@ jobs:
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      MKETY_DB_HOST: db.vdblajgxrfndjesoyayy.supabase.co
-      MKETY_DB_PORT: 5432
-      MKETY_DB_NAME: postgres
-      MKETY_DB_USER: mkety_academy_app
+      MKETY_DB_HOST: ${{ secrets.MKETY_DB_HOST }}
+      MKETY_DB_PORT: ${{ secrets.MKETY_DB_PORT }}
+      MKETY_DB_NAME: ${{ secrets.MKETY_DB_NAME }}
+      MKETY_DB_USER: ${{ secrets.MKETY_DB_USER }}
       MKETY_DB_PASSWORD: ${{ secrets.MKETY_DB_PASSWORD }}
       DATABASE_SSL: require
       MKETY_ADMIN_ACCESS_KEY: ${{ secrets.MKETY_ADMIN_ACCESS_KEY }}
@@ -46,7 +46,7 @@ jobs:
             echo "Concrete deploy/installations/mkety-academy.json is required before deployment."
             exit 1
           }
-          for name in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN MKETY_DB_PASSWORD MKETY_ADMIN_ACCESS_KEY MKETY_ADMIN_SESSION_SECRET MKETY_MEDIA_SIGNING_SECRET; do
+          for name in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN MKETY_DB_HOST MKETY_DB_PORT MKETY_DB_NAME MKETY_DB_USER MKETY_DB_PASSWORD MKETY_ADMIN_ACCESS_KEY MKETY_ADMIN_SESSION_SECRET MKETY_MEDIA_SIGNING_SECRET; do
             if [ -z "${!name:-}" ]; then echo "Missing required Mkety deployment secret: $name"; exit 1; fi
           done
           node --input-type=module <<'NODE'
@@ -62,11 +62,28 @@ jobs:
           if (errors.length) throw new Error(errors.join('\n'));
           NODE
 
+      - name: Verify both Hyperdrive origins match the approved target
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mapfile -t ids < <(jq -r '.hyperdrive.freshId, .hyperdrive.cachedId' deploy/installations/mkety-academy.json)
+          test -n "${ids[0]}" && test -n "${ids[1]}" && test "${ids[0]}" != "${ids[1]}"
+          response=$(mktemp)
+          trap 'rm -f "$response"' EXIT
+          for id in "${ids[@]}"; do
+            status=$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/hyperdrive/configs/$id" \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+            test "$status" = "200" || { echo "Unable to verify Mkety Hyperdrive origin; deployment blocked."; exit 1; }
+            HYPERDRIVE_ORIGIN_JSON_PATH="$response" node scripts/assert-hyperdrive-origin.mjs
+          done
+
       - name: Confirm Mkety database migration ownership
         shell: bash
         run: |
           set -euo pipefail
-          echo "Mkety database schema is pre-migrated and audited via Supabase; preview deployment does not mutate PostgreSQL."
+          echo "Database schema changes are operator-managed; this preview workflow does not mutate PostgreSQL."
 
       - name: Construct Mkety application DATABASE_URL
         shell: bash

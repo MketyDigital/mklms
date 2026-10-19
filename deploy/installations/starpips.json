@@ -12,6 +12,10 @@
     "platformId": "mkety-saas"
   },
   "r2Bucket": "spf-media",
+  "d1Database": {
+    "name": "mklms-starpips",
+    "id": "cce87337-bcb7-42a2-8e19-358b91b5289a"
+  },
   "hyperdrive": {
     "freshId": "bb7c9f70c2fe402080c22e06d0c0f305",
     "cachedId": "14a4baf3773d41c88e4600967ab3b68d"

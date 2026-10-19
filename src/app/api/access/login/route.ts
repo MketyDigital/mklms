@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { PostgresAccessRepository } from "@/features/access/repositories/postgres-access.repository";
+import { createPostgresAccessRepository } from "@/features/access/repositories/access-repository.factory";
 import { AccessLoginService } from "@/features/access/services/access-login.service";
 import { getStudentSessionCookieOptions, STUDENT_SESSION_COOKIE } from "@/features/access/server/session-cookie";
 import {
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   if (!parsed.success) return NextResponse.json({ ok: false, message: "We could not sign you in with that access code." }, { status: 400 });
 
   try {
-    const service = new AccessLoginService(new PostgresAccessRepository(), {
+    const service = new AccessLoginService(createPostgresAccessRepository(), {
       sessionTtlSeconds: Number(process.env.MKLMS_STUDENT_SESSION_TTL_SECONDS ?? 1209600),
     });
     const result = await service.login(parsed.data.accessCode);

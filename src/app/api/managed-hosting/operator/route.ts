@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { PostgresManagedHostingLedgerRepository } from "@/features/hosting/repositories/postgres-managed-hosting-ledger.repository";
-import { PostgresManagedHostingRepository } from "@/features/hosting/repositories/postgres-managed-hosting.repository";
+import { createPostgresManagedHostingLedgerRepository } from "@/features/hosting/repositories/hosting-repository.factory"
+import { createPostgresManagedHostingRepository } from "@/features/hosting/repositories/hosting-repository.factory";
 import {
   canonicalBillingSettlementPayload,
   isFreshBillingTimestamp,
@@ -38,8 +38,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "Unauthorized operator command." }, { status: 401 });
   }
 
-  const repository = new PostgresManagedHostingRepository();
-  const ledger = new PostgresManagedHostingLedgerRepository();
+  const repository = createPostgresManagedHostingRepository();
+  const ledger = createPostgresManagedHostingLedgerRepository();
 
   if (parsed.data.action === "getPolicy") {
     const [stored, effective] = await Promise.all([

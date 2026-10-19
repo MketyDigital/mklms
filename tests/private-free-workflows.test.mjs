@@ -5,16 +5,17 @@ import { readFileSync } from 'node:fs';
 test('Starpips release does not depend on environment-scoped secrets', () => {
   const workflow = readFileSync('.github/workflows/release-starpips-production.yml', 'utf8');
   assert.doesNotMatch(workflow, /^\s*environment:\s*(database-migrations|starpips)\s*$/m);
-  assert.match(workflow, /secrets\.STARPIPS_DATABASE_URL/);
-  assert.match(workflow, /secrets\.STARPIPS_DATABASE_SSL/);
-  assert.doesNotMatch(workflow, /secrets\.MKLMS_DATABASE_URL/);
+  assert.match(workflow, /secrets\.MKLMS_DATABASE_URL/);
+  assert.match(workflow, /secrets\.MKLMS_DATABASE_SSL/);
+  assert.doesNotMatch(workflow, /secrets\.STARPIPS_DATABASE_URL|secrets\.STARPIPS_DATABASE_SSL/);
 });
 
 test('manual database migration workflow is explicitly Starpips-scoped on Free private', () => {
   const workflow = readFileSync('.github/workflows/run-db-migrations.yml', 'utf8');
   assert.doesNotMatch(workflow, /^\s*environment:\s*database-migrations\s*$/m);
-  assert.match(workflow, /secrets\.STARPIPS_DATABASE_URL/);
-  assert.match(workflow, /secrets\.STARPIPS_DATABASE_SSL/);
+  assert.match(workflow, /secrets\.MKLMS_DATABASE_URL/);
+  assert.match(workflow, /secrets\.MKLMS_DATABASE_SSL/);
+  assert.doesNotMatch(workflow, /secrets\.STARPIPS_DATABASE_URL|secrets\.STARPIPS_DATABASE_SSL/);
 });
 
 test('Mkety generic deploy workflows receive secrets from installation wrappers', () => {
@@ -55,7 +56,13 @@ test('private Free readiness workflow verifies required repository secrets witho
   for (const name of [
     'CLOUDFLARE_ACCOUNT_ID',
     'CLOUDFLARE_API_TOKEN',
-    'STARPIPS_DATABASE_URL',
+    'MKLMS_DATABASE_URL',
+    'MKLMS_DATABASE_SSL',
+    'MKETY_DB_HOST',
+    'MKETY_DB_PORT',
+    'MKETY_DB_NAME',
+    'MKETY_DB_USER',
+    'MKETY_DB_PASSWORD',
     'MKETY_ADMIN_ACCESS_KEY',
     'MKETY_ADMIN_SESSION_SECRET',
     'MKETY_MEDIA_SIGNING_SECRET',
@@ -66,15 +73,11 @@ test('private Free readiness workflow verifies required repository secrets witho
   assert.doesNotMatch(workflow, /echo\s+.*\$\{\{\s*secrets\./);
 });
 
-test('public-only readiness job proves copied Starpips repo secrets equal the old environment secrets', () => {
+test('readiness checks the confirmed Starpips secret names without copying credentials', () => {
   const workflow = readFileSync('.github/workflows/private-free-readiness.yml', 'utf8');
-  assert.match(workflow, /environment:\s*database-migrations/);
   assert.match(workflow, /secrets\.MKLMS_DATABASE_URL/);
   assert.match(workflow, /secrets\.MKLMS_DATABASE_SSL/);
-  assert.match(workflow, /secrets\.STARPIPS_DATABASE_URL/);
-  assert.match(workflow, /secrets\.STARPIPS_DATABASE_SSL/);
-  assert.match(workflow, /github\.event\.repository\.private\s*==\s*false/);
-  assert.match(workflow, /OLD_DATABASE_URL.*NEW_DATABASE_URL/s);
+  assert.doesNotMatch(workflow, /STARPIPS_DATABASE_URL|STARPIPS_DATABASE_SSL|OLD_DATABASE_URL|NEW_DATABASE_URL/);
 });
 
 test('PR CI cancels superseded runs to preserve private-repo Actions minutes', () => {
@@ -89,6 +92,6 @@ test('private Free operations guide records CodeQL and Actions-plan tradeoffs', 
   assert.match(guide, /private/i);
   assert.match(guide, /CodeQL/i);
   assert.match(guide, /Actions minutes/i);
-  assert.match(guide, /STARPIPS_DATABASE_URL/);
+  assert.match(guide, /MKLMS_DATABASE_URL/);
   assert.match(guide, /customers\.mkety\.com/);
 });
