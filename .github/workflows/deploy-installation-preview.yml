@@ -38,7 +38,6 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-24.04
-    environment: ${{ inputs.installation_id }}
     env:
       INSTALLATION_ID: ${{ inputs.installation_id }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
