@@ -9,7 +9,7 @@ function read(path) {
 test('live player renews authorization without jumping an active viewer backward or to a new live offset', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
 
-  assert.match(source, /sameLoadedMedia\s*&&\s*currentVideo/);
+  assert.match(source, /sameLoadedMedia\s*&&\s*!forceLiveEdge\s*&&\s*currentVideo/);
   assert.match(source, /targetVideo\.currentTime\s*=\s*currentVideo\.currentTime/);
   assert.match(source, /currentVideo\.currentTime - targetVideo\.currentTime > 0\.75/);
   assert.match(source, /preservedPosition/);
@@ -133,8 +133,8 @@ test('returning to a healthy visible live player does not mute or rebuild it unn
   assert.match(refresh, /video\.paused/);
   assert.match(refresh, /video\.readyState < HTMLMediaElement\.HAVE_FUTURE_DATA/);
   assert.doesNotMatch(refresh, /video\.currentTime < expectedSeconds/);
-  assert.doesNotMatch(refresh, /shouldCorrectBroadcastPosition/);
-  assert.match(refresh, /if \(!needsRecovery\)[\s\S]*forceLiveEdgeOnNextAuthorizationRef\.current = false[\s\S]*setActivePlaybackBlocked\(false\)[\s\S]*return/);
+  assert.match(refresh, /shouldCorrectBroadcastPosition/);
+  assert.match(refresh, /if \(!needsRecovery && !behindLive\)[\s\S]*forceLiveEdgeOnNextAuthorizationRef\.current = false[\s\S]*setActivePlaybackBlocked\(false\)[\s\S]*return/);
   assert.doesNotMatch(refresh, /setMuted\(true\)/);
   assert.doesNotMatch(refresh, /video\.muted = true/);
 });
@@ -273,19 +273,19 @@ test('HLS uses conservative adaptive buffering and local fatal recovery before a
 test('staged chat follows the actual media position when playback falls behind the live wall clock', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
 
-  assert.match(source, /const currentPlaybackOffsetSeconds = playedOffsetSeconds/);
-  assert.match(source, /loadedMediaSessionRef\.current === active/);
-  assert.match(source, /Math\.min\(currentLiveOffsetSeconds, playedOffsetSeconds\)/);
+  assert.match(source, /const currentPlaybackOffsetSeconds = currentLiveOffsetSeconds/);
+  assert.match(source, /const currentPlaybackOffsetSeconds = currentLiveOffsetSeconds/);
+  assert.doesNotMatch(source, /setPlayedOffsetSeconds/);
   assert.match(source, /getNewTimelineMessages\([\s\S]*currentPlaybackOffsetSeconds/);
   assert.match(source, /getInitialTimelineMessages\([\s\S]*currentPlaybackOffsetSeconds/);
 });
 
 test('large DIRECT MP4 recovery preserves played position even when forced and samples chat only in an effect', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
-  assert.match(source, /sameLoadedMedia\s*&&\s*currentVideo\s*&&\s*Number\.isFinite\(currentVideo\.currentTime\)/);
+  assert.match(source, /sameLoadedMedia\s*&&\s*!forceLiveEdge\s*&&\s*currentVideo\s*&&\s*Number\.isFinite\(currentVideo\.currentTime\)/);
   assert.match(source, /targetVideo\.currentTime = currentVideo\.currentTime/);
-  assert.match(source, /const \[playedOffsetSeconds, setPlayedOffsetSeconds\] = useState/);
-  assert.match(source, /setPlayedOffsetSeconds\(/);
+  assert.match(source, /const currentPlaybackOffsetSeconds = currentLiveOffsetSeconds/);
+  assert.match(source, /correctPosition\(targetVideo\)/);
   assert.match(source, /lastForcedRecoveryAtRef\.current = recoveryNow/);
   const begin = source.indexOf('const currentPlaybackOffsetSeconds =');
   const end = source.indexOf('const timelineSource =', begin);
@@ -298,14 +298,14 @@ test('healthy DIRECT playback ignores browser native seek and foreground wall-cl
   const seekingEnd = source.indexOf('const scheduleStallRecovery =', seekingStart);
   const seeking = source.slice(seekingStart, seekingEnd);
 
-  assert.match(seeking, /playbackType === "DIRECT"/);
-  assert.match(seeking, /loadedMediaSessionRef\.current === playbackRef\.current\?\.sessionId/);
+  assert.match(seeking, /shouldCorrectBroadcastPosition/);
+  assert.match(seeking, /video\.currentTime = target/);
   assert.match(seeking, /const target = expectedPosition\(\)/);
 
   const foregroundStart = source.indexOf('const refreshVisiblePlayback =');
   const foregroundEnd = source.indexOf('const onVisibilityChange =', foregroundStart);
   const foreground = source.slice(foregroundStart, foregroundEnd);
-  assert.doesNotMatch(foreground, /shouldCorrectBroadcastPosition/);
+  assert.match(foreground, /shouldCorrectBroadcastPosition/);
 });
 
 test('visibility return and playback errors explicitly rejoin the authoritative live edge', () => {
