@@ -320,12 +320,14 @@ export function AdminLiveClassManager({
       const firstMessageAtSeconds = firstMessageAtMinutesRaw
         ? Math.round(Number(firstMessageAtMinutesRaw) * 60)
         : null;
+      const recordingStartAtLocal = String(formData.get("recordingStartAtLocal") ?? "").trim() || null;
       const result = await postAction({
         action: "importTimeline",
         sessionId,
         format,
         content: String(formData.get("timeline") ?? ""),
         firstMessageAtSeconds,
+        recordingStartAtLocal,
       });
       setMessage(
         `Parsed ${result.imported ?? 0} synchronized chat message(s). Confirmed stored ${result.stored ?? 0} in the database${
@@ -590,7 +592,7 @@ export function AdminLiveClassManager({
                                 if (textarea) textarea.value = content;
                                 const format = document.getElementById(`timeline-format-${session.id}`) as HTMLSelectElement | null;
                                 if (format) format.value = file.name.toLowerCase().endsWith(".csv") ? "csv" : "text";
-                                setMessage(`Loaded ${file.name}. Review the optional sync calibration, then click Import chat.`);
+                                setMessage(`Loaded ${file.name}. Add the Zoom recording start time for automatic synchronization, or use the optional manual calibration, then click Import chat.`);
                               }).catch(() => setMessage("The selected chat file could not be read."));
                             }}
                           />
@@ -601,7 +603,17 @@ export function AdminLiveClassManager({
                             <option value="csv">CSV</option>
                           </select>
                         </Field>
-                        <Field label="First imported message appears at video minute (optional)">
+                        <Field label="Zoom recording start date and time (optional)">
+                          <Input
+                            name="recordingStartAtLocal"
+                            type="datetime-local"
+                            step="1"
+                          />
+                        </Field>
+                        <p className="text-xs text-muted-foreground">
+                          Use the exact Start time shown for this computer recording in Zoom. The chat timestamps will be placed relative to it; the folder date and time can be used when it matches Zoom’s Start time. Leave this blank to use the existing import behavior.
+                        </p>
+                        <Field label="First imported message appears at video minute (manual fallback)">
                           <Input
                             name="firstMessageAtMinutes"
                             type="number"
@@ -611,7 +623,7 @@ export function AdminLiveClassManager({
                           />
                         </Field>
                         <p className="text-xs text-muted-foreground">
-                          For wall-clock Zoom timestamps, enter where the first chat message occurs in the video if it is not at the beginning. Example: 10 means the first imported chat appears at 10:00 in the video while all later message gaps stay synchronized.
+                          Use this only when you do not have the recording start date and time. Example: 10 means the first imported chat appears at 10:00 in the video while later message gaps stay synchronized. Do not fill both sync fields.
                         </p>
                         <Field label="Chat export / timeline text">
                           <Textarea id={`timeline-${session.id}`} name="timeline" rows={8} placeholder="00:00:10 From Ada to Everyone: Good evening" />
