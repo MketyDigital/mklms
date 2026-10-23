@@ -230,7 +230,13 @@ export class AdminLiveClassService {
     if (session && items.length > 0) {
       const maxOffset = Math.max(...items.map((item) => item.offsetSeconds));
       if (maxOffset > session.durationSeconds) {
-        if (input.format === "text" && looksLikeZoomChatExport(input.content)) {
+        if (recordingStartAtLocal) {
+          items = [];
+          errors.push({
+            line: 0,
+            message: "Synced Zoom chat falls outside the selected session duration. Verify the exact recording start time and chat timestamps.",
+          });
+        } else if (input.format === "text" && looksLikeZoomChatExport(input.content)) {
           const rebased = rebaseZoomClockItems(items);
           const rebasedMax = Math.max(...rebased.map((item) => item.offsetSeconds));
           if (rebasedMax <= session.durationSeconds) {

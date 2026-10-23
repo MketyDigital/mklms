@@ -192,7 +192,6 @@ export function LiveClassRoomMobileFirst({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(0);
-  const [playedOffsetSeconds, setPlayedOffsetSeconds] = useState<number | null>(null);
   const [muted, setMuted] = useState(true);
   const [needsPlaybackGesture, setNeedsPlaybackGesture] = useState(false);
   const [activePlaybackBlocked, setActivePlaybackBlocked] = useState(false);
@@ -478,16 +477,6 @@ export function LiveClassRoomMobileFirst({
     }, 0);
     const clock = window.setInterval(() => {
       setNowMs(synchronizedNowMs());
-      const video = currentAudioVideo();
-      const active = roomStateRef.current?.session?.id;
-      setPlayedOffsetSeconds(
-        active &&
-        loadedMediaSessionRef.current === active &&
-        video &&
-        Number.isFinite(video.currentTime)
-          ? Math.max(0, video.currentTime)
-          : null,
-      );
     }, 1_000);
     const safetyRefresh = window.setInterval(
       () => void fetchState().catch(() => undefined),
@@ -506,13 +495,27 @@ export function LiveClassRoomMobileFirst({
           !video ||
           video.paused ||
           video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA;
+        // Foreground recovery must rejoin a real broadcast if a browser kept
+        // playing stale buffered frames while the scheduled clock advanced.
+        const behindLive =
+          video &&
+          playbackRef.current?.sessionId === currentState.session?.id &&
+          shouldCorrectBroadcastPosition({
+            currentSeconds: video.currentTime,
+            expectedSeconds: resolveBroadcastPosition({
+              liveOffsetSeconds: currentState.liveOffsetSeconds ?? 0,
+              serverNow: new Date(currentState.serverNow),
+              clientNow: new Date(synchronizedNowMs()),
+              durationSeconds: currentState.session?.durationSeconds ?? 0,
+            }),
+          });
 
         // A healthy large DIRECT MP4 may legitimately trail the simulated
         // broadcast clock on mobile data. Never discard its buffer solely
         // because it is behind; recover only a genuinely paused/unready player.
         // The initial join still seeks to the authoritative session offset.
 
-        if (!needsRecovery) {
+        if (!needsRecovery && !behindLive) {
           forceLiveEdgeOnNextAuthorizationRef.current = false;
           setActivePlaybackBlocked(false);
           setNeedsPlaybackGesture(false);
@@ -677,9 +680,9 @@ export function LiveClassRoomMobileFirst({
 
   // Read media progress in the interval, never during React render. A stalled
   // DIRECT MP4 must not advance prerecorded chat beyond the displayed frame.
-  const currentPlaybackOffsetSeconds = playedOffsetSeconds === null
-    ? currentLiveOffsetSeconds
-    : Math.min(currentLiveOffsetSeconds, playedOffsetSeconds);
+  // Staged comments belong to the authoritative broadcast, never to a
+  // viewer's locally delayed video clock.
+  const currentPlaybackOffsetSeconds = currentLiveOffsetSeconds;
 
   const timelineSource = useMemo(() => {
     if (!roomState || roomState.state !== "LIVE") return [];
@@ -865,6 +868,7 @@ export function LiveClassRoomMobileFirst({
         if (generation !== directSwapGenerationRef.current) return;
         if (
           sameLoadedMedia &&
+          !forceLiveEdge &&
           currentVideo &&
           Number.isFinite(currentVideo.currentTime)
         ) {
@@ -1165,14 +1169,7 @@ export function LiveClassRoomMobileFirst({
 
   const handleSeeking = (video: HTMLVideoElement) => {
     if (video !== currentAudioVideo()) return;
-    // The native MP4 decoder may seek internally when a slow byte-range
-    // request resumes. For a session already joined, do not chase the wall
-    // clock and throw away buffered progress. Initial join is positioned in
-    // the loadedmetadata handler before the session is marked loaded.
-    if (
-      playbackRef.current?.authorization?.playbackType === "DIRECT" &&
-      loadedMediaSessionRef.current === playbackRef.current?.sessionId
-    ) return;
+    // A viewer cannot seek back into a completed part of a live broadcast.
     const target = expectedPosition();
     if (
       video.currentTime < target &&
@@ -1207,11 +1204,24 @@ export function LiveClassRoomMobileFirst({
 
       const progressed = Math.abs(video.currentTime - stalledAtSeconds) >= 0.5;
       const hasFutureData = video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA;
-      if (progressed || (!video.paused && hasFutureData)) {
+      const drifted = shouldCorrectBroadcastPosition({
+        currentSeconds: video.currentTime,
+        expectedSeconds: expectedPosition(),
+      });
+      if (!drifted && (progressed || (!video.paused && hasFutureData))) {
         setActivePlaybackBlocked(false);
         return;
       }
 
+      if (drifted) {
+        // Catch up using the existing media element first; seek via HTTP
+        // byte-range instead of discarding the whole MP4 download.
+        correctPosition(video);
+        if (!video.paused) {
+          setActivePlaybackBlocked(false);
+          return;
+        }
+      }
       setActivePlaybackBlocked(true);
 
       // hls.js has its own fragment/network recovery and keeps useful buffered
@@ -1242,6 +1252,8 @@ export function LiveClassRoomMobileFirst({
     currentAudioVideo,
     keepPlaybackRunning,
     requestPlayback,
+    correctPosition,
+    expectedPosition,
   ]);
 
   useEffect(() => {
@@ -1386,8 +1398,9 @@ export function LiveClassRoomMobileFirst({
       // A plain "Tap to hear audio" never seeks. Only an actually paused/
       // suspended player is moved to the authoritative live edge before resume.
       if (recoveringPausedPlayback) {
-        // Resume from the buffered position first. A forced seek on a slow
-        // MP4 connection discards progress and can restart buffering.
+        // A real live session resumes at the present broadcast time, not the
+        // old buffered position that preceded an interruption.
+        correctPosition(video);
         forceLiveEdgeOnNextAuthorizationRef.current = false;
       }
 

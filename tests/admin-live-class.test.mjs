@@ -181,3 +181,18 @@ test('exact recording-start sync rejects messages before recording rather than s
   assert.equal(repository.timeline.length, 0);
   assert.match(result.errors[0].message, /verify the exact recording start/i);
 });
+
+test('exact recording-start sync rejects chat beyond the session duration instead of rebasing', async () => {
+  const repository = new FakeRepository();
+  repository.sessions.push({ id: 'session-1', batchId: 'batch-1', durationSeconds: 3600 });
+  const service = new AdminLiveClassService(repository);
+  const result = await service.importTimeline('session-1', {
+    format: 'text',
+    recordingStartAtLocal: '2026-05-04T11:37:30',
+    content: '12:37:45 From Mary to Everyone: Outside the session',
+  });
+  assert.equal(result.imported, 0);
+  assert.equal(result.stored, 0);
+  assert.equal(repository.timeline.length, 0);
+  assert.match(result.errors[0].message, /verify the exact recording start/i);
+});
