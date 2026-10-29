@@ -132,9 +132,8 @@ test('returning to a healthy visible live player does not mute or rebuild it unn
   assert.match(refresh, /const needsRecovery =/);
   assert.match(refresh, /video\.paused/);
   assert.match(refresh, /video\.readyState < HTMLMediaElement\.HAVE_FUTURE_DATA/);
-  assert.doesNotMatch(refresh, /video\.currentTime < expectedSeconds/);
-  assert.match(refresh, /shouldCorrectBroadcastPosition/);
-  assert.match(refresh, /if \(!needsRecovery && !behindLive\)[\s\S]*forceLiveEdgeOnNextAuthorizationRef\.current = false[\s\S]*setActivePlaybackBlocked\(false\)[\s\S]*return/);
+  assert.match(refresh, /authorization\?\.playbackType !== "DIRECT"/);
+  assert.match(refresh, /if \(!needsRecovery && !behindLive\)[\s\S]*setActivePlaybackBlocked\(false\)[\s\S]*return/);
   assert.doesNotMatch(refresh, /setMuted\(true\)/);
   assert.doesNotMatch(refresh, /video\.muted = true/);
 });
@@ -241,7 +240,7 @@ test('playback authorization is single-flight so concurrent recovery signals can
   assert.match(request, /playbackRequestRef\.current = null/);
 });
 
-test('weak-network waiting events preserve useful buffering before forcing a DIRECT source rebuild', () => {
+test('weak-network waiting events preserve DIRECT MP4 buffering before recovery', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
   const start = source.indexOf('const scheduleStallRecovery = useCallback');
   const end = source.indexOf('\n  useEffect(() => {', start);
@@ -252,6 +251,7 @@ test('weak-network waiting events preserve useful buffering before forcing a DIR
   assert.match(handler, /Math\.abs\(video\.currentTime - stalledAtSeconds\) >= 0\.5/);
   assert.match(handler, /authorization\?\.playbackType === "HLS"/);
   assert.match(handler, /keepPlaybackRunning\(video, \{ preferAudio: false \}\)/);
+  assert.doesNotMatch(handler, /drifted|correctPosition\(video\)/);
   assert.match(handler, /LIVE_FORCED_RECOVERY_COOLDOWN_MS/);
   assert.doesNotMatch(handler, /clearStallRecovery\(\);[\s\S]*stallRecoveryTimerRef\.current = window\.setTimeout/);
 });
@@ -273,38 +273,39 @@ test('HLS uses conservative adaptive buffering and local fatal recovery before a
 test('staged chat follows the actual media position when playback falls behind the live wall clock', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
 
-  assert.match(source, /const currentPlaybackOffsetSeconds = currentLiveOffsetSeconds/);
-  assert.match(source, /const currentPlaybackOffsetSeconds = currentLiveOffsetSeconds/);
-  assert.doesNotMatch(source, /setPlayedOffsetSeconds/);
+  assert.match(source, /const currentPlaybackOffsetSeconds = playedOffsetSeconds/);
+  assert.match(source, /loadedMediaSessionRef\.current === active/);
+  assert.match(source, /Math\.min\(currentLiveOffsetSeconds, playedOffsetSeconds\)/);
+  assert.match(source, /setPlayedOffsetSeconds\(/);
   assert.match(source, /getNewTimelineMessages\([\s\S]*currentPlaybackOffsetSeconds/);
   assert.match(source, /getInitialTimelineMessages\([\s\S]*currentPlaybackOffsetSeconds/);
 });
 
-test('large DIRECT MP4 recovery preserves played position even when forced and samples chat only in an effect', () => {
+test('large DIRECT MP4 recovery preserves its buffered position and staged chat follows displayed frames', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
-  assert.match(source, /sameLoadedMedia\s*&&\s*!forceLiveEdge\s*&&\s*currentVideo\s*&&\s*Number\.isFinite\(currentVideo\.currentTime\)/);
+  assert.match(source, /sameLoadedMedia\s*&&\s*currentVideo\s*&&\s*Number\.isFinite\(currentVideo\.currentTime\)/);
   assert.match(source, /targetVideo\.currentTime = currentVideo\.currentTime/);
-  assert.match(source, /const currentPlaybackOffsetSeconds = currentLiveOffsetSeconds/);
-  assert.match(source, /correctPosition\(targetVideo\)/);
-  assert.match(source, /lastForcedRecoveryAtRef\.current = recoveryNow/);
+  assert.match(source, /const \[playedOffsetSeconds, setPlayedOffsetSeconds\] = useState/);
+  assert.match(source, /setPlayedOffsetSeconds\(/);
   const begin = source.indexOf('const currentPlaybackOffsetSeconds =');
   const end = source.indexOf('const timelineSource =', begin);
-  assert.doesNotMatch(source.slice(begin, end), /\.current/);
+  assert.match(source.slice(begin, end), /Math\.min\(currentLiveOffsetSeconds, playedOffsetSeconds\)/);
 });
 
-test('healthy DIRECT playback ignores browser native seek and foreground wall-clock drift', () => {
+test('healthy DIRECT playback ignores native MP4 seeks and does not catch up to wall clock on foreground return', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
   const seekingStart = source.indexOf('const handleSeeking =');
   const seekingEnd = source.indexOf('const scheduleStallRecovery =', seekingStart);
   const seeking = source.slice(seekingStart, seekingEnd);
 
-  assert.match(seeking, /shouldCorrectBroadcastPosition/);
-  assert.match(seeking, /video\.currentTime = target/);
-  assert.match(seeking, /const target = expectedPosition\(\)/);
+  assert.match(seeking, /playbackType === "DIRECT"/);
+  assert.match(seeking, /loadedMediaSessionRef\.current === playbackRef\.current\?\.sessionId/);
+  assert.doesNotMatch(seeking, /video\.currentTime = target/);
 
   const foregroundStart = source.indexOf('const refreshVisiblePlayback =');
   const foregroundEnd = source.indexOf('const onVisibilityChange =', foregroundStart);
   const foreground = source.slice(foregroundStart, foregroundEnd);
+  assert.match(foreground, /authorization\?\.playbackType !== "DIRECT"/);
   assert.match(foreground, /shouldCorrectBroadcastPosition/);
 });
 
