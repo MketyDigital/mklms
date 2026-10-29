@@ -213,7 +213,12 @@ test('DIRECT waiting and stalled events keep the current MP4 source and buffer',
 
   assert.match(handler, /playbackType === "DIRECT"\) return/);
   assert.match(handler, /playbackType === "HLS"[\s\S]*keepPlaybackRunning\(video, \{ preferAudio: false \}\)[\s\S]*return/);
-  assert.doesNotMatch(handler, /forceLiveEdgeOnNextAuthorizationRef\.current = true|requestPlayback\(\)/);
+  const directGuard = handler.indexOf('if (playbackRef.current?.authorization?.playbackType === "DIRECT") return;');
+  const reauthorizationFallback = handler.indexOf('forceLiveEdgeOnNextAuthorizationRef.current = true');
+  const requestPlaybackFallback = handler.indexOf('requestPlayback().catch');
+  assert.ok(directGuard >= 0, 'DIRECT stalls must return before reauthorization');
+  assert.ok(reauthorizationFallback > directGuard, 'non-DIRECT fallback must follow the DIRECT guard');
+  assert.ok(requestPlaybackFallback > reauthorizationFallback, 'requestPlayback must remain behind the DIRECT guard');
 });
 
 test('playback authorization is single-flight so concurrent recovery signals cannot race source swaps', () => {
@@ -238,7 +243,12 @@ test('weak-network DIRECT waiting keeps native buffering instead of renewing aut
   assert.match(handler, /const stalledAtSeconds = video\.currentTime/);
   assert.match(handler, /authorization\?\.playbackType === "HLS"/);
   assert.match(handler, /playbackType === "DIRECT"\) return/);
-  assert.doesNotMatch(handler, /forceLiveEdgeOnNextAuthorizationRef\.current = true|requestPlayback\(\)/);
+  const directGuard = handler.indexOf('if (playbackRef.current?.authorization?.playbackType === "DIRECT") return;');
+  const reauthorizationFallback = handler.indexOf('forceLiveEdgeOnNextAuthorizationRef.current = true');
+  const requestPlaybackFallback = handler.indexOf('requestPlayback().catch');
+  assert.ok(directGuard >= 0, 'DIRECT stalls must return before reauthorization');
+  assert.ok(reauthorizationFallback > directGuard, 'non-DIRECT fallback must follow the DIRECT guard');
+  assert.ok(requestPlaybackFallback > reauthorizationFallback, 'requestPlayback must remain behind the DIRECT guard');
   assert.doesNotMatch(handler, /drifted|correctPosition\(video\)/);
 });
 
