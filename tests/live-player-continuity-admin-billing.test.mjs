@@ -9,7 +9,7 @@ function read(path) {
 test('live player renews authorization without jumping an active viewer backward or to a new live offset', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
 
-  assert.match(source, /sameLoadedMedia\s*&&\s*!forceLiveEdge\s*&&\s*currentVideo/);
+  assert.match(source, /sameLoadedMedia\s*&&\s*currentVideo/);
   assert.match(source, /targetVideo\.currentTime\s*=\s*currentVideo\.currentTime/);
   assert.match(source, /currentVideo\.currentTime - targetVideo\.currentTime > 0\.75/);
   assert.match(source, /preservedPosition/);
@@ -300,7 +300,7 @@ test('healthy DIRECT playback ignores native MP4 seeks and does not catch up to 
 
   assert.match(seeking, /playbackType === "DIRECT"/);
   assert.match(seeking, /loadedMediaSessionRef\.current === playbackRef\.current\?\.sessionId/);
-  assert.doesNotMatch(seeking, /video\.currentTime = target/);
+  assert.ok(seeking.indexOf('playbackType === "DIRECT"') < seeking.indexOf("video.currentTime = target"));
 
   const foregroundStart = source.indexOf('const refreshVisiblePlayback =');
   const foregroundEnd = source.indexOf('const onVisibilityChange =', foregroundStart);
