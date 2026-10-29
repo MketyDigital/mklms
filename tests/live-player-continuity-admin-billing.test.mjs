@@ -132,7 +132,7 @@ test('returning to a healthy visible live player does not mute or rebuild it unn
   assert.match(refresh, /const needsRecovery =/);
   assert.match(refresh, /video\.paused/);
   assert.match(refresh, /video\.readyState < HTMLMediaElement\.HAVE_FUTURE_DATA/);
-  assert.match(refresh, /playbackType\?\.playbackType !== "DIRECT"/);
+  assert.match(refresh, /authorization\?\.playbackType !== "DIRECT"/);
   assert.match(refresh, /if \(!needsRecovery && !behindLive\)[\s\S]*setActivePlaybackBlocked\(false\)[\s\S]*return/);
   assert.doesNotMatch(refresh, /setMuted\(true\)/);
   assert.doesNotMatch(refresh, /video\.muted = true/);
@@ -305,7 +305,7 @@ test('healthy DIRECT playback ignores native MP4 seeks and does not catch up to 
   const foregroundStart = source.indexOf('const refreshVisiblePlayback =');
   const foregroundEnd = source.indexOf('const onVisibilityChange =', foregroundStart);
   const foreground = source.slice(foregroundStart, foregroundEnd);
-  assert.match(foreground, /playbackType\?\.playbackType !== "DIRECT"/);
+  assert.match(foreground, /authorization\?\.playbackType !== "DIRECT"/);
   assert.match(foreground, /shouldCorrectBroadcastPosition/);
 });
 
