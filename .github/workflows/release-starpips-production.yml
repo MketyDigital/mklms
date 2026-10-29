@@ -157,7 +157,6 @@ jobs:
           while read -r candidate; do
             git cat-file -e "$candidate^{commit}" 2>/dev/null || continue
             if git diff --quiet "$candidate" "$GITHUB_SHA" -- . ':(exclude).github/workflows/release-starpips-production.yml'; then
-              run_id="$(jq -er --arg sha "$candidate" '.workflow_runs | [.[]?]' "$runs_file" 2>/dev/null || true)"
               run_id="$(jq -er --arg sha "$candidate" '[.workflow_runs[] | select(.head_sha == $sha and .conclusion == "success")] | sort_by(.run_started_at) | last | .id' "$runs_file")"
               break
             fi
