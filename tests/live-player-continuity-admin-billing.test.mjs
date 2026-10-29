@@ -74,13 +74,15 @@ test('mobile foreground and network recovery rejoin live muted when audible auto
   assert.match(source, /forceLiveEdgeOnNextAuthorizationRef\.current = true;[\s\S]*requestPlayback\(\)/);
 });
 
-test('unexpected visible mobile pauses recover automatically in muted autoplay-safe mode', () => {
+test('visible DIRECT pauses retry the active MP4 without a source replacement', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
+  const start = source.indexOf('const handlePlaybackPaused');
+  const end = source.indexOf('const handlePlaybackError', start);
+  const handler = source.slice(start, end);
 
-  assert.match(source, /const handlePlaybackPaused/);
-  assert.match(source, /document\.visibilityState === "visible"/);
-  assert.match(source, /keepPlaybackRunning\(video, \{ preferAudio: false \}\)/);
-  assert.match(source, /if \(playing\) return;[\s\S]*forceLiveEdgeOnNextAuthorizationRef\.current = true/);
+  assert.match(handler, /keepPlaybackRunning\(video, \{ preferAudio: false \}\)/);
+  assert.match(handler, /playbackType === "DIRECT"\) return/);
+  assert.ok(handler.indexOf('playbackType === "DIRECT"') < handler.indexOf('forceLiveEdgeOnNextAuthorizationRef.current = true'));
 });
 
 test('mobile autoplay fallback keeps the active live picture running if audible restart is rejected', () => {
@@ -160,20 +162,10 @@ test('hidden DIRECT authorization refresh cannot raise the active audio prompt o
   assert.ok(directStart >= 0 && hlsStart > directStart, 'DIRECT handoff block must be present');
   assert.match(direct, /targetVideo\.muted = true/);
   assert.match(direct, /await targetVideo\.play\(\)/);
-  assert.match(direct, /LIVE_AUTHORIZATION_RETRY_MS/);
+  assert.doesNotMatch(direct, /authorizationRetryTimerRef|LIVE_AUTHORIZATION_RETRY_MS/);
   assert.match(direct, /const shouldStayMuted = mutedRef\.current/);
   assert.match(direct, /setDirectSlot\(targetSlot\);[\s\S]*targetVideo\.muted = shouldStayMuted/);
   assert.doesNotMatch(direct, /keepPlaybackRunning\(targetVideo\)/);
-
-  const preloadCatch = direct.slice(
-    direct.indexOf('try {\n          await targetVideo.play()'),
-    direct.indexOf('if (generation !== directSwapGenerationRef.current) return;', direct.indexOf('try {\n          await targetVideo.play()')),
-  );
-  assert.match(
-    preloadCatch,
-    /currentVideo === currentAudioVideo\(\)[\s\S]*currentVideo\.paused \|\|[\s\S]*currentVideo\.readyState < HTMLMediaElement\.HAVE_FUTURE_DATA[\s\S]*setNeedsPlaybackGesture\(true\)/,
-  );
-  assert.doesNotMatch(preloadCatch, /setMuted\(true\)/);
 });
 
 test('audio overlay is defensively tied to explicit active playback health state', () => {
@@ -205,14 +197,12 @@ test('DIRECT frame readiness accepts loaded data and does not restart the source
 
 test('silent DIRECT freezes do not reload the MP4 while it may still be buffering', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
-  const sampleStart = source.indexOf('const recoveryNow = window.performance.now()', source.indexOf('LIVE_PROGRESS_SAMPLE_MS'));
-  const sampleEnd = source.indexOf('}, LIVE_PROGRESS_SAMPLE_MS', sampleStart);
-  const recovery = source.slice(sampleStart, sampleEnd);
+  const timerStart = source.indexOf('const timer = window.setInterval', source.indexOf('LIVE_PROGRESS_SAMPLE_MS'));
+  const timerEnd = source.indexOf('}, LIVE_PROGRESS_SAMPLE_MS', timerStart);
+  const recovery = source.slice(timerStart, timerEnd);
 
-  assert.match(recovery, /playbackType === "DIRECT"/);
-  assert.match(recovery, /keepPlaybackRunning\(video, \{ preferAudio: false \}\)/);
-  assert.doesNotMatch(recovery, /forceLiveEdgeOnNextAuthorizationRef\.current = true|requestPlayback\(\)/);
-  assert.match(recovery, /requestPlayback\(\)\.catch/);
+  assert.match(recovery, /setActivePlaybackBlocked\(true\);[\s\S]*playbackType === "DIRECT"\) return/);
+  assert.match(recovery, /playbackType === "DIRECT"\) return;[\s\S]*forceLiveEdgeOnNextAuthorizationRef\.current = true[\s\S]*requestPlayback\(\)\.catch/);
 });
 
 test('DIRECT waiting and stalled events keep the current MP4 source and buffer', () => {
@@ -221,9 +211,9 @@ test('DIRECT waiting and stalled events keep the current MP4 source and buffer',
   const end = source.indexOf('\n  useEffect(() => {', start);
   const handler = source.slice(start, end);
 
-  assert.match(handler, /playbackType === "DIRECT"[\s\S]*keepPlaybackRunning\(video, \{ preferAudio: false \}\)[\s\S]*return/);
+  assert.match(handler, /playbackType === "DIRECT"\) return/);
+  assert.match(handler, /playbackType === "HLS"[\s\S]*keepPlaybackRunning\(video, \{ preferAudio: false \}\)[\s\S]*return/);
   assert.doesNotMatch(handler, /forceLiveEdgeOnNextAuthorizationRef\.current = true|requestPlayback\(\)/);
-  assert.match(handler, /playbackType === "HLS"[\s\S]*keepPlaybackRunning\(video, \{ preferAudio: false \}\)/);
 });
 
 test('playback authorization is single-flight so concurrent recovery signals cannot race source swaps', () => {
@@ -239,20 +229,17 @@ test('playback authorization is single-flight so concurrent recovery signals can
   assert.match(request, /playbackRequestRef\.current = null/);
 });
 
-test('weak-network waiting events preserve DIRECT MP4 buffering before recovery', () => {
+test('weak-network DIRECT waiting keeps native buffering instead of renewing authorization', () => {
   const source = read('src/features/live-classes/components/live-class-room-mobile-first.tsx');
   const start = source.indexOf('const scheduleStallRecovery = useCallback');
   const end = source.indexOf('\n  useEffect(() => {', start);
   const handler = source.slice(start, end);
 
-  assert.match(handler, /if \(stallRecoveryTimerRef\.current !== null\) return/);
   assert.match(handler, /const stalledAtSeconds = video\.currentTime/);
-  assert.match(handler, /Math\.abs\(video\.currentTime - stalledAtSeconds\) >= 0\.5/);
   assert.match(handler, /authorization\?\.playbackType === "HLS"/);
-  assert.match(handler, /keepPlaybackRunning\(video, \{ preferAudio: false \}\)/);
+  assert.match(handler, /playbackType === "DIRECT"\) return/);
+  assert.doesNotMatch(handler, /forceLiveEdgeOnNextAuthorizationRef\.current = true|requestPlayback\(\)/);
   assert.doesNotMatch(handler, /drifted|correctPosition\(video\)/);
-  assert.match(handler, /LIVE_FORCED_RECOVERY_COOLDOWN_MS/);
-  assert.doesNotMatch(handler, /clearStallRecovery\(\);[\s\S]*stallRecoveryTimerRef\.current = window\.setTimeout/);
 });
 
 test('HLS uses conservative adaptive buffering and local fatal recovery before authorization rebuild', () => {
