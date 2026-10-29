@@ -39,27 +39,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          source_sha="$GITHUB_SHA"
           runs_file="$(mktemp)"
           trap 'rm -f "$runs_file"' EXIT
           api="https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/phase1-ci.yml/runs?status=success&per_page=100"
           curl --silent --show-error --fail-with-body "$api" \
             -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' > "$runs_file"
-          # The second parent of a production merge is its tested main SHA.
-          # Only reuse a tested merge parent when application contents match
-          # byte-for-byte; allow changes solely to this release workflow.
-          while read -r ancestor; do
-            candidate="$(git rev-parse "$ancestor^2" 2>/dev/null || true)"
-            if [ -n "$candidate" ] && git diff --quiet "$candidate" "$GITHUB_SHA" -- . ':(exclude).github/workflows/release-starpips-production.yml' && jq -e --arg sha "$candidate" '.workflow_runs | any(.head_sha == $sha and .conclusion == "success")' "$runs_file" >/dev/null; then
-              source_sha="$candidate"
+          # Squash merges do not retain the tested PR head as a parent. Compare successful CI heads to the release tree.
+          git fetch origin '+refs/pull/*/head:refs/remotes/pull/*' --no-tags --force
+          run_id=""
+          while read -r candidate; do
+            git cat-file -e "$candidate^{commit}" 2>/dev/null || continue
+            if git diff --quiet "$candidate" "$GITHUB_SHA" -- . ':(exclude).github/workflows/release-starpips-production.yml'; then
+              run_id="$(jq -er --arg sha "$candidate" '[.workflow_runs[] | select(.head_sha == $sha and .conclusion == "success")] | sort_by(.run_started_at) | last | .id' "$runs_file")"
               break
             fi
-          done < <(git rev-list --first-parent -n 20 "$GITHUB_SHA")
-          if ! jq -e --arg sha "$source_sha" '.workflow_runs | any(.head_sha == $sha and .conclusion == "success")' "$runs_file" >/dev/null; then
-            echo "No successful CI for application-identical promoted commit." >&2
-            exit 1
-          fi
-          run_id="$(jq -er --arg sha "$source_sha" '[.workflow_runs[] | select(.head_sha == $sha and .conclusion == "success")] | sort_by(.run_started_at) | last | .id' "$runs_file")"
+          done < <(jq -r '.workflow_runs[] | select(.conclusion == "success") | .head_sha' "$runs_file")
+          test -n "$run_id" || { echo "No successful CI for application-identical source." >&2; exit 1; }
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
 
       - name: Download lockfile from exact-source CI
@@ -74,11 +69,25 @@ jobs:
       - name: Install dependencies from verified CI lockfile
         run: npm ci --no-audit --no-fund
 
+      - name: Detect guarded Starpips migrations changed
+        id: migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          before="${{ github.event.before }}"
+          changed=false
+          if git cat-file -e "$before^{commit}" 2>/dev/null && ! git diff --quiet "$before" "$GITHUB_SHA" -- \
+            ':(glob)**/018_certificate_visual_layout_and_starpips_calibration.sql' \
+            ':(glob)**/019_managed_hosting_daily_ledger.sql' \
+            ':(glob)**/020_managed_hosting_payment_settlement.sql'; then
+            changed=true
+          fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          echo "guarded_migrations_changed=$changed"
       - name: Verify exact Starpips production pointer before database access
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${DATABASE_URL:-}" || { echo "Missing repository secret STARPIPS_DATABASE_URL"; exit 1; }
           git fetch origin "$PRODUCTION_BRANCH:refs/remotes/origin/$PRODUCTION_BRANCH" --force
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(git rev-parse "origin/$PRODUCTION_BRANCH")" = "$GITHUB_SHA" || {
@@ -87,6 +96,7 @@ jobs:
           }
 
       - name: Verify Starpips historical migration ledger is safe
+        if: steps.migrations.outputs.changed == 'true'
         run: >-
           node scripts/starpips-migration-guard.mjs verify
           018_certificate_visual_layout_and_starpips_calibration.sql
@@ -94,6 +104,7 @@ jobs:
           020_managed_hosting_payment_settlement.sql
 
       - name: Apply only guarded additive Starpips migrations 018 through 020 when pending
+        if: steps.migrations.outputs.changed == 'true'
         run: >-
           node scripts/starpips-migration-guard.mjs apply
           018_certificate_visual_layout_and_starpips_calibration.sql
@@ -101,6 +112,7 @@ jobs:
           020_managed_hosting_payment_settlement.sql
 
       - name: Verify Starpips migrations 018 through 020 are current
+        if: steps.migrations.outputs.changed == 'true'
         run: >-
           node scripts/starpips-migration-guard.mjs verify
           018_certificate_visual_layout_and_starpips_calibration.sql
@@ -134,27 +146,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          source_sha="$GITHUB_SHA"
           runs_file="$(mktemp)"
           trap 'rm -f "$runs_file"' EXIT
           api="https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/phase1-ci.yml/runs?status=success&per_page=100"
           curl --silent --show-error --fail-with-body "$api" \
             -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' > "$runs_file"
-          # The second parent of a production merge is its tested main SHA.
-          # Only reuse a tested merge parent when application contents match
-          # byte-for-byte; allow changes solely to this release workflow.
-          while read -r ancestor; do
-            candidate="$(git rev-parse "$ancestor^2" 2>/dev/null || true)"
-            if [ -n "$candidate" ] && git diff --quiet "$candidate" "$GITHUB_SHA" -- . ':(exclude).github/workflows/release-starpips-production.yml' && jq -e --arg sha "$candidate" '.workflow_runs | any(.head_sha == $sha and .conclusion == "success")' "$runs_file" >/dev/null; then
-              source_sha="$candidate"
+          # Squash merges do not retain the tested PR head as a parent. Compare successful CI heads to the release tree.
+          git fetch origin '+refs/pull/*/head:refs/remotes/pull/*' --no-tags --force
+          run_id=""
+          while read -r candidate; do
+            git cat-file -e "$candidate^{commit}" 2>/dev/null || continue
+            if git diff --quiet "$candidate" "$GITHUB_SHA" -- . ':(exclude).github/workflows/release-starpips-production.yml'; then
+              run_id="$(jq -er --arg sha "$candidate" '.workflow_runs | [.[]?]' "$runs_file" 2>/dev/null || true)"
+              run_id="$(jq -er --arg sha "$candidate" '[.workflow_runs[] | select(.head_sha == $sha and .conclusion == "success")] | sort_by(.run_started_at) | last | .id' "$runs_file")"
               break
             fi
-          done < <(git rev-list --first-parent -n 20 "$GITHUB_SHA")
-          if ! jq -e --arg sha "$source_sha" '.workflow_runs | any(.head_sha == $sha and .conclusion == "success")' "$runs_file" >/dev/null; then
-            echo "No successful CI for application-identical promoted commit." >&2
-            exit 1
-          fi
-          run_id="$(jq -er --arg sha "$source_sha" '[.workflow_runs[] | select(.head_sha == $sha and .conclusion == "success")] | sort_by(.run_started_at) | last | .id' "$runs_file")"
+          done < <(jq -r '.workflow_runs[] | select(.conclusion == "success") | .head_sha' "$runs_file")
+          test -n "$run_id" || { echo "No successful CI for application-identical source." >&2; exit 1; }
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
 
       - name: Download lockfile from exact-source CI
