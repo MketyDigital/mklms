@@ -80,9 +80,7 @@ const LIVE_CHAT_BOTTOM_THRESHOLD_PX = 48;
 const LIVE_STALL_RECOVERY_MS = 12_000;
 const LIVE_SILENT_FREEZE_RECOVERY_MS = 10_000;
 const LIVE_PROGRESS_SAMPLE_MS = 2_500;
-const LIVE_AUTHORIZATION_RETRY_MS = 2_000;
 const LIVE_FRAME_READY_TIMEOUT_MS = 5_000;
-const LIVE_FORCED_RECOVERY_COOLDOWN_MS = 20_000;
 const LIVE_HLS_FATAL_RECOVERY_ATTEMPTS = 3;
 
 type DirectSlot = 0 | 1;
@@ -104,14 +102,16 @@ function waitForRenderableFrame(video: HTMLVideoElement): Promise<boolean> {
       LIVE_FRAME_READY_TIMEOUT_MS,
     );
 
-    if (typeof video.requestVideoFrameCallback === "function") {
-      video.requestVideoFrameCallback(() => finish(true));
-      return;
-    }
     if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
       afterPaint();
       return;
     }
+    if (typeof video.requestVideoFrameCallback === "function") {
+      video.requestVideoFrameCallback(() => finish(true));
+    }
+    // Some browsers expose requestVideoFrameCallback but suppress callbacks
+    // for an invisible preload slot. HAVE_CURRENT_DATA/loadeddata is enough
+    // to promote the source without waiting for a compositor callback.
     video.addEventListener("loadeddata", onLoadedData, { once: true });
   });
 }
@@ -173,9 +173,7 @@ export function LiveClassRoomMobileFirst({
   const serverClockOffsetMsRef = useRef(0);
   const mutedRef = useRef(true);
   const stallRecoveryTimerRef = useRef<number | null>(null);
-  const authorizationRetryTimerRef = useRef<number | null>(null);
   const playbackRequestRef = useRef<Promise<PlaybackState> | null>(null);
-  const lastForcedRecoveryAtRef = useRef(0);
   const silentFreezeSampleRef = useRef<{
     video: HTMLVideoElement;
     currentTime: number;
@@ -291,10 +289,7 @@ export function LiveClassRoomMobileFirst({
 
   useEffect(() => () => {
     clearStallRecovery();
-    if (authorizationRetryTimerRef.current !== null) {
-      window.clearTimeout(authorizationRetryTimerRef.current);
-      authorizationRetryTimerRef.current = null;
-    }
+
   }, [clearStallRecovery]);
 
   useEffect(() => {
@@ -530,6 +525,16 @@ export function LiveClassRoomMobileFirst({
         }
 
         setActivePlaybackBlocked(true);
+        if (
+          video &&
+          playbackRef.current?.authorization?.playbackType === "DIRECT" &&
+          playbackRef.current.sessionId === currentState.session?.id
+        ) {
+          // Foreground/network recovery resumes the active progressive source.
+          // Reauthorizing would replace its in-flight range download.
+          void keepPlaybackRunning(video);
+          return;
+        }
         forceLiveEdgeOnNextAuthorizationRef.current = true;
         void requestPlayback().catch(() => {
           const activeVideo = currentAudioVideo();
@@ -562,7 +567,7 @@ export function LiveClassRoomMobileFirst({
       window.removeEventListener("pageshow", onPageShow);
       window.removeEventListener("online", onOnline);
     };
-  }, [currentAudioVideo, fetchChat, fetchSharedChat, fetchState, requestPlayback, synchronizedNowMs]);
+  }, [currentAudioVideo, fetchChat, fetchSharedChat, fetchState, keepPlaybackRunning, requestPlayback, synchronizedNowMs]);
 
   useEffect(() => {
     if (!roomState) return;
@@ -871,6 +876,13 @@ export function LiveClassRoomMobileFirst({
       targetVideo.muted = true;
       targetVideo.preload = "auto";
 
+      const abandonPreload = () => {
+        if (targetSlot === currentSlot) return;
+        targetVideo.pause();
+        targetVideo.removeAttribute("src");
+        targetVideo.load();
+      };
+
       const promote = async () => {
         if (generation !== directSwapGenerationRef.current) return;
         if (
@@ -888,10 +900,8 @@ export function LiveClassRoomMobileFirst({
         try {
           await targetVideo.play();
         } catch {
-          // This is a hidden/preloading replacement. It must never change the
-          // active player's mute/gesture UI while the current broadcast is still
-          // healthy and audible. Keep the current slot untouched and retry a
-          // fresh authorization shortly instead of surfacing a false audio prompt.
+          // Keep the current slot untouched. Slow MP4 bytes must not trigger a
+          // timed authorization retry that reloads the replacement repeatedly.
           if (
             currentVideo &&
             currentVideo === currentAudioVideo() &&
@@ -901,13 +911,13 @@ export function LiveClassRoomMobileFirst({
             setActivePlaybackBlocked(true);
             setNeedsPlaybackGesture(true);
           }
-          if (authorizationRetryTimerRef.current === null) {
-            authorizationRetryTimerRef.current = window.setTimeout(() => {
-              authorizationRetryTimerRef.current = null;
-              forceLiveEdgeOnNextAuthorizationRef.current = true;
-              void requestPlayback().catch(() => undefined);
-            }, LIVE_AUTHORIZATION_RETRY_MS);
+          abandonPreload();
+          if (targetSlot === currentSlot) {
+            loadedMediaSessionRef.current = playback.sessionId;
+            loadedMediaTypeRef.current = authorization.playbackType;
+            loadedAuthorizationUrlRef.current = authorization.url;
           }
+
           return;
         }
         if (generation !== directSwapGenerationRef.current) return;
@@ -923,13 +933,13 @@ export function LiveClassRoomMobileFirst({
             setActivePlaybackBlocked(true);
             setNeedsPlaybackGesture(true);
           }
-          if (authorizationRetryTimerRef.current === null) {
-            authorizationRetryTimerRef.current = window.setTimeout(() => {
-              authorizationRetryTimerRef.current = null;
-              forceLiveEdgeOnNextAuthorizationRef.current = true;
-              void requestPlayback().catch(() => undefined);
-            }, LIVE_AUTHORIZATION_RETRY_MS);
+          abandonPreload();
+          if (targetSlot === currentSlot) {
+            loadedMediaSessionRef.current = playback.sessionId;
+            loadedMediaTypeRef.current = authorization.playbackType;
+            loadedAuthorizationUrlRef.current = authorization.url;
           }
+
           return;
         }
 
@@ -942,13 +952,7 @@ export function LiveClassRoomMobileFirst({
           const realignedFrameReady = await waitForRenderableFrame(targetVideo);
           if (generation !== directSwapGenerationRef.current) return;
           if (!realignedFrameReady) {
-            if (authorizationRetryTimerRef.current === null) {
-              authorizationRetryTimerRef.current = window.setTimeout(() => {
-                authorizationRetryTimerRef.current = null;
-                forceLiveEdgeOnNextAuthorizationRef.current = true;
-                void requestPlayback().catch(() => undefined);
-              }, LIVE_AUTHORIZATION_RETRY_MS);
-            }
+            abandonPreload();
             return;
           }
         }
@@ -981,10 +985,7 @@ export function LiveClassRoomMobileFirst({
         loadedMediaTypeRef.current = authorization.playbackType;
         loadedAuthorizationUrlRef.current = authorization.url;
         forceLiveEdgeOnNextAuthorizationRef.current = false;
-        if (authorizationRetryTimerRef.current !== null) {
-          window.clearTimeout(authorizationRetryTimerRef.current);
-          authorizationRetryTimerRef.current = null;
-        }
+
       };
 
       targetVideo.addEventListener("loadedmetadata", () => void promote(), { once: true });
@@ -1229,12 +1230,10 @@ export function LiveClassRoomMobileFirst({
         return;
       }
 
-      const now = window.performance.now();
-      if (now - lastForcedRecoveryAtRef.current < LIVE_FORCED_RECOVERY_COOLDOWN_MS) {
-        void keepPlaybackRunning(video, { preferAudio: false });
-        return;
-      }
-      lastForcedRecoveryAtRef.current = now;
+      // A DIRECT MP4 owns one progressive download. Keep that element and its
+      // buffer in place during a normal stall; swapping sources restarts ranges.
+      if (playbackRef.current?.authorization?.playbackType === "DIRECT") return;
+
       forceLiveEdgeOnNextAuthorizationRef.current = true;
       void requestPlayback().catch(() => {
         const activeVideo = currentAudioVideo();
@@ -1303,17 +1302,11 @@ export function LiveClassRoomMobileFirst({
       };
       // Preserve the existing download and seek position on poor connections;
       // avoid tearing down the MP4 for every silent 10-second buffering gap.
-      const recoveryNow = window.performance.now();
-      if (
-        playbackRef.current?.authorization?.playbackType === "DIRECT" &&
-        recoveryNow - lastForcedRecoveryAtRef.current < LIVE_FORCED_RECOVERY_COOLDOWN_MS
-      ) {
-        return;
-      }
-      if (playbackRef.current?.authorization?.playbackType === "DIRECT") {
-        lastForcedRecoveryAtRef.current = recoveryNow;
-      }
       setActivePlaybackBlocked(true);
+      // A DIRECT MP4 can have a long buffer gap on a slow link. Do not restart
+      // its in-flight download just because currentTime has not advanced yet.
+      if (playbackRef.current?.authorization?.playbackType === "DIRECT") return;
+
       forceLiveEdgeOnNextAuthorizationRef.current = true;
       void requestPlayback().catch(() => {
         const activeVideo = currentAudioVideo();
@@ -1347,6 +1340,9 @@ export function LiveClassRoomMobileFirst({
       // immediately in muted autoplay-safe mode before asking for any gesture.
       void keepPlaybackRunning(video, { preferAudio: false }).then((playing) => {
         if (playing) return;
+        // keepPlaybackRunning already exposes the gesture prompt on failure.
+        // Reauthorizing a session-bound DIRECT URL would only restart its MP4.
+        if (playbackRef.current?.authorization?.playbackType === "DIRECT") return;
         forceLiveEdgeOnNextAuthorizationRef.current = true;
         void requestPlayback().catch(() => {
           if (
