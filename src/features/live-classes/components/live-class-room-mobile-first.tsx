@@ -192,6 +192,7 @@ export function LiveClassRoomMobileFirst({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(0);
+  const [playedOffsetSeconds, setPlayedOffsetSeconds] = useState<number | null>(null);
   const [muted, setMuted] = useState(true);
   const [needsPlaybackGesture, setNeedsPlaybackGesture] = useState(false);
   const [activePlaybackBlocked, setActivePlaybackBlocked] = useState(false);
@@ -477,6 +478,16 @@ export function LiveClassRoomMobileFirst({
     }, 0);
     const clock = window.setInterval(() => {
       setNowMs(synchronizedNowMs());
+      const video = currentAudioVideo();
+      const active = roomStateRef.current?.session?.id;
+      setPlayedOffsetSeconds(
+        active &&
+        loadedMediaSessionRef.current === active &&
+        video &&
+        Number.isFinite(video.currentTime)
+          ? Math.max(0, video.currentTime)
+          : null,
+      );
     }, 1_000);
     const safetyRefresh = window.setInterval(
       () => void fetchState().catch(() => undefined),
@@ -495,9 +506,10 @@ export function LiveClassRoomMobileFirst({
           !video ||
           video.paused ||
           video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA;
-        // Foreground recovery must rejoin a real broadcast if a browser kept
-        // playing stale buffered frames while the scheduled clock advanced.
+        // Large DIRECT MP4s can trail the broadcast clock while bytes arrive.
+        // Keep their downloaded buffer; HLS can still rejoin the live edge.
         const behindLive =
+          playbackRef.current?.authorization?.playbackType !== "DIRECT" &&
           video &&
           playbackRef.current?.sessionId === currentState.session?.id &&
           shouldCorrectBroadcastPosition({
@@ -509,11 +521,6 @@ export function LiveClassRoomMobileFirst({
               durationSeconds: currentState.session?.durationSeconds ?? 0,
             }),
           });
-
-        // A healthy large DIRECT MP4 may legitimately trail the simulated
-        // broadcast clock on mobile data. Never discard its buffer solely
-        // because it is behind; recover only a genuinely paused/unready player.
-        // The initial join still seeks to the authoritative session offset.
 
         if (!needsRecovery && !behindLive) {
           forceLiveEdgeOnNextAuthorizationRef.current = false;
@@ -680,9 +687,9 @@ export function LiveClassRoomMobileFirst({
 
   // Read media progress in the interval, never during React render. A stalled
   // DIRECT MP4 must not advance prerecorded chat beyond the displayed frame.
-  // Staged comments belong to the authoritative broadcast, never to a
-  // viewer's locally delayed video clock.
-  const currentPlaybackOffsetSeconds = currentLiveOffsetSeconds;
+  const currentPlaybackOffsetSeconds = playedOffsetSeconds === null
+    ? currentLiveOffsetSeconds
+    : Math.min(currentLiveOffsetSeconds, playedOffsetSeconds);
 
   const timelineSource = useMemo(() => {
     if (!roomState || roomState.state !== "LIVE") return [];
@@ -868,7 +875,6 @@ export function LiveClassRoomMobileFirst({
         if (generation !== directSwapGenerationRef.current) return;
         if (
           sameLoadedMedia &&
-          !forceLiveEdge &&
           currentVideo &&
           Number.isFinite(currentVideo.currentTime)
         ) {
@@ -1169,6 +1175,12 @@ export function LiveClassRoomMobileFirst({
 
   const handleSeeking = (video: HTMLVideoElement) => {
     if (video !== currentAudioVideo()) return;
+    // Native MP4 byte-range recovery can seek internally. Do not chase the
+    // broadcast clock and discard its buffer after the session has loaded.
+    if (
+      playbackRef.current?.authorization?.playbackType === "DIRECT" &&
+      loadedMediaSessionRef.current === playbackRef.current?.sessionId
+    ) return;
     // A viewer cannot seek back into a completed part of a live broadcast.
     const target = expectedPosition();
     if (
@@ -1204,23 +1216,9 @@ export function LiveClassRoomMobileFirst({
 
       const progressed = Math.abs(video.currentTime - stalledAtSeconds) >= 0.5;
       const hasFutureData = video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA;
-      const drifted = shouldCorrectBroadcastPosition({
-        currentSeconds: video.currentTime,
-        expectedSeconds: expectedPosition(),
-      });
-      if (!drifted && (progressed || (!video.paused && hasFutureData))) {
+      if (progressed || (!video.paused && hasFutureData)) {
         setActivePlaybackBlocked(false);
         return;
-      }
-
-      if (drifted) {
-        // Catch up using the existing media element first; seek via HTTP
-        // byte-range instead of discarding the whole MP4 download.
-        correctPosition(video);
-        if (!video.paused) {
-          setActivePlaybackBlocked(false);
-          return;
-        }
       }
       setActivePlaybackBlocked(true);
 
@@ -1252,8 +1250,6 @@ export function LiveClassRoomMobileFirst({
     currentAudioVideo,
     keepPlaybackRunning,
     requestPlayback,
-    correctPosition,
-    expectedPosition,
   ]);
 
   useEffect(() => {
@@ -1395,12 +1391,12 @@ export function LiveClassRoomMobileFirst({
     video.muted = false;
 
     const resume = async () => {
-      // A plain "Tap to hear audio" never seeks. Only an actually paused/
-      // suspended player is moved to the authoritative live edge before resume.
+      // Keep a slow DIRECT MP4 at its buffered position when resuming. HLS
+      // can safely rejoin the live edge after a real playback interruption.
       if (recoveringPausedPlayback) {
-        // A real live session resumes at the present broadcast time, not the
-        // old buffered position that preceded an interruption.
-        correctPosition(video);
+        if (playbackRef.current?.authorization?.playbackType !== "DIRECT") {
+          correctPosition(video);
+        }
         forceLiveEdgeOnNextAuthorizationRef.current = false;
       }
 
