@@ -1,0 +1,62 @@
+name: Optimize existing R2 live-class MP4 (manual, non-destructive)
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_key:
+        description: "Existing private R2 media/...mp4 object key (not a URL)"
+        required: true
+        type: string
+      quality:
+        description: "H.264 quality (18 highest, 20 balanced, 22 smaller)"
+        required: true
+        default: "20"
+        type: choice
+        options:
+          - "18"
+          - "20"
+          - "22"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r2-live-mp4-optimizer
+  cancel-in-progress: false
+
+jobs:
+  optimize:
+    name: Encode and upload a separate MP4 copy
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    # No actions on R2 or other external services until manually dispatched.
+    env:
+      SOURCE_KEY: ${{ inputs.source_key }}
+      CRF: ${{ inputs.quality }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: spf-media
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install FFmpeg and AWS CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg awscli
+
+      - name: Fail if credentials are not configured
+        shell: bash
+        run: |
+          : "${R2_ACCOUNT_ID:?Configure R2_ACCOUNT_ID as repository secret}"
+          : "${R2_ACCESS_KEY_ID:?Configure R2_ACCESS_KEY_ID as repository secret}"
+          : "${R2_SECRET_ACCESS_KEY:?Configure R2_SECRET_ACCESS_KEY as repository secret}"
+
+      - name: Optimize selected private MP4 to new R2 object
+        shell: bash
+        env:
+          # A unique output key per run/attempt. The input can never be overwritten.
+          OUTPUT_KEY: media/optimized/${{ github.run_id }}/${{ github.run_attempt }}/optimized.mp4
+        run: bash scripts/optimize-r2-live-mp4.sh "$SOURCE_KEY" "$CRF" "$OUTPUT_KEY"
