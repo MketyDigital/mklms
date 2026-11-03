@@ -16,13 +16,13 @@ This is an opt-in, **non-destructive** workflow for unusually large direct-MP4 l
 
 ## Secrets (configure in GitHub Settings → Secrets and variables → Actions)
 
-Create or reuse three **repository secrets** (not plaintext variables):
+The workflow uses these **GitHub Actions repository secrets** (not plaintext variables):
 
-- `R2_ACCOUNT_ID` — Cloudflare account ID
+- `CLOUDFLARE_ACCOUNT_ID` — existing Cloudflare account ID already referenced by deployment workflows
 - `R2_ACCESS_KEY_ID` — bucket-scoped R2 S3 API token access key
 - `R2_SECRET_ACCESS_KEY` — matching secret access key
 
-Use a token with Object Read & Write limited to `spf-media`. Cloudflare Worker R2 bindings cannot be accessed from a GitHub-hosted runner. **Do not print credentials or add them to git**. This workflow does not read or change existing Cloudflare Worker secrets.
+The R2 access and secret keys must actually be configured in **GitHub Actions**. Their presence cannot be inferred from Cloudflare Worker secrets or from documented variable names. The workflow fails clearly if either is absent.\n\nUse a token with Object Read & Write limited to `spf-media`. Cloudflare Worker R2 bindings cannot be accessed from a GitHub-hosted runner. **Do not print credentials or add them to git**. This workflow does not read or change existing Cloudflare Worker secrets.
 
 The R2 bucket name is explicitly `spf-media` so the workflow cannot accidentally write to an unrelated installation. Before using the workflow with another installation, introduce an intentionally reviewed, separately scoped workflow.
 
