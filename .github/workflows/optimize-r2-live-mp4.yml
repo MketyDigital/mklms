@@ -42,10 +42,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install FFmpeg and AWS CLI
+      - name: Ensure FFmpeg and AWS CLI are available
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg awscli
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+
+          # Ubuntu 24.04 runners may not publish an apt awscli package.
+          # Prefer the runner's existing AWS CLI; otherwise install official AWS CLI v2.
+          if ! command -v aws >/dev/null 2>&1; then
+            command -v curl >/dev/null 2>&1
+            command -v unzip >/dev/null 2>&1
+            curl --fail --silent --show-error --location \
+              https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip \
+              --output "${RUNNER_TEMP}/awscliv2.zip"
+            unzip -q "${RUNNER_TEMP}/awscliv2.zip" -d "${RUNNER_TEMP}/awscli-install"
+            sudo "${RUNNER_TEMP}/awscli-install/aws/install"
+          fi
+
+          ffmpeg -version | head -n 1
+          ffprobe -version | head -n 1
+          aws --version
 
       - name: Fail if credentials are not configured
         shell: bash
