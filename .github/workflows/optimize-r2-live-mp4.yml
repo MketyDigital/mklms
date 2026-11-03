@@ -34,8 +34,8 @@ jobs:
       SOURCE_KEY: ${{ inputs.source_key }}
       CRF: ${{ inputs.quality }}
       R2_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ACCESS_KEY_ID: ${{ secrets.MKLMS_R2_DIRECT_UPLOAD_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.MKLMS_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY }}
       R2_BUCKET: spf-media
 
     steps:
@@ -51,8 +51,8 @@ jobs:
         shell: bash
         run: |
           : "${R2_ACCOUNT_ID:?Configure existing CLOUDFLARE_ACCOUNT_ID as repository secret}"
-          : "${R2_ACCESS_KEY_ID:?Configure R2_ACCESS_KEY_ID as repository secret}"
-          : "${R2_SECRET_ACCESS_KEY:?Configure R2_SECRET_ACCESS_KEY as repository secret}"
+          : "${R2_ACCESS_KEY_ID:?Missing repository secret MKLMS_R2_DIRECT_UPLOAD_ACCESS_KEY_ID}"
+          : "${R2_SECRET_ACCESS_KEY:?Missing repository secret MKLMS_R2_DIRECT_UPLOAD_SECRET_ACCESS_KEY}"
 
       - name: Optimize selected private MP4 to new R2 object
         shell: bash
